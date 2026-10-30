@@ -1,0 +1,18 @@
+*build/
+*output/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.shaders/
+game/tts/moss-tts-nano/outputs/
+# Runtime resources are distributed separately; see runtime_assets.json.
+*.onnx
+*.data
+*.model
+*.stl
+*.STL
+*.wav
+*.mp3
+*.npz
+*.npy
+/mediamtx/mediamtx

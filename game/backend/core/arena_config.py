@@ -1,0 +1,436 @@
+"""Project-wide (arena) configuration: deployment defaults under game manifests.
+
+``backend/config.json`` describes what kind of machine this deployment is:
+which engine fills each provider slot, the default TTS voice/speed, and the
+global ASR breaker.  Game manifests override any of it per game, and speech
+entries can pin a provider per line.  The local TTS selection is additionally
+frozen at process start — switching engines requires a restart.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+from typing import Any, Callable, Iterable, Mapping
+from urllib.parse import urlsplit
+
+from core.participants import normalize_participants
+
+ROOT = Path(__file__).resolve().parents[2]
+# `dice-arena serve` keeps the operator's copy in the site (DICE_ARENA_CONFIG); this file is the default.
+ARENA_CONFIG_PATH = Path(os.environ.get("DICE_ARENA_CONFIG") or ROOT / "backend" / "config.json")
+
+
+class ArenaConfigError(ValueError):
+    """Raised when backend/config.json is malformed or self-contradictory."""
+
+
+def validate_arena_config(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ArenaConfigError("arena config must be a JSON object")
+    if payload.get("schema_version") != 1:
+        raise ArenaConfigError("arena config schema_version must be 1")
+    providers = payload.get("providers", {})
+    if not isinstance(providers, dict) or not all(
+        isinstance(key, str) and key and isinstance(value, str) and value.strip() for key, value in providers.items()
+    ):
+        raise ArenaConfigError("providers must map slots to non-empty provider ids")
+    participants = payload.get("participants")
+    if participants is not None:
+        try:
+            normalize_participants(participants)
+        except ValueError as exc:
+            raise ArenaConfigError(f"participants is invalid: {exc}") from exc
+    display = payload.get("display")
+    if display is not None:
+        if not isinstance(display, dict) or display.get("player_side") not in ("LEFT", "RIGHT"):
+            raise ArenaConfigError("display.player_side must be LEFT or RIGHT")
+        rotations = display.get("video_rotation_deg", {})
+        if not isinstance(rotations, dict) or any(
+            not isinstance(game, str) or not game or type(angle) is not int or angle not in (0, 90, 180, 270)
+            for game, angle in rotations.items()
+        ):
+            raise ArenaConfigError("display.video_rotation_deg must map game ids to 0/90/180/270")
+    video = payload.get("video")
+    if video is not None:
+        if not isinstance(video, dict):
+            raise ArenaConfigError("video must be an object")
+        base = video.get("webrtc_base_url")
+        if base is not None:
+            if not isinstance(base, str) or not base.strip():
+                raise ArenaConfigError("video.webrtc_base_url must be a non-empty string")
+            parsed = urlsplit(base.strip())
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+                raise ArenaConfigError("video.webrtc_base_url must be an absolute HTTP(S) URL")
+            if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+                raise ArenaConfigError("video.webrtc_base_url must not contain a path or query")
+    games_enabled = payload.get("games_enabled")
+    if games_enabled is not None:
+        if not isinstance(games_enabled, dict) or not all(
+            isinstance(game, str) and game and isinstance(value, bool) for game, value in games_enabled.items()
+        ):
+            raise ArenaConfigError("games_enabled must map game ids to true/false")
+    voice = payload.get("voice")
+    if voice is not None and (not isinstance(voice, str) or not voice.strip()):
+        raise ArenaConfigError("voice must be a non-empty string")
+    board_input = payload.get("input_board_enable")
+    if board_input is not None and not isinstance(board_input, bool):
+        raise ArenaConfigError("input_board_enable must be true/false")
+    speed = payload.get("speed")
+    if speed is not None and (not isinstance(speed, (int, float)) or isinstance(speed, bool) or speed <= 0):
+        raise ArenaConfigError("speed must be a positive number")
+    asr_enabled = payload.get("asr_enabled", True)
+    if not isinstance(asr_enabled, bool):
+        raise ArenaConfigError("asr_enabled must be boolean")
+    vision_always_on = payload.get("vision_always_on", True)
+    if not isinstance(vision_always_on, bool):
+        raise ArenaConfigError("vision_always_on must be boolean")
+    standby = payload.get("standby", {})
+    if not isinstance(standby, dict):
+        raise ArenaConfigError("standby must be an object")
+    if standby.get("enabled", True) is True and "wake_phrases" in standby:
+        phrases = standby["wake_phrases"]
+        if (
+            not isinstance(phrases, list)
+            or not phrases
+            or not all(isinstance(word, str) and word.strip() for word in phrases)
+        ):
+            raise ArenaConfigError("standby.wake_phrases must be a non-empty list of words")
+    idle_seconds = standby.get("idle_seconds", 120)
+    if not isinstance(idle_seconds, (int, float)) or isinstance(idle_seconds, bool) or not (5 <= idle_seconds <= 3600):
+        raise ArenaConfigError("standby.idle_seconds must be between 5 and 3600 seconds")
+    for field in ("enabled", "boot_standby"):
+        if field in standby and not isinstance(standby[field], bool):
+            raise ArenaConfigError(f"standby.{field} must be boolean")
+    game_select = payload.get("game_select", {})
+    if not isinstance(game_select, dict):
+        raise ArenaConfigError("game_select must be an object")
+    select_phrases = game_select.get("phrases", {})
+    if not isinstance(select_phrases, dict):
+        raise ArenaConfigError("game_select.phrases must map game ids to trigger-word lists")
+    for game_id, words in select_phrases.items():
+        if (
+            not isinstance(game_id, str)
+            or not game_id.strip()
+            or not isinstance(words, list)
+            or not words
+            or not all(isinstance(word, str) and word.strip() for word in words)
+            or len(words) != len(set(words))
+        ):
+            raise ArenaConfigError(
+                f"game_select.phrases.{game_id!r} must be a non-empty duplicate-free list of trigger words"
+            )
+    # Optional "enter the currently highlighted game" words (list screen).
+    # Empty/missing list = the voice-confirm affordance is off.
+    confirm_phrases = game_select.get("confirm_phrases", [])
+    if (
+        not isinstance(confirm_phrases, list)
+        or not all(isinstance(word, str) and word.strip() for word in confirm_phrases)
+        or len(confirm_phrases) != len(set(confirm_phrases))
+    ):
+        raise ArenaConfigError("game_select.confirm_phrases must be a duplicate-free list of trigger words")
+    return payload
+
+
+def arena_standby(arena: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Normalized standby screen settings (browser-safe defaults included)."""
+    standby = (arena or {}).get("standby")
+    if not isinstance(standby, Mapping):
+        standby = {}
+    enabled = standby.get("enabled", True)
+    boot = standby.get("boot_standby", False)
+    return {
+        "enabled": enabled if isinstance(enabled, bool) else True,
+        "idle_seconds": standby.get("idle_seconds", 120),
+        "boot_standby": boot if isinstance(boot, bool) else False,
+        "wake_phrases": list(standby.get("wake_phrases") or []),
+    }
+
+
+def load_arena_config(path: Path | str | None = None) -> dict[str, Any]:
+    """Load the arena config; a missing file means "no global defaults".
+
+    A present-but-broken file raises so a typo cannot silently disable the
+    deployment defaults (the caller keeps the last good config).
+    """
+    config_path = Path(path) if path is not None else ARENA_CONFIG_PATH
+    if not config_path.is_file():
+        return {}
+    try:
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ArenaConfigError(f"cannot read arena config {config_path}: {exc}") from exc
+    return validate_arena_config(payload)
+
+
+def arena_slot_value(arena: Mapping[str, Any] | None, slot: str) -> str:
+    providers = (arena or {}).get("providers")
+    if isinstance(providers, Mapping):
+        value = providers.get(slot)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def arena_asr_enabled(arena: Mapping[str, Any] | None) -> bool:
+    value = (arena or {}).get("asr_enabled", True)
+    return value if isinstance(value, bool) else True
+
+
+def arena_input_board_enabled(arena: Mapping[str, Any] | None) -> bool:
+    """板端物理键盘输入开关（缺省 False=只有 web 输入，既有行为不变）。"""
+    return isinstance((arena or {}).get("input_board_enable"), bool) and (
+        (arena or {}).get("input_board_enable") is True
+    )
+
+
+def arena_vision_always_on(arena: Mapping[str, Any] | None) -> bool:
+    """Whether the vision stream outlives the game that started it.
+
+    ``True`` keeps the camera/RTSP stream resident for the whole process, across
+    rounds and games; ``False`` makes the stream follow the game's lifetime and
+    tears it down when the round reaches a terminal status.  Either way the
+    stream is started when the game is entered — this only decides when it ends.
+
+    Missing means ``True`` so an existing deployment behaves exactly as before.
+    """
+    value = (arena or {}).get("vision_always_on", True)
+    return value if isinstance(value, bool) else True
+
+
+def arena_webrtc_base_url(arena: Mapping[str, Any] | None) -> str:
+    """Deployment-wide WebRTC origin (board IP + MediaMTX port), or ``""``.
+
+    Consumers fall back to it when neither the game manifest nor the game's
+    runtime config declares ``video.webrtc_base_url``.  The value only shapes
+    browser-facing video URLs, so it is hot-reloaded and never rebuilds the
+    vision runtime.  Invalid values are rejected by ``validate_arena_config``
+    at load time; anything non-string here degrades to ``""`` (no video URL).
+    """
+    video = (arena or {}).get("video")
+    if not isinstance(video, Mapping):
+        return ""
+    value = video.get("webrtc_base_url")
+    return value.strip() if isinstance(value, str) and value.strip() else ""
+
+
+def arena_game_select_phrases(arena: Mapping[str, Any] | None) -> dict[str, list[str]]:
+    """Voice-selection trigger words per game id, from the global config.
+
+    The game list is a deployment-level surface (like the standby screen),
+    so its vocabulary lives in ``game_select.phrases`` — not in any game
+    manifest.  Games without an entry are simply not voice-selectable.
+    """
+    game_select = (arena or {}).get("game_select")
+    if not isinstance(game_select, Mapping):
+        return {}
+    phrases = game_select.get("phrases")
+    if not isinstance(phrases, Mapping):
+        return {}
+    table: dict[str, list[str]] = {}
+    for game_id, words in phrases.items():
+        if not isinstance(game_id, str) or not isinstance(words, list):
+            continue
+        cleaned = [str(word).strip() for word in words if isinstance(word, str) and word.strip()]
+        if cleaned:
+            table[game_id.strip()] = cleaned
+    return table
+
+
+def arena_game_select_confirm_phrases(arena: Mapping[str, Any] | None) -> list[str]:
+    """Trigger words that enter the currently highlighted game (list screen).
+
+    Lives beside ``game_select.phrases`` in the global config: the game list
+    is a deployment-level surface, and so is its "confirm selection" command.
+    Empty/missing means the affordance is off.
+    """
+    game_select = (arena or {}).get("game_select")
+    if not isinstance(game_select, Mapping):
+        return []
+    words = game_select.get("confirm_phrases")
+    if not isinstance(words, list):
+        return []
+    return [str(word).strip() for word in words if isinstance(word, str) and word.strip()]
+
+
+def with_global_defaults(manifest: Mapping[str, Any], arena: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Underlay arena defaults beneath one game manifest.
+
+    Per field the game manifest wins; the arena fills only what it leaves
+    out.  Display is a global presentation policy shared by all games. Dice
+    and RPS in display mode generate their source-frame role mapping internally.
+    The ASR section is another exception: it carries no switch of its own,
+    so the arena breaker is written in as the effective ``enabled`` value.
+    Returns a fresh dict — the source manifest and the games registry are
+    never mutated.
+    """
+    merged = dict(manifest)
+    arena = arena or {}
+    global_providers = arena.get("providers")
+    if isinstance(global_providers, Mapping) and global_providers:
+        game_providers = merged.get("providers")
+        providers = dict(global_providers)
+        if isinstance(game_providers, Mapping):
+            providers.update(game_providers)
+        merged["providers"] = providers
+    display = arena.get("display")
+    if isinstance(display, Mapping) and merged.get("id") in ("dice", "rps"):
+        # Both detectors use the same source coordinates: blue/player LEFT,
+        # red/robot RIGHT. Screen rotation must never swap their ownership.
+        # Keep this protocol field generated, not a second editable setting.
+        merged["participants"] = {"player": "LEFT", "agent": "RIGHT"}
+    elif "participants" not in merged and isinstance(arena.get("participants"), Mapping):
+        # Compatibility for deployments without display and other games.
+        merged["participants"] = dict(arena["participants"])
+    # Presentation is shared by both games and independent of source coordinates.
+    if isinstance(display, Mapping):
+        player_side = display["player_side"]
+        base_rotation = display.get("video_rotation_deg", {}).get(merged.get("id"), 0)
+        merged["display"] = {
+            "player_side": player_side,
+            "agent_side": "RIGHT" if player_side == "LEFT" else "LEFT",
+            "video_rotation_deg": (base_rotation + (180 if player_side == "RIGHT" else 0)) % 360,
+        }
+    # 游戏启停宏控（2026-09-29）：config 里写了该游戏的键就以全局为准，
+    # 没写回落 manifest 自己的 enabled——集中管理，单游戏仍可自带默认。
+    games_enabled = arena.get("games_enabled")
+    if isinstance(games_enabled, Mapping):
+        override = games_enabled.get(merged.get("id"))
+        if isinstance(override, bool):
+            merged["enabled"] = override
+    if "voice" not in merged and isinstance(arena.get("voice"), str) and arena["voice"]:
+        merged["voice"] = arena["voice"]
+    if "speed" not in merged:
+        speed = arena.get("speed")
+        if isinstance(speed, (int, float)) and not isinstance(speed, bool):
+            merged["speed"] = speed
+    asr = merged.get("asr")
+    if isinstance(asr, dict):
+        asr = dict(asr)
+        # Voice on/off is a deployment decision rather than a per-game one:
+        # the section only carries trigger words, so the breaker is the sole
+        # source of the effective value downstream code reads.
+        asr["enabled"] = arena_asr_enabled(arena)
+        merged["asr"] = asr
+    # Browser-facing WebRTC origin: the board IP + MediaMTX port are
+    # deployment attributes with no per-game meaning, so the arena fills the
+    # value in when the game's vision_profile.video leaves it out (a manifest
+    # declaration still wins, per the usual underlay rule).  The injected key
+    # is deliberately outside the vision runtime signature: changing the IP
+    # rewrites browser video URLs only and never rebuilds the runtime.
+    profile = merged.get("vision_profile")
+    if isinstance(profile, dict):
+        video = profile.get("video")
+        if isinstance(video, dict) and "webrtc_base_url" not in video:
+            base = arena_webrtc_base_url(arena)
+            if base:
+                merged["vision_profile"] = {**profile, "video": {**video, "webrtc_base_url": base}}
+    return merged
+
+
+def resolve_local_tts_pin(
+    arena: Mapping[str, Any] | None,
+    game_manifests: Iterable[Mapping[str, Any]],
+) -> str | None:
+    """Resolve the single local TTS engine this process may run.
+
+    Candidates are the arena ``tts_local`` slot plus every *enabled* game's
+    own override.  Exactly one distinct id is allowed: the local engines are
+    heavy resident processes, the demo cannot honor a mid-run switch, so a
+    conflicting configuration must fail loudly at startup.
+    """
+    candidates: list[str] = []
+    arena_value = arena_slot_value(arena, "tts_local")
+    if arena_value:
+        candidates.append(arena_value)
+    for manifest in game_manifests:
+        if not isinstance(manifest, Mapping) or not manifest.get("enabled", False):
+            continue
+        providers = manifest.get("providers")
+        value = providers.get("tts_local") if isinstance(providers, Mapping) else None
+        if isinstance(value, str) and value.strip():
+            candidates.append(value.strip())
+    distinct = sorted(set(candidates))
+    if len(distinct) > 1:
+        raise ArenaConfigError(
+            "multiple local TTS engines configured: "
+            f"{', '.join(distinct)} — keep exactly one (arena providers.tts_local "
+            "plus optional per-game overrides) and restart"
+        )
+    return distinct[0] if distinct else None
+
+
+def collect_local_tts_ids(
+    arena: Mapping[str, Any] | None,
+    game_manifests: Iterable[Mapping[str, Any]],
+    is_local_tts: Callable[[str], bool],
+) -> list[str]:
+    """Every distinct board-local TTS engine id the configuration references.
+
+    References cover everything that can route synthesis to a local engine:
+    the arena ``tts_local`` slot, *enabled* games' ``providers.tts_local``
+    slots, and per-speech-action ``provider`` pins (including ``select_by``
+    case payloads).  ``is_local_tts`` decides whether an id names a local
+    engine; cloud/remote engines may be referenced freely and never count.
+    Callers use this to enforce the single-local-engine invariant: a process
+    pins exactly one local TTS, and no manifest line may route around it.
+    """
+    referenced: list[str] = []
+
+    def add(provider_id: Any) -> None:
+        if not isinstance(provider_id, str):
+            return
+        provider_id = provider_id.strip()
+        if provider_id and provider_id not in referenced:
+            referenced.append(provider_id)
+
+    arena_value = arena_slot_value(arena, "tts_local")
+    if arena_value:
+        add(arena_value)
+    for manifest in game_manifests:
+        if not isinstance(manifest, Mapping) or not manifest.get("enabled", False):
+            continue
+        providers = manifest.get("providers")
+        if isinstance(providers, Mapping):
+            add(providers.get("tts_local"))
+        machine = manifest.get("state_machine")
+        if isinstance(machine, Mapping):
+            from core.state_schema import iter_speech_actions
+
+            for action in iter_speech_actions(machine):
+                add(action.get("provider"))
+    return [provider_id for provider_id in referenced if is_local_tts(provider_id)]
+
+
+def collect_provider_slot_ids(
+    slot: str,
+    arena: Mapping[str, Any] | None,
+    game_manifests: Iterable[Mapping[str, Any]],
+) -> list[str]:
+    """Every distinct provider id referenced for one semantic provider slot.
+
+    Covers the arena default plus every *enabled* game's own override of the
+    slot.  Used to seal single-engine slots (ASR owns the microphone, so two
+    distinct engines can never run together) on both the startup and the
+    manifest hot-reload paths.
+    """
+    referenced: list[str] = []
+
+    def add(provider_id: Any) -> None:
+        if not isinstance(provider_id, str):
+            return
+        provider_id = provider_id.strip()
+        if provider_id and provider_id not in referenced:
+            referenced.append(provider_id)
+
+    arena_value = arena_slot_value(arena, slot)
+    if arena_value:
+        add(arena_value)
+    for manifest in game_manifests:
+        if not isinstance(manifest, Mapping) or not manifest.get("enabled", False):
+            continue
+        providers = manifest.get("providers")
+        if isinstance(providers, Mapping):
+            add(providers.get(slot))
+    return referenced

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+    "games_enabled": {
+    "dice": true
+  },
+  "providers": {
+    "tts_local": "tts_moss_nano",
+    "vision_adjudicator": "vision_yolov8_objdetect",
+    "robot_arm": "robot_arm_spacemit"
+  },
+  "voice": "default",
+  "speed": 1.0,
+  "video": {
+    "webrtc_base_url": "http://127.0.0.1:8889"
+  },
+  "asr_enabled": false,
+  "vision_always_on": false,
+  "robot_home_patrol": false,
+  "robot_home_patrol_seconds": 30,
+  "standby": {
+    "enabled": true,
+    "idle_seconds": 120,
+    "boot_standby": true,
+    "wake_phrases": [
+      "游戏",
+      "你好",
+      "在不",
+      "开始游戏",
+      "hello",
+      "wake up",
+      "start game",
+      "start the game"
+    ]
+  },
+  "game_select": {
+    "phrases": {
+      "dice": ["摇骰子","骰子","dice"]
+    },
+    "confirm_phrases": ["进入游戏", "玩这个", "进入这个游戏", "开始这个游戏",
+                        "play this", "enter the game", "enter this game",
+                        "start the game", "start this game"]
+  },
+  "display": {
+    "player_side": "RIGHT",
+    "video_rotation_deg": {"dice": 0}
+  },
+  "input_board_enable": true
+}

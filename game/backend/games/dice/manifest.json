@@ -1,0 +1,406 @@
+{
+	"id": "dice",
+	"name": "摇骰子",
+	"icon": "🎲",
+	"description": "双方各 5 颗 · 比较点数总和",
+	"enabled": true,
+	"asr": {
+		"phrases": {
+			"confirm": [
+				"确认",
+				"确定",
+				"OK",
+				"明白了",
+				"准备好了",
+				"yes",
+				"confirm",
+				"got it",
+				"start"
+			],
+			"start_shake": [
+				"开始",
+				"确定",
+				"start",
+				"OK",
+				"begin",
+				"go"
+			],
+			"repeat": [
+				"重复",
+				"再来一遍",
+				"再听一次",
+				"repeat",
+				"again",
+				"say it again",
+				"one more time"
+			],
+			"retry": [
+				"重试",
+				"重新",
+				"重新来一遍",
+				"retry",
+				"try again",
+				"again"
+			],
+			"new_round": [
+				"再来一局",
+				"再来一句",
+				"下一局",
+				"下一句",
+				"next round",
+				"play again",
+				"new round",
+				"one more round",
+				"one more game"
+			],
+			"back": [
+				"返回",
+				"退出",
+				"back",
+				"go back",
+				"exit",
+				"quit"
+			]
+		}
+	},
+	"vision_profile": {
+		"schema_version": 1,
+		"game_id": "dice",
+		"runtime_config": "backend/games/dice/adjudicator_config.json",
+		"vision": {
+			"class_map": {
+				"0": "1",
+				"1": "2",
+				"2": "3",
+				"3": "4",
+				"4": "5",
+				"5": "6"
+			},
+			"participants": [
+				"LEFT",
+				"RIGHT"
+			],
+			"expected_count": 5,
+			"grouping": "divider_regions"
+		},
+		"multi_view": {
+			"enabled": true,
+			"min_views": 1
+		},
+		"rule": {
+			"kind": "numeric_compare"
+		},
+		"video": {
+			"enabled": true,
+			"path": "/dice/det"
+		},
+		"lifecycle": {
+			"pre_adjudication_wait_seconds": 0,
+			"post_result_hold_seconds": 0
+		},
+		"timeouts": {
+			"yolo_detection_seconds": 8,
+			"adjudication_seconds": 30
+		}
+	},
+	"state_machine": {
+		"schema_version": 1,
+		"initial": "rules",
+		"states": {
+			"rules": {
+				"ui": {
+					"view": "rules",
+					"title": "先听三步小秘诀",
+					"copy": "听完后按绿色按钮出发；蓝色按钮可以再听一次，红色按钮返回。"
+				},
+				"on_enter": [
+					{
+						"action": "speech",
+						"mode": "tts_local",
+						"text": "欢迎来到骰王挑战赛。本游戏由机械臂与您对局，双方各有五颗骰子，听语音倒计时开始摇骰，机械臂会和您同时摇骰，摇骰结束后视觉自动判定点数，点数总和更大的一方获胜。如果明白了，请按绿色按钮开始游戏；如果需要再听一次，请按蓝色的按钮。"
+					}
+				],
+				"on_intent": {
+					"confirm": {
+						"to": "ready"
+					},
+					"repeat": {
+						"actions": [
+							{
+								"action": "speech",
+								"mode": "tts_local",
+								"text": "欢迎来到骰王挑战赛。本游戏由机械臂与您对局，双方各有五颗骰子，听语音倒计时开始摇骰，机械臂会和您同时摇骰，摇骰结束后视觉自动判定点数，点数总和更大的一方获胜。如果明白了，请按绿色按钮开始游戏；如果需要再听一次，请按蓝色的按钮。"
+							}
+						]
+					},
+					"back": {
+						"exit": true
+					}
+				}
+			},
+			"rehome": {
+				"ui": {
+					"view": "rehome",
+					"title": "机械臂回起点啦",
+					"copy": "稍等一下，小搭子正在摆好姿势，下一局马上就绪。"
+				},
+				"on_enter": [
+					{
+						"action": "robot",
+						"command": "reset_home"
+					}
+				],
+				"on_event": {
+					"robot.reset_home.completed": {
+						"to": "ready"
+					},
+					"robot.reset_home.failed": {
+						"to": "ready"
+					}
+				}
+			},
+			"ready": {
+				"ui": {
+					"view": "ready",
+					"title": "握好骰盅，好运要出发啦！",
+					"copy": "按下绿色按钮，你和机械臂就会一起开始摇骰。"
+				},
+				"on_enter": [
+					{
+						"action": "speech",
+						"mode": "tts_local",
+						"text": "准备好了吗，按下绿色按钮就马上开始。"
+					}
+				],
+				"on_intent": {
+					"start_shake": {
+						"to": "game_start"
+					},
+					"back": {
+						"to": "rules"
+					}
+				}
+			},
+			"game_start": {
+				"ui": {
+					"view": "game_start",
+					"title": "抓稳骰盅，挑战开始！",
+					"copy": "机械臂准备中，请握好骰盅。"
+				},
+				"duration": 3.0,
+				"on_enter": [
+					{
+						"action": "robot",
+						"command": "grasp_cup",
+						"timeout_seconds": 30
+					}
+				],
+				"on_expire": {
+					"to": "shake_countdown"
+				},
+				"on_event": {
+					"robot.grasp_cup.failed": {
+						"to": "arm_failed"
+					}
+				}
+			},
+			"shake_countdown": {
+				"ui": {
+					"view": "countdown",
+					"title": "一起倒数，准备摇！",
+					"copy": "跟着倒计时，准备一起摇。"
+				},
+				"duration": 2.4,
+				"tick_seconds": 0.8,
+				"on_enter": [
+					{
+						"action": "speech",
+						"mode": "audio",
+						"audio": "audio/warm_321开始.wav",
+						"text": "三，二，一，开始"
+					}
+				],
+				"on_expire": {
+					"to": "shaking"
+				},
+				"on_event": {
+					"robot.grasp_cup.failed": {
+						"to": "arm_failed"
+					}
+				}
+			},
+			"shaking": {
+				"ui": {
+					"view": "shaking",
+					"title": "摇起来，把好运叫醒！",
+					"copy": "一起摇，听到“停”再停。"
+				},
+				"on_enter": [
+					{
+						"action": "robot",
+						"command": "shake_dice",
+						"timeout_seconds": 90
+					}
+				],
+				"on_event": {
+					"robot.shake_dice.completed": {
+						"to": "stop_call"
+					},
+					"robot.shake_dice.failed": {
+						"to": "arm_failed"
+					}
+				}
+			},
+			"stop_call": {
+				"ui": {
+					"view": "shaking",
+					"title": "摇好了！",
+					"copy": "停！机械臂正在放回骰盅，随后开始判定。"
+				},
+				"on_enter": [
+					{
+						"action": "speech",
+						"mode": "audio",
+						"audio": "audio/停.wav",
+						"text": "停！"
+					},
+					{
+						"action": "robot",
+						"command": "settle_dice",
+						"timeout_seconds": 90
+					}
+				],
+				"on_event": {
+					"robot.settle_dice.completed": {
+						"to": "analysis"
+					},
+					"robot.settle_dice.failed": {
+						"to": "arm_failed"
+					}
+				}
+			},
+			"arm_failed": {
+				"ui": {
+					"view": "arm_failed",
+					"title": "机械臂刚刚卡了一下",
+					"copy": "没关系！蓝色按钮让它再试一次；红色按钮退出本局。"
+				},
+				"on_enter": [
+					{
+						"action": "speech",
+						"mode": "tts_local",
+						"text": "机械臂没有完成摇骰动作。可以按蓝色按钮让机械臂重试，或按红色按钮退出本局。"
+					},
+					{
+						"action": "robot",
+						"command": "reset_home",
+						"timeout_seconds": 30
+					}
+				],
+				"on_intent": {
+					"retry": {
+						"to": "game_start"
+					},
+					"back": {
+						"exit": true
+					}
+				}
+			},
+			"analysis": {
+				"ui": {
+					"view": "analysis",
+					"title": "点数侦探正在认真数",
+					"copy": "请让骰子保持不动，数完点数马上揭晓胜负。"
+				},
+				"on_enter": [
+					{
+						"action": "adjudicate"
+					}
+				],
+				"on_event": {
+					"adjudication.result": {
+						"to": "result"
+					},
+					"adjudication.diagnosis": {
+						"to": "analysis_failed"
+					}
+				}
+			},
+			"analysis_failed": {
+				"ui": {
+					"view": "analysis",
+					"title": "这次没看清，再给我一次机会",
+					"copy": "整理好骰子后，按蓝色按钮重新识别。"
+				},
+				"on_enter": [
+					{
+						"action": "speech",
+						"mode": "tts_local",
+						"text": "本次识别未完成，请整理好骰子后，可选择按蓝色按钮重新识别。"
+					},
+					{
+						"action": "robot",
+						"command": "reset_home",
+						"timeout_seconds": 30
+					}
+				],
+				"on_intent": {
+					"retry": {
+						"to": "analysis"
+					},
+					"new_round": {
+						"to": "ready"
+					},
+					"back": {
+						"exit": true
+					}
+				}
+			},
+			"result": {
+				"ui": {
+					"view": "result",
+					"title": "好运揭晓！",
+					"copy": ""
+				},
+				"on_enter": [
+					{
+						"action": "speech",
+						"select_by": "winner_role",
+						"cases": {
+							"PLAYER": {
+								"mode": "tts_local",
+								"text": "当前玩家点数是{player_score}，机械臂点数是{agent_score}。恭喜你，你赢了，你真的太棒了。"
+							},
+							"AGENT": {
+								"mode": "tts_local",
+								"text": "当前玩家点数是{player_score}，机械臂点数是{agent_score}。很遗憾，你输了哦，要不再来一局？"
+							},
+							"TIE": {
+								"mode": "tts_local",
+								"text": "当前玩家点数{player_score}。机械臂点数{agent_score}。本局平局，再玩一局怎么样？"
+							}
+						}
+					},
+					{
+						"action": "robot",
+						"command": "feedback",
+						"select_by": "winner_role",
+						"cases": {
+							"PLAYER": "lose",
+							"AGENT": "win",
+							"TIE": "draw"
+						}
+					}
+				],
+				"on_intent": {
+					"new_round": {
+						"to": "rehome"
+					},
+					"back": {
+						"exit": true
+					}
+				}
+			}
+		}
+	}
+}

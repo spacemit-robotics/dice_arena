@@ -1,0 +1,348 @@
+"""Loading and validation for game visual-adjudication profiles."""
+
+from __future__ import annotations
+
+import json
+import math
+import re
+from pathlib import Path
+from typing import Any, Mapping
+from urllib.parse import urlsplit, urlunsplit
+
+
+class ProfileError(ValueError):
+    """Raised when a vision profile or component configuration is invalid."""
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+# Top-level keys a hardware runtime config understands: every key the C++
+# runtime reads (vision/yolov8_objdetect/src/main.cpp, load_config) plus
+# the Python-side ``video`` (``video.webrtc_base_url`` is consumed by the
+# provider) and the sanctioned ``_note`` comment key.  Anything else is
+# silently ignored by both parsers -- a typo such as ``ep_afinity`` would
+# quietly run without EP affinity -- so it is reported here as a warning
+# instead of refusing to load.
+RUNTIME_CONFIG_KNOWN_KEYS = frozenset(
+    {
+        "model",
+        "camera",
+        "device",
+        "width",
+        "height",
+        "fps",
+        "intra_threads",
+        "ep_affinity",
+        "conf",
+        "stable_frames",
+        "focus",
+        "zoom",
+        "max_frames",
+        "dump_input",
+        "self_test",
+        "display_enabled",
+        "no_display",
+        "show_debug_text",
+        "yolov8_enabled",
+        "divider_detection",
+        "divider_colors",
+        "queue_depth",
+        "rtsp",
+        "video",
+        "_note",
+    }
+)
+
+# Warn once per (file, unknown-key set) per process: the health metadata
+# path calls load_runtime_config on every /api/health request, so without
+# dedup a single typo would flood the log.
+_unknown_key_warnings: set[tuple[str, tuple[str, ...]]] = set()
+
+
+def resolve_project_path(value: str, project_root: Path = PROJECT_ROOT) -> Path:
+    if not isinstance(value, str) or not value.strip():
+        raise ProfileError("path must be a non-empty repository-relative string")
+    raw = Path(value)
+    if raw.is_absolute() or any(part in {"", ".", ".."} for part in raw.parts):
+        raise ProfileError("path must stay inside the project")
+    root = project_root.resolve()
+    candidate = (root / raw).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise ProfileError("path escapes the project") from exc
+    return candidate
+
+
+def _read_object(path: Path, label: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProfileError(f"unable to read {label}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ProfileError(f"{label} must be a JSON object")
+    return payload
+
+
+def resolve_runtime_config_path(
+    profile: Mapping[str, Any] | str | Path,
+    project_root: Path = PROJECT_ROOT,
+) -> Path:
+    """Resolve a game's C++ runtime configuration (per-game, mandatory).
+
+    The path comes from the game manifest's ``vision_profile.runtime_config``
+    (required by :func:`validate_profile` since the shared deployment default
+    was removed, 2026-09-20): every game declares its own hardware file, so a
+    typo cannot quietly fall back to another game's camera and RTSP setup.
+    A declared path is *not* silently ignored when it is malformed: absolute
+    paths and traversal are rejected by :func:`resolve_project_path`.
+    """
+    if isinstance(profile, Mapping):
+        value = profile.get("runtime_config")
+    else:
+        value = profile
+    if not isinstance(value, str) or not value.strip():
+        raise ProfileError("runtime_config must be a non-empty repository-relative path")
+    return resolve_project_path(value.strip(), project_root)
+
+
+def load_runtime_config(path: Path) -> dict[str, Any]:
+    """Load and minimally validate the hardware runtime configuration."""
+    payload = _read_object(Path(path), "vision runtime config")
+    unknown = sorted(set(payload) - RUNTIME_CONFIG_KNOWN_KEYS)
+    if unknown:
+        marker = (str(Path(path).resolve()), tuple(unknown))
+        if marker not in _unknown_key_warnings:
+            _unknown_key_warnings.add(marker)
+            print(
+                f"[vision] runtime config {path}: unknown keys are ignored by the C++ runtime: {', '.join(unknown)}",
+                flush=True,
+            )
+    if payload.get("divider_colors", "red_blue") not in ("red_blue", "green_gray"):
+        raise ProfileError("runtime config divider_colors must be red_blue or green_gray")
+    if "rtsp" in payload and not isinstance(payload["rtsp"], dict):
+        raise ProfileError("runtime config rtsp must be an object")
+    video = payload.get("video", {})
+    if not isinstance(video, dict):
+        raise ProfileError("runtime config video must be an object")
+    if "webrtc_base_url" in video:
+        _validate_base_url(video["webrtc_base_url"], "runtime video.webrtc_base_url")
+    return payload
+
+
+def _required_string(value: Any, field: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ProfileError(f"{field} must be a non-empty string")
+    return value.strip()
+
+
+def _validate_video_path(path: Any) -> str:
+    path = _required_string(path, "video.path")
+    parsed = urlsplit(path)
+    if not path.startswith("/") or parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+        raise ProfileError("video.path must be a URL path")
+    if ".." in Path(path).parts or any(ord(ch) < 32 for ch in path):
+        raise ProfileError("video.path contains unsafe characters")
+    return path
+
+
+def _validate_camera(value: Any, field: str) -> str:
+    """Validate a profile-owned camera selector without accepting traversal."""
+    camera = _required_string(value, field)
+    if any(ord(ch) < 32 for ch in camera) or ".." in Path(camera).parts:
+        raise ProfileError(f"{field} contains unsafe characters")
+    return camera
+
+
+def _validate_base_url(value: Any, field: str = "video.webrtc_base_url") -> str:
+    value = _required_string(value, field)
+    parsed = urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+        raise ProfileError(f"{field} must be an absolute HTTP(S) URL")
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        raise ProfileError(f"{field} must not contain a path or query")
+    return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+
+
+def compose_video_url(base_url: str, path: str) -> str:
+    base = _validate_base_url(base_url)
+    game_path = _validate_video_path(path)
+    return base.rstrip("/") + "/" + game_path.lstrip("/")
+
+
+def validate_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    if profile.get("schema_version") != 1:
+        raise ProfileError("schema_version must be 1")
+    game_id = profile.get("game_id")
+    if not isinstance(game_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", game_id):
+        raise ProfileError("game_id must be a non-empty identifier")
+    # Per-game hardware runtime config.  Required since the shared deployment
+    # default was removed (2026-09-20): a game with no hardware differences
+    # declares its own copy instead of silently inheriting another game's
+    # camera and RTSP setup.
+    declared = profile.get("runtime_config")
+    if not isinstance(declared, str) or not declared.strip():
+        raise ProfileError("runtime_config is required and must be a non-empty repository-relative path")
+    resolve_project_path(declared.strip())
+    vision = profile.get("vision")
+    if not isinstance(vision, dict):
+        raise ProfileError("vision must be an object")
+    # Runtime-operational parameters moved to the game's own adjudicator
+    # config file (2026-09-20): the manifest deliberately no longer carries
+    # them, and a leftover key must fail loudly instead of silently doing
+    # nothing (the command-line forwarding that used to read them is gone).
+    for removed in ("model", "confidence", "conf", "stable_frames", "divider_detection"):
+        if removed in vision:
+            raise ProfileError(
+                f"vision.{removed} was moved to the game's runtime config file "
+                "(vision_profile.runtime_config); the manifest no longer accepts it"
+            )
+    if not isinstance(vision.get("class_map"), dict) or not vision["class_map"]:
+        raise ProfileError("vision.class_map must be a non-empty object")
+    if not isinstance(vision.get("participants"), list) or not vision["participants"]:
+        raise ProfileError("vision.participants must be a non-empty array")
+    assignment = vision.get("participant_assignment", "")
+    grouping = vision.get("grouping", "")
+    if assignment not in {"", "x_midpoint", "divider_regions"}:
+        raise ProfileError("vision.participant_assignment must be x_midpoint or divider_regions")
+    if grouping not in {"", "divider_regions", "x_midpoint"}:
+        raise ProfileError("vision.grouping must be divider_regions or x_midpoint")
+    if grouping == "divider_regions":
+        divider = vision.get("divider", {})
+        if not isinstance(divider, dict):
+            raise ProfileError("vision.divider must be an object")
+        orientation = divider.get("orientation", "vertical")
+        if orientation not in {"vertical", "horizontal"}:
+            raise ProfileError("vision.divider.orientation must be vertical or horizontal")
+        position = divider.get("position", 0.5)
+        if (
+            not isinstance(position, (int, float))
+            or isinstance(position, bool)
+            or not math.isfinite(position)
+            or not 0 < position < 1
+        ):
+            raise ProfileError("vision.divider.position must be between 0 and 1")
+    # Pre-winner LLM verification was removed entirely (2026-09-30):
+    # adjudication is detector-only (pure YOLO).  Any leftover ``llm``
+    # section is refused loudly instead of being silently ignored as dead
+    # config — a stale manifest fails fast at load time.
+    if "llm" in profile:
+        raise ProfileError(
+            "llm was removed (2026-09-30); adjudication is detector-only. "
+            "Delete the llm section from this game's vision_profile"
+        )
+
+    video = profile.get("video")
+    if not isinstance(video, dict):
+        raise ProfileError("video must be an object")
+    if "webrtc_base_url" in video:
+        _validate_base_url(video["webrtc_base_url"], "video.webrtc_base_url")
+    _validate_video_path(video.get("path"))
+    if video.get("enabled", True) not in {True, False}:
+        raise ProfileError("video.enabled must be boolean")
+
+    timeouts = profile.get("timeouts", {"adjudication_seconds": 120})
+    if not isinstance(timeouts, dict):
+        raise ProfileError("timeouts must be an object")
+    adjudication_timeout = timeouts.get("adjudication_seconds")
+    if (
+        not isinstance(adjudication_timeout, (int, float))
+        or isinstance(adjudication_timeout, bool)
+        or not math.isfinite(adjudication_timeout)
+        or adjudication_timeout <= 0
+    ):
+        raise ProfileError("timeouts.adjudication_seconds must be a positive number")
+    if "diagnosis_llm_seconds" in timeouts:
+        raise ProfileError("timeouts.diagnosis_llm_seconds was removed")
+    normalized_timeouts = {"adjudication_seconds": float(adjudication_timeout)}
+    for field, default in (("yolo_detection_seconds", adjudication_timeout),):
+        value = timeouts.get(field, default)
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value <= 0:
+            raise ProfileError(f"timeouts.{field} must be a positive number")
+        normalized_timeouts[field] = float(value)
+    profile["timeouts"] = normalized_timeouts
+
+    lifecycle = profile.get("lifecycle", {})
+    if not isinstance(lifecycle, dict):
+        raise ProfileError("lifecycle must be an object")
+    hold = lifecycle.get("post_result_hold_seconds", 0)
+    if (
+        not isinstance(hold, (int, float))
+        or isinstance(hold, bool)
+        or not math.isfinite(hold)
+        or hold < 0
+        or hold > 300
+    ):
+        raise ProfileError("lifecycle.post_result_hold_seconds must be between 0 and 300 seconds")
+    pre_wait = lifecycle.get("pre_adjudication_wait_seconds", 0)
+    if (
+        not isinstance(pre_wait, (int, float))
+        or isinstance(pre_wait, bool)
+        or not math.isfinite(pre_wait)
+        or pre_wait < 0
+        or pre_wait > 300
+    ):
+        raise ProfileError("lifecycle.pre_adjudication_wait_seconds must be between 0 and 300 seconds")
+
+    multi = profile.get("multi_view", {"enabled": False, "min_views": 1})
+    if not isinstance(multi, dict) or not isinstance(multi.get("enabled", False), bool):
+        raise ProfileError("multi_view must be an object with boolean enabled")
+    if not isinstance(multi.get("min_views", 1), int) or multi.get("min_views", 1) < 1:
+        raise ProfileError("multi_view.min_views must be a positive integer")
+    views = multi.get("views", [])
+    if views is None:
+        views = []
+    if not isinstance(views, list):
+        raise ProfileError("multi_view.views must be an array")
+    seen_view_ids: set[str] = set()
+    for index, view in enumerate(views):
+        field = f"multi_view.views[{index}]"
+        if not isinstance(view, dict):
+            raise ProfileError(f"{field} must be an object")
+        view_id = _required_string(view.get("id"), f"{field}.id")
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", view_id) or view_id in seen_view_ids:
+            raise ProfileError(f"{field}.id must be unique and identifier-like")
+        seen_view_ids.add(view_id)
+        _validate_camera(view.get("camera"), f"{field}.camera")
+        view_video = view.get("video")
+        if not isinstance(view_video, dict):
+            raise ProfileError(f"{field}.video must be an object")
+        _validate_video_path(view_video.get("path"))
+        if view_video.get("enabled", True) not in {True, False}:
+            raise ProfileError(f"{field}.video.enabled must be boolean")
+    # An ``enabled`` section that declares no views at all is not an error:
+    # the provider falls back to one implicit view, so a hand-edited manifest
+    # must not be able to take the whole game offline.  Declaring views but
+    # fewer than ``min_views`` is still a real misconfiguration.
+    if bool(multi.get("enabled", False)) and views and len(views) < int(multi.get("min_views", 1)):
+        raise ProfileError("multi_view.views must contain at least min_views entries when enabled")
+    if multi.get("yolo_fusion", "majority_vote") not in {"majority_vote"}:
+        raise ProfileError("multi_view.yolo_fusion must be majority_vote")
+    return profile
+
+
+def load_profile(path: Path) -> dict[str, Any]:
+    return validate_profile(_read_object(Path(path), "vision profile"))
+
+
+def load_component_config(package_dir: Path) -> dict[str, Any]:
+    payload = _read_object(Path(package_dir) / "config.json", "vision component config")
+    if payload.get("schema_version") != 1:
+        raise ProfileError("component config schema_version must be 1")
+    runtime = payload.get("runtime")
+    if not isinstance(runtime, dict) or runtime.get("mode", "per_request") not in {"per_request", "resident"}:
+        raise ProfileError("runtime.mode must be per_request or resident")
+    if "binary" in runtime:
+        resolve_project_path(runtime["binary"])
+    if "working_dir" in runtime:
+        resolve_project_path(runtime["working_dir"])
+    if "config" in runtime:
+        raise ProfileError(
+            "runtime.config was removed; each game declares its own hardware file through vision_profile.runtime_config"
+        )
+    video = payload.get("video", {})
+    if not isinstance(video, dict):
+        raise ProfileError("component config video must be an object")
+    if "webrtc_base_url" in video:
+        _validate_base_url(video["webrtc_base_url"], "video.webrtc_base_url")
+    return payload

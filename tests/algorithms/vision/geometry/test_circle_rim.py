@@ -1,0 +1,318 @@
+"""Independent synthetic stereo geometry and failure cases; no hardware actions."""
+
+import unittest
+import cv2
+import numpy as np
+from vision.geometry.circle_rim import make_view, project, fit_circle
+
+
+class StereoRimTest(unittest.TestCase):
+    def test_calibrated_table_skips_runtime_depth_plane_fit(self):
+        from unittest.mock import patch
+        from vision.geometry.circle_rim import table_from_base_scene, resolve_table
+
+        transform = np.diag([1, -1, -1, 1]).astype(float)
+        transform[:3, 3] = [0, 0, 0.7]
+        scene = dict(
+            cup_support_base_m=[0.1, 0.2, 0],
+            cup_normal_base=[0, 0, 1],
+            table_fit=dict(inlier_fraction=0.84, rms_mm=2.3),
+        )
+        fixed = table_from_base_scene(scene, transform)
+        np.testing.assert_allclose(fixed["point"], [0.1, -0.2, 0.7])
+        np.testing.assert_allclose(fixed["normal"], [0, 0, -1])
+        with patch("vision.geometry.circle_rim._plane", side_effect=AssertionError("runtime table fit forbidden")):
+            point, normal, fraction, rms, source = resolve_table(None, None, None, 6, fixed)
+        np.testing.assert_allclose(point, fixed["point"])
+        np.testing.assert_allclose(normal, fixed["normal"])
+        self.assertEqual((fraction, rms, source), (0.84, 0.0023, "calibrated"))
+
+    def setUp(self):
+        self.table = np.array([0.0, 0.0, 0.665])
+        self.normal = np.array([0.0, 0.0, -1.0])
+        self.views = []
+        theta = np.linspace(0, 2 * np.pi, 360, endpoint=False)
+        points = np.c_[0.0375 * np.cos(theta), 0.0375 * np.sin(theta), np.full(360, 0.6)]
+        for baseline in (0, 0.05):
+            record = {
+                "intrinsics": dict(width=640, height=480, fx=600.0, fy=600.0, cx=320.0, cy=240.0, dist_coeffs=[0] * 5),
+                "to_color_rotation": np.eye(3).ravel(order="F").tolist(),
+                "to_color_translation": [baseline, 0, 0],
+            }
+            image = np.full((480, 640), 150, np.uint8)
+            blank = make_view(image, record)
+            uv = project(points, blank)
+            cv2.fillPoly(image, [np.rint(uv).astype("int32")], 20)
+            self.views.append(make_view(image, record))
+
+    def test_fixed_height_recovers_position_and_radius(self):
+        for center in ([0.0, 0.0, 0.6],):
+            fitted = fit_circle(
+                self.views,
+                self.table,
+                self.normal,
+                [[0.003, 0.002, 0.59, 0.034], [-0.002, 0.001, 0.62, 0.04]],
+                [0.025, 0.075],
+                [0.04, 0.18],
+                fixed_height=0.065,
+            )
+            self.assertAlmostEqual(fitted["height_m"], 0.065, places=12)
+            np.testing.assert_allclose(fitted["center"], center, atol=0.002)
+            self.assertAlmostEqual(fitted["radius_m"] * 2, 0.075, delta=0.002)
+        shifted = [dict(v, k=dict(v["k"], cx=v["k"]["cx"] + 15)) for v in self.views]
+        moved = fit_circle(
+            shifted,
+            self.table,
+            self.normal,
+            [[-0.01, 0, 0.6, 0.0375]],
+            [0.025, 0.075],
+            [0.04, 0.18],
+            fixed_height=0.065,
+        )
+        self.assertAlmostEqual(moved["center"][0], -0.015, delta=0.002)
+        bad = list(self.views)
+        bad[1] = dict(bad[1], distance=np.full((480, 640), 30.0))
+        with self.assertRaises(ValueError):
+            fit_circle(
+                bad, self.table, self.normal, [[0, 0, 0.6, 0.0375]], [0.025, 0.075], [0.04, 0.18], fixed_height=0.065
+            )
+
+    def test_height_mode_validation(self):
+        from vision.geometry.circle_rim import height_options
+
+        self.assertEqual(height_options({})[0], "measured")
+        opts = dict(height_mode="fixed", fixed_height_mm=65, geometry_method="stereo_rim", height_range_mm=[40, 180])
+        self.assertEqual(height_options(opts), ("fixed", 0.065))
+        for change in (
+            dict(fixed_height_mm=0),
+            dict(fixed_height_mm=200),
+            dict(height_mode="typo"),
+            dict(geometry_method="depth_band"),
+        ):
+            with self.assertRaises(ValueError):
+                height_options(dict(opts, **change))
+
+    def test_recovers_metric_height_and_diameter_without_size_reference(self):
+        fitted = fit_circle(
+            self.views,
+            self.table,
+            self.normal,
+            [[0.003, 0.002, 0.59, 0.034], [-0.002, 0.001, 0.62, 0.04]],
+            [0.025, 0.075],
+            [0.04, 0.18],
+        )
+        self.assertAlmostEqual(fitted["height_m"], 0.065, delta=0.004)
+        self.assertAlmostEqual(fitted["radius_m"] * 2, 0.075, delta=0.002)
+        np.testing.assert_allclose(fitted["center"], [0, 0, 0.6], atol=0.004)
+
+    def test_scale_comes_from_baseline_not_reference_size(self):
+        for view in self.views:
+            view["t"] *= 1.5
+        fitted = fit_circle(
+            self.views,
+            self.table * 1.5,
+            self.normal,
+            [[0.003, 0.002, 0.89, 0.054], [-0.002, 0.001, 0.92, 0.06]],
+            [0.025, 0.075],
+            [0.04, 0.18],
+        )
+        self.assertAlmostEqual(fitted["height_m"], 0.0975, delta=0.006)
+        self.assertAlmostEqual(fitted["radius_m"] * 2, 0.1125, delta=0.003)
+
+    def test_quality_configuration_validation(self):
+        from vision.geometry.circle_rim import quality_options
+
+        for bad in (
+            {"min_edge_support": 1.1},
+            {"edge_distance_px": float("nan")},
+            {"max_center_spread_mm": True},
+            {"unknown": 1},
+        ):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                quality_options(bad)
+
+    def test_single_camera_cannot_supply_metric_scale(self):
+        with self.assertRaisesRegex(ValueError, "independent"):
+            fit_circle(
+                [self.views[0]] * 2, self.table, self.normal, [[0, 0, 0.6, 0.0375]], [0.025, 0.075], [0.04, 0.18]
+            )
+
+    def test_one_missing_rim_is_rejected(self):
+        self.views[1]["distance"][:] = 30
+        with self.assertRaises(ValueError):
+            fit_circle(self.views, self.table, self.normal, [[0, 0, 0.6, 0.0375]], [0.025, 0.075], [0.04, 0.18])
+
+    def test_distorted_images_require_rectification(self):
+        with self.assertRaisesRegex(ValueError, "rectified"):
+            make_view(
+                np.zeros((480, 640), np.uint8),
+                {"intrinsics": dict(width=640, height=480, dist_coeffs=[0.1, 0, 0, 0, 0])},
+            )
+
+
+class StereoSequenceTest(unittest.TestCase):
+    def test_shared_starts_do_not_replace_independent_observations(self):
+        from unittest.mock import patch
+        from vision.geometry.circle_rim import refine_sequence, QUALITY
+
+        initial = [dict(center=[0, 0, 0.60], radius_m=0.0375), dict(center=[0, 0, 0.61], radius_m=0.037)]
+        views = [object(), object()]
+        independent_results = [dict(center=[0, 0, 0.6001]), dict(center=[0, 0, 0.6102])]
+        with patch("vision.geometry.circle_rim.fit_circle", side_effect=independent_results) as fit:
+            result = refine_sequence(views, initial, [0, 0, 1], [0, 0, -1], [0.025, 0.075], [0.04, 0.18], QUALITY)
+        self.assertEqual(result, independent_results)
+        self.assertIs(fit.call_args_list[0].args[0], views[0])
+        self.assertIs(fit.call_args_list[1].args[0], views[1])
+        for call in fit.call_args_list:
+            np.testing.assert_allclose(call.args[3], [[0, 0, 0.60, 0.0375], [0, 0, 0.61, 0.037]])
+
+    def test_bad_first_search_can_be_recovered_but_each_frame_is_rechecked(self):
+        from unittest.mock import patch
+        from vision.geometry.circle_rim import fit_frame_sequence, QUALITY
+
+        good = dict(center=[0, 0, 0.6], radius_m=0.0375)
+        views = [object(), object()]
+        diag = {}
+        with patch(
+            "vision.geometry.circle_rim.fit_circle", side_effect=[ValueError("bad initial guess"), good, good, good]
+        ) as fit:
+            result = fit_frame_sequence(
+                views, [0, 0, 1], [0, 0, -1], [[0, 0, 0.7, 0.04]], [0.025, 0.075], [0.04, 0.18], QUALITY, diag
+            )
+        self.assertEqual(result, [good, good])
+        self.assertIsNone(diag["initial_frames"][0])
+        self.assertEqual(diag["initial_frame_errors"][0]["frame"], 0)
+        self.assertIs(fit.call_args_list[2].args[0], views[0])
+        self.assertIs(fit.call_args_list[3].args[0], views[1])
+
+    def test_missing_edges_are_not_rescued_by_neighbor_frames(self):
+        from unittest.mock import patch
+        from vision.geometry.circle_rim import fit_frame_sequence, QUALITY
+
+        good = dict(center=[0, 0, 0.6], radius_m=0.0375)
+        with patch(
+            "vision.geometry.circle_rim.fit_circle",
+            side_effect=[ValueError("missing edges"), good, ValueError("missing edges")],
+        ):
+            with self.assertRaisesRegex(ValueError, "missing edges"):
+                fit_frame_sequence(
+                    [object(), object()],
+                    [0, 0, 1],
+                    [0, 0, -1],
+                    [[0, 0, 0.7, 0.04]],
+                    [0.025, 0.075],
+                    [0.04, 0.18],
+                    QUALITY,
+                    {},
+                )
+
+    def test_real_motion_still_fails_original_limits(self):
+        from vision.geometry.circle_rim import validate_sequence, QUALITY
+
+        frames = [dict(center=[x, 0, 0.6], height_m=0.065, radius_m=0.0375) for x in [0, 0, 0, 0.01, 0.02]]
+        diag = {}
+        with self.assertRaisesRegex(ValueError, "center spread 20.00 mm"):
+            validate_sequence(frames, QUALITY, diag)
+        self.assertEqual(diag["center_spread_mm"], 20)
+
+    def test_failed_batch_height_variation_remains_rejected(self):
+        from vision.geometry.circle_rim import validate_sequence, QUALITY
+
+        heights = [0.0720637, 0.0663968, 0.0659890, 0.0687016, 0.0686496]
+        frames = [dict(center=[0, 0, 0.735 - h], height_m=h, radius_m=0.0373) for h in heights]
+        with self.assertRaisesRegex(ValueError, "height span 6.07 mm"):
+            validate_sequence(frames, QUALITY, {})
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class FixedQuorumTest(unittest.TestCase):
+    def test_quorum_preserves_quality_and_records_rejected_frames(self):
+        from unittest.mock import patch
+        from vision.geometry.circle_rim import fit_fixed_sequence, QUALITY
+
+        good = dict(center=[0, 0, 0.6], height_m=0.065, radius_m=0.0375)
+        diagnostic = {}
+        with patch(
+            "vision.geometry.circle_rim.fit_circle",
+            side_effect=[ValueError("weak edge"), good, ValueError("no rim"), good, good],
+        ) as fit:
+            results, first = fit_fixed_sequence(
+                [None] * 5, [0, 0, 0.665], [0, 0, -1], [], [0.025, 0.075], [0.04, 0.18], QUALITY, 0.065, 3, diagnostic
+            )
+        self.assertEqual(first, 1)
+        self.assertEqual(len(results), 3)
+        self.assertEqual(diagnostic["accepted_frame_indices"], [1, 3, 4])
+        self.assertEqual(len(diagnostic["rejected_frames"]), 2)
+        self.assertTrue(all(call.args[6] is QUALITY for call in fit.call_args_list))
+
+    def test_insufficient_frames_and_motion_still_fail(self):
+        from unittest.mock import patch
+        from vision.geometry.circle_rim import fit_fixed_sequence, QUALITY
+
+        good = dict(center=[0, 0, 0.6], height_m=0.065, radius_m=0.0375)
+        moved = dict(good, center=[0.02, 0, 0.6])
+        for values, minimum in (
+            ([good, good] + [ValueError("weak")] * 3, 3),
+            ([good] * 3 + [ValueError("weak")] * 2, 5),
+            ([good, good, moved] + [ValueError("weak")] * 2, 3),
+        ):
+            with patch("vision.geometry.circle_rim.fit_circle", side_effect=values):
+                with self.assertRaises(ValueError):
+                    fit_fixed_sequence(
+                        [None] * 5,
+                        [0, 0, 0.665],
+                        [0, 0, -1],
+                        [],
+                        [0.025, 0.075],
+                        [0.04, 0.18],
+                        QUALITY,
+                        0.065,
+                        minimum,
+                        {},
+                    )
+        for invalid in (True, 2, 6, 3.5):
+            with self.assertRaises(ValueError):
+                fit_fixed_sequence([], [], [], [], [], [], QUALITY, 0.065, invalid, {})
+
+
+class WorkspaceGateTest(unittest.TestCase):
+    """Red-workspace admission threshold is configurable; default stays .9."""
+
+    def setUp(self):
+        from pathlib import Path
+        import tempfile
+        from vision.geometry.circle_rim import detect_stereo
+
+        self.detect_stereo = detect_stereo
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.run = Path(directory.name)
+        self.image = np.zeros((40, 40, 3), np.uint8)
+        self.image[:, :20] = (0, 0, 255)  # red cloth fills the left half
+        mask = np.zeros((40, 40), bool)
+        mask[:, 5:25] = True  # 75% of the cup mask lies inside the red region
+        self.instances = [dict(mask=mask)]
+        self.meta = {"intrinsics": dict(fx=600.0, fy=600.0, cx=20.0, cy=20.0)}
+        self.fixed_table = dict(point=[0, 0, 0.665], normal=[0, 0, 1], fit=dict(inlier_fraction=0.9, rms_mm=2.0))
+
+    def detect(self, opts):
+        return self.detect_stereo(
+            self.run, None, self.image, self.meta, opts, 6, self.instances, {}, fixed_table=self.fixed_table
+        )
+
+    def test_default_threshold_rejects_partial_overlap(self):
+        opts = dict(min_area_px=100, stereo_rim={})
+        with self.assertRaisesRegex(ValueError, "red workspace"):
+            self.detect(opts)
+
+    def test_lowered_threshold_admits_partial_overlap(self):
+        from unittest.mock import patch
+
+        opts = dict(min_area_px=100, stereo_rim={}, min_workspace_fraction=0.1)
+        with patch("vision.geometry.circle_rim.image_contour", side_effect=ValueError("synthetic no contour")):
+            # The gate passed; the failure moves to the next pipeline stage.
+            with self.assertRaisesRegex(ValueError, "No complete image contour"):
+                self.detect(opts)

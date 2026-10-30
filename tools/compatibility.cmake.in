@@ -1,0 +1,16 @@
+# Preserve paths stored by existing installations without duplicating application resources.
+set(legacy "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/@CMAKE_INSTALL_DATADIR@/cup_shake")
+if(IS_SYMLINK "${legacy}")
+    file(READ_SYMLINK "${legacy}" destination)
+    if(NOT destination STREQUAL "dice_arena")
+        message(FATAL_ERROR "Unexpected compatibility link: ${legacy} -> ${destination}")
+    endif()
+elseif(EXISTS "${legacy}")
+    message(STATUS "Preserving existing cup_shake resources: ${legacy}")
+else()
+    execute_process(COMMAND "@CMAKE_COMMAND@" -E create_symlink dice_arena "${legacy}"
+        RESULT_VARIABLE result)
+    if(NOT result EQUAL 0)
+        message(FATAL_ERROR "Cannot create compatibility resource link: ${legacy}")
+    endif()
+endif()

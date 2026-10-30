@@ -1,0 +1,320 @@
+{
+  "schema_version": 1,
+  "files": [
+    {
+      "path": "algorithms/cup_grasp_demo/models/best_green.q.onnx",
+      "size_bytes": 3601973,
+      "sha256": "66ab24e84bf97ce8ce01bf4118fc7ba03ab3839cc4a7ca910b7f2eb9eb74a34d"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/base_link.stl",
+      "size_bytes": 807284,
+      "sha256": "540462fb56e52091daa3cd1ad3acc3c19a43f120b2f11bae5a69b32b08c738b6"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/gripper_base.stl",
+      "size_bytes": 1837884,
+      "sha256": "041b1c8ffa29bff9a5e9350ec9d3e1a0129a5abcba1f347b29b5ad7367ba5f5a"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/gripper_flange.stl",
+      "size_bytes": 665584,
+      "sha256": "1ae6d1c5af001582a3328564839e8eb5f2acec02e7e2b19e65fc3c43f8a9c95a"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/gripper_link1.stl",
+      "size_bytes": 104384,
+      "sha256": "475a7d8db056524d7659fadf5a2c307d62791047b6214d733dfc7846ed1c613d"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/gripper_link2.stl",
+      "size_bytes": 104384,
+      "sha256": "3f88d534a85e28a33ef7d2061adacbd1d25214aa9325f9e464aad0f9e4b74606"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/link1.stl",
+      "size_bytes": 1130084,
+      "sha256": "0e38bf33ce41f04d7e70e471768c00fa144ba4016a878b9a6d8303c319736e09"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/link2.stl",
+      "size_bytes": 1802534,
+      "sha256": "fc9eb85db9fbd351c9f6e119f5fed33c6f0dd3bc3b11698a0f96aaeb2d36c721"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/link3.stl",
+      "size_bytes": 1947484,
+      "sha256": "44c70f731ad5067d608ebebc9e59f3c231988f992dfac6cb01ee7a6bb4b053f1"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/link4.stl",
+      "size_bytes": 1814784,
+      "sha256": "47242e9b5d8b06c912261756f24dddb1e7f54ac6e718232a25889115298b966d"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/link5.stl",
+      "size_bytes": 1810084,
+      "sha256": "dc497f5a9bab2d0d314250134d4ec86617abea7205d122db41b765acdb86ae7e"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/link6.stl",
+      "size_bytes": 758284,
+      "sha256": "66417d30596e33c890f4f141781023bd3ea15709a502e7f59b30f6676f556022"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/link7.stl",
+      "size_bytes": 149384,
+      "sha256": "70a2f415358f9e46088673c92bfe78ca5b1072dd73b7ea24464ba3ebb4c3e647"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/revo2_flange.stl",
+      "size_bytes": 315384,
+      "sha256": "ddef9ff5daab9f549c1901daefd0e601abb731b4eb49d9c9fb10e2a78d0af4c3"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_base_link.STL",
+      "size_bytes": 2364184,
+      "sha256": "2754b59a9132a04a28cf5725d5478599218c9f7dd4b2e13329147e824211ec44"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_base_visual_link.STL",
+      "size_bytes": 130584,
+      "sha256": "7357830cda11d9749adc1e796aa0e493f8001ac2c21815d40fdc1406a3b3457c"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_index_distal_link.STL",
+      "size_bytes": 411284,
+      "sha256": "44d4b12f55e85baf77685443aa1f38ae521130a58f0b742920f2a99abc1a1efb"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_index_proximal_link.STL",
+      "size_bytes": 339884,
+      "sha256": "94fdff414f1c29940495d1f0264a50621340cfc30f9b5365b3490d39ae367f2f"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_index_tip.STL",
+      "size_bytes": 117684,
+      "sha256": "4af36131feedb7f83a695ff8e7d09a7e8893df96f971b2d363c0d359e3a82bbf"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_index_touch_link.STL",
+      "size_bytes": 99984,
+      "sha256": "a7f7b054539a858173b3e002be2df5ebc60a3e3d8bdf38e32f490a1475809251"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_middle_distal_link.STL",
+      "size_bytes": 408584,
+      "sha256": "8f11ee9addab1a1eab40fd765c21389e6f98397166ae5899dc83ddf66f871b3b"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_middle_proximal_link.STL",
+      "size_bytes": 333384,
+      "sha256": "56d9f019bad093daf93a736596ab4e7d9b17fb3c79e2be4181d909958cf76a37"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_middle_tip.STL",
+      "size_bytes": 117684,
+      "sha256": "844204b7bcf3de3ad500232e2e30ac15a8ec41728be281d0670c7ad1a2b09e34"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_middle_touch_link.STL",
+      "size_bytes": 69884,
+      "sha256": "1fdd83c56c7eccb38b1af2d75742f1681d6a4dff93e9f15a37173e22117fecf0"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_pinky_distal_link.STL",
+      "size_bytes": 554084,
+      "sha256": "14c25fb57059978594ea518860522ae401e3a3602d6a39297c52807620e30bac"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_pinky_proximal_link.STL",
+      "size_bytes": 343284,
+      "sha256": "1a4ba525880efd4da2bcdfd5d2d69a684a02f8c7c01f8e185adf23f47469d0f4"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_pinky_tip.STL",
+      "size_bytes": 117684,
+      "sha256": "f632c67971d2d6dc8a5edcfcac4db8b3078e346540270bd89a9e9c783d304415"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_pinky_touch_link.STL",
+      "size_bytes": 68584,
+      "sha256": "96ed796046634fead6ac789be979e3b013c3a6d32ba866a31ea92f7c3ebf19ee"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_ring_distal_link.STL",
+      "size_bytes": 529684,
+      "sha256": "40acf67de96d432bbbc0a3eda7bbb292cbd2ea0c5f0c78a9b299cf360f3a9f07"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_ring_proximal_link.STL",
+      "size_bytes": 281484,
+      "sha256": "89c64252e891bc91567241b74de18d986e20e4e57d74cd10289d7171f6c57dc6"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_ring_tip.STL",
+      "size_bytes": 117684,
+      "sha256": "c3be3c69a1b7cba72d4b09c8ca4e04f3ad15ef2e47f8212bb547be7487f88022"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_ring_touch_link.STL",
+      "size_bytes": 71584,
+      "sha256": "f9c0ac36994b014d25b7d5c292cbd39192e5146c8961ded1e8a9702e2d4e62c2"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_thumb_distal_link.STL",
+      "size_bytes": 95834,
+      "sha256": "f489da4e47935510ffba42016052318f123ef07360fdbbfaadcb0f7d8ddbe28f"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_thumb_metacarpal_link.STL",
+      "size_bytes": 289584,
+      "sha256": "15464fa122dddc49a56462898777e9e407f22b81abb03d10aba0d95f8fefc83a"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_thumb_proximal_link.STL",
+      "size_bytes": 620984,
+      "sha256": "17d6f8575ffdc49fd0c8a4525650180a6806ee3fc0a6485f0610040010aeed34"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_thumb_proximal_visual_link.STL",
+      "size_bytes": 735284,
+      "sha256": "0c415499f0b28609062d1364cd2500cd801a5f4e6a8a2083ae82b8a870404495"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_thumb_tip.STL",
+      "size_bytes": 117684,
+      "sha256": "0e53267b1a3abdbcb41b190b264f805bf83f650e79ea2c22b4974e404e78e454"
+    },
+    {
+      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_thumb_touch_link.STL",
+      "size_bytes": 123084,
+      "sha256": "184c29c27b46ea21df210a13af795c49569fcc1b36cd8b8ebe5aa66b4a0f5612"
+    },
+    {
+      "path": "game/backend/games/dice/audio/warm_321开始.wav",
+      "size_bytes": 210796,
+      "sha256": "0869f77aa2576692eafdc073cd38ecb59bb54ee59239829c892d37778694cf5d"
+    },
+    {
+      "path": "game/backend/games/dice/audio/warm_准备好了没有？三，二，一,开盖.wav",
+      "size_bytes": 752684,
+      "sha256": "42ba8b6e869f86168e3e2bdd6ead9b12d78ae94ad1a7f2f70476cc538e75539c"
+    },
+    {
+      "path": "game/backend/games/dice/audio/zanni_321开始.wav",
+      "size_bytes": 146640,
+      "sha256": "c3a600848a00b1534482248b08badf66f900bae9e8ebac404811766c472b685a"
+    },
+    {
+      "path": "game/backend/games/dice/audio/停.wav",
+      "size_bytes": 52524,
+      "sha256": "478b6f67caffe3d1dbea033e1a86d83f79781e8e844f2973b97ae5cfcd687f8d"
+    },
+    {
+      "path": "game/backend/games/dice/models/best.q.onnx",
+      "size_bytes": 11479986,
+      "sha256": "035e20721c729d63133d4056e06da7186e5224ac46a635b8844d03e5a79b28bf"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/assets/warm-female-reference.wav",
+      "size_bytes": 647080,
+      "sha256": "b59901c87e521990f37e6d6d15189a16ade2f0806ed704c309a1b730acddb9b6"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/models/MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_full.onnx",
+      "size_bytes": 12184066,
+      "sha256": "b92d3512969eaef84f4f64df5bd3c26e4d74856987179aad984cbecff6b7df7d"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/models/MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_shared.data",
+      "size_bytes": 44198912,
+      "sha256": "e69d52e0f4e84ca27850557ee54face46632d3a5a16c89bd246c7c408466dcad"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/models/MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_encode.data",
+      "size_bytes": 44507136,
+      "sha256": "aa751265b2bab2887eac224484546b194875aa7494b607115439b3dc6b228a2c"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/models/MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_encode.onnx",
+      "size_bytes": 815775,
+      "sha256": "eadea4a645abdcf98714c7aead122ee2ce7da6e080f9f80b977cd1ca8e19473a"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/models/MOSS-TTS-Nano-100M-ONNX-xslim-dynq/moss_tts_decode_step.onnx",
+      "size_bytes": 186609498,
+      "sha256": "afd4f71b6da0b3b9cedbbdd6b3f9ce3dfc47502a5b2428f4dab10442f9b86631"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/models/MOSS-TTS-Nano-100M-ONNX-xslim-dynq/moss_tts_local_fixed_sampled_frame.gelu.onnx",
+      "size_bytes": 130259799,
+      "sha256": "e215dd50a500f7b673b0f37d49581b561e73ab516469ae2d40ff7c9982eac7ba"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/models/MOSS-TTS-Nano-100M-ONNX-xslim-dynq/moss_tts_prefill.onnx",
+      "size_bytes": 186666268,
+      "sha256": "f79c89a0805a11344e39687a7d7e091a2eb9c20db97403b235bc38bff2e36e3c"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/models/MOSS-TTS-Nano-100M-ONNX-xslim-dynq/tokenizer.model",
+      "size_bytes": 470897,
+      "sha256": "c353ee1479b536bf414c1b247f5542b6607fb8ae91320e5af1781fee200fddff"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/voice/1安可-4s.wav",
+      "size_bytes": 384078,
+      "sha256": "3c1bce075b6d4927fb6b5667eb08b9197446c878a07cb8a99f79851b8f53aab3"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/voice/1安可.wav",
+      "size_bytes": 919206,
+      "sha256": "6752bbcfe59bf7804ec4e673e2d1065b642550a1d80ab78fd8e3b670a2c31ec9"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/voice/anke.wav",
+      "size_bytes": 1000528,
+      "sha256": "fe33150ef4d7f96c76986cb3779c74d19331e3bd9cd13c12b285b35b317f9304"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/voice/anke1.wav",
+      "size_bytes": 386430,
+      "sha256": "37bf8aeb5dcc0e832cec20eeffbd51df1c122183a94b843522d70ab453e2c944"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/voice/boy.wav",
+      "size_bytes": 480078,
+      "sha256": "376e0e65d9c7845f20e9e513b685651cfc9ac0523ea7aa02eb507dda727c8af6"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/voice/reference.wav",
+      "size_bytes": 747154,
+      "sha256": "ae92b73e85305ed9605b478bdc01fa147c90a36adcd3d20223633a18e6b3134a"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/voice/warm-female-reference.wav",
+      "size_bytes": 647080,
+      "sha256": "b59901c87e521990f37e6d6d15189a16ade2f0806ed704c309a1b730acddb9b6"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/voice/warm.wav",
+      "size_bytes": 334138,
+      "sha256": "c7b31d6dbe7cc6a716dded00550db5b50940bf209e424e4ad207b12e657c8ff6"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/voice/yangyang.wav",
+      "size_bytes": 686420,
+      "sha256": "1b5e68858a3b0159d52b24bbaa5e275d8e5d1d15bff86e7ce4f08ee35eb0356e"
+    },
+    {
+      "path": "game/tts/moss-tts-nano/voice/zanni1.wav",
+      "size_bytes": 562706,
+      "sha256": "4b033d5168deaa6ef216ff3c0388df0052bd9b9e86f59de12dc818d97f5c8b38"
+    },
+    {
+      "path": "mediamtx/mediamtx",
+      "size_bytes": 50636677,
+      "sha256": "b1c50d3b08efac53cf2dbe2a108c60108262c8ccbfb65e4b5c235b7f3fa54f49"
+    }
+  ]
+}

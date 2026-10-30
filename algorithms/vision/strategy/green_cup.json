@@ -1,0 +1,43 @@
+{
+  "contact_offset_base_mm": [
+    0,
+    0,
+    65
+  ],
+  "tcp_offset_flange_mm": [
+    25,
+    0,
+    10
+  ],
+  "wrist_reference_deg": [
+    15,
+    -13,
+    5
+  ],
+  "lift_mm": 50,
+  "open_targets_0_100": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "grip_targets_0_100": [
+    0,
+    80,
+    50,
+    50,
+    50,
+    100
+  ],
+  "finger_duration_s": 1.0,
+  "finger_settle_s": 0.0,
+  "held_cup_margin_mm": 5,
+  "place_tolerance_mm": 3,
+  "approach_via_above": false,
+  "retreat_clearance_mm": 50,
+  "approach_clearance_mm": 0,
+  "require_hand_position": false,
+  "require_arm_position": false
+}

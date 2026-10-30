@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<package format="3">
+    <name>dice_arena</name>
+    <version>0.2.0</version>
+    <description>Dice game, cup grasp and shake execution, hand-eye calibration, speech and vision</description>
+    <maintainer email="robot_team@spacemit.com">robot_team</maintainer>
+    <license>Apache-2.0</license>
+    <depend>manipulation</depend>
+    <system_depend check="python3 -c 'import cv2; cv2.aruco'">python3-opencv</system_depend>
+    <system_depend check="python3 -c 'import numpy'">python3-numpy</system_depend>
+    <system_depend check="python3 -c 'import scipy'">python3-scipy</system_depend>
+    <system_depend arch="riscv64" check="python3 -c 'import onnxruntime, spacemit_ort'">python3-spacemit-ort</system_depend>
+    <!-- Local MOSS-TTS: the packages the original game bundled under tts/moss-tts-nano/python. -->
+    <system_depend arch="riscv64" check="python3 -c 'import sentencepiece'">python3-sentencepiece</system_depend>
+    <system_depend arch="riscv64" check="python3 -c 'import soundfile'">python3-soundfile</system_depend>
+    <system_depend arch="riscv64">spacemit-onnxruntime</system_depend>
+    <system_depend arch="riscv64">spacemit-tcm</system_depend>
+    <system_depend arch="riscv64">alsa-utils</system_depend>
+    <system_depend arch="riscv64">pipewire</system_depend>
+    <!-- Dice recognition (yolov8_camera): build and GStreamer camera/RTSP pipeline. -->
+    <system_depend arch="riscv64">opencv-spacemit</system_depend>
+    <system_depend arch="riscv64">ocl-icd-opencl-dev</system_depend>
+    <system_depend arch="riscv64">opencl-clhpp-headers</system_depend>
+    <system_depend arch="riscv64">libgstreamer1.0-dev</system_depend>
+    <system_depend arch="riscv64">libgstreamer-plugins-base1.0-dev</system_depend>
+    <system_depend arch="riscv64">gstreamer1.0-plugins-good</system_depend>
+    <system_depend arch="riscv64">gstreamer1.0-plugins-bad</system_depend>
+    <system_depend arch="riscv64">gstreamer1.0-rtsp</system_depend>
+    <system_depend arch="riscv64">v4l-utils</system_depend>
+    <export><build_type>cmake</build_type></export>
+</package>

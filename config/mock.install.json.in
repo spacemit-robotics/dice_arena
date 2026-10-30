@@ -1,0 +1,26 @@
+{
+    "schema_version": 1,
+    "executable": "@CUP_DEVICE_PATH@",
+    "device_plan": "@CUP_PLAN_PATH@",
+    "policy_library": "@CUP_POLICY_PATH@",
+    "planner": {
+        "type": "fixture",
+        "home_rad": [0, 0],
+        "targets": {
+            "approach": [[0.1, -0.1]],
+            "lift": [[0.1, 0]],
+            "shake": [[0.12, 0], [0.08, 0], [0.1, 0]],
+            "lower": [[0.1, -0.1]],
+            "return_home": [[0, 0]]
+        }
+    },
+    "speed_scale": 0.05,
+    "open_positions": [0, 0, 0, 0, 0, 0],
+    "grip_positions": [0.2, 0.2, 0.3, 0.3, 0.3, 0.3],
+    "duration_s": 0.5,
+    "gestures": {
+        "win": [0.1, 0.1, 0, 0, 0, 0],
+        "lose": [0, 0, 0.3, 0.3, 0.3, 0.3],
+        "draw": [0, 0, 0, 0, 0, 0]
+    }
+}

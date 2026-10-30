@@ -1,0 +1,15 @@
+{
+    "id": "robot_arm_spacemit",
+    "type": "robot",
+    "name": "SpacemiT manipulation",
+    "version": "0.1.0",
+    "enabled": true,
+    "entry": "provider.py:SpacemitRobotProvider",
+    "capabilities": [
+        "grasp_cup",
+        "shake_dice",
+        "settle_dice",
+        "feedback",
+        "query_pose"
+    ]
+}

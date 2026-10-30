@@ -1,0 +1,2496 @@
+#!/usr/bin/env python3
+"""Small K3-local HTTP bridge for the Dice Arena web UI.
+
+The bridge owns only HTTP routing, static serving, and per-round job lifecycle.
+Board-local capabilities live in pluggable components
+(``components/<id>/provider.py``) and games declare
+which components they orchestrate (``games/*/``). The browser never receives
+the LLM key and never decides the winner itself.
+"""
+
+from __future__ import annotations
+
+import argparse
+import faulthandler
+import json
+import mimetypes
+import os
+import queue
+import signal
+import sys
+import threading
+import time
+from http import HTTPStatus
+from ipaddress import ip_address
+from urllib.parse import parse_qs, urlsplit
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any, Callable
+
+from core.components import build_registry
+from core.errors import (
+    DiceArenaError,
+    GameDisabledError,
+    InvalidRequestError,
+    JobAlreadyExistsError,
+    JobNotFoundError,
+)
+from core.games import (
+    GAMES_ROOT,
+    GameRegistry,
+    load_games,
+    require_game,
+    resolve_game_audio_path,
+    resolve_provider_id,
+    resolve_adjudication_timeout,
+    run_game,
+)
+from core.jobs import ComponentJob
+from core.asr_bridge import AsrIntentBridge
+from core.vision_stream import VisionStreamManager
+from core.board_input import BoardKeyReader, resolve_intent
+from core.shared_session import SharedSession
+from core.shared_audio import SharedAudio
+from core.arena_config import (
+    ARENA_CONFIG_PATH,
+    ArenaConfigError,
+    arena_asr_enabled,
+    arena_game_select_confirm_phrases,
+    arena_game_select_phrases,
+    arena_input_board_enabled,
+    arena_slot_value,
+    arena_standby,
+    collect_local_tts_ids,
+    collect_provider_slot_ids,
+    load_arena_config,
+    resolve_local_tts_pin,
+    with_global_defaults,
+)
+from core.state_machine import GameRound, IntentRejectedError, RoundClosedError
+from core.tts_config import TtsConfigError
+from core.tts_config import load_component_config as load_tts_component_config
+from core.tts_dispatch import TtsDispatcher
+from core.tts_protocol import (
+    encode_audio_frame,
+    encode_end_frame,
+    encode_error_frame,
+)
+from components.vision_yolov8_objdetect.profile import (
+    compose_video_url,
+    load_component_config,
+    load_runtime_config,
+    resolve_runtime_config_path,
+)
+
+ROOT = Path(__file__).resolve().parents[1]
+WEB_ROOT = ROOT / "web"
+
+# Operational fallback; each game manifest's timeouts.adjudication_seconds owns
+# the per-round budget.
+JOB_TIMEOUT_SECONDS = 120
+COMPONENTS = build_registry()
+GAMES = load_games()
+
+# Manifest hot reload: game manifests are small and reread whenever their
+# mtime changes, so line edits, wav swaps, and speech-mode changes take
+# effect on the next page load or request without a service restart.
+# Engine processes keep their boot-time set: slot ids are expected to keep
+# pointing at the providers that were started (per-line changes between
+# local/remote/audio need no new process).
+_GAMES_ROOT = GAMES_ROOT
+_GAMES_LOCK = threading.Lock()
+
+
+def _manifest_mtimes() -> dict[str, float]:
+    return {str(path): path.stat().st_mtime for path in sorted(_GAMES_ROOT.glob("*/manifest.json"))}
+
+
+def get_games() -> GameRegistry:
+    """Return the game registry, reloading manifests when their mtime changes.
+
+    A reload that would drop a previously loaded game means a broken manifest
+    edit; keep serving the last good registry in that case so a typo cannot
+    make games vanish from the UI.  Removing a game on purpose needs a
+    service restart.  A reload that would reference a second local TTS
+    engine (slot or per-line provider pin) is rejected the same way: the
+    process is frozen on the one engine it pinned at startup.
+    """
+    global GAMES, _GAMES_MTIMES
+    reloaded = False
+    with _GAMES_LOCK:
+        mtimes = _manifest_mtimes()
+        if mtimes != _GAMES_MTIMES:
+            candidate = load_games(_GAMES_ROOT)
+            missing = {m["id"] for m in GAMES.all()} - {m["id"] for m in candidate.all()}
+            conflict = _single_local_tts_conflict(_ARENA_CONFIG, candidate) or _single_asr_conflict(
+                _ARENA_CONFIG, candidate
+            )
+            if missing:
+                print(
+                    f"[games] reload skipped; broken manifest removed {sorted(missing)}, keeping last good config",
+                    flush=True,
+                )
+            elif conflict is not None:
+                print(f"[games] reload skipped; {conflict}", flush=True)
+            else:
+                GAMES = candidate
+                _GAMES_MTIMES = mtimes
+                reloaded = True
+        games = GAMES
+    # The drift check re-enters get_games() and the arena accessors; it must
+    # run OUTSIDE _GAMES_LOCK — _GAMES_LOCK is not reentrant, and calling it
+    # under the lock deadlocked every request thread (2026-09-03 incident).
+    # The conflict check above therefore reads the cached _ARENA_CONFIG
+    # instead of get_arena_config(); the drift pass below re-validates.
+    if reloaded:
+        _check_local_tts_drift()
+    return games
+
+
+_GAMES_MTIMES: dict[str, float] = _manifest_mtimes()
+
+# Arena (project-wide) config: deployment defaults that follow the process
+# rather than any single game — provider slots, TTS voice/speed defaults,
+# and the global ASR breaker.  Hot-reloaded with the same keep-last-good
+# rule as game manifests; the local TTS selection is additionally pinned at
+# process start (see main) because a running engine cannot be swapped.
+_ARENA_CONFIG: dict[str, Any] = {}
+_ARENA_MTIME: float | None = None
+_LOCAL_TTS_PIN: str | None = None
+
+
+def get_arena_config() -> dict[str, Any]:
+    """Return the arena config, reloading backend/config.json on mtime change."""
+    global _ARENA_CONFIG, _ARENA_MTIME
+    try:
+        mtime = ARENA_CONFIG_PATH.stat().st_mtime
+    except OSError:
+        mtime = None
+    if mtime != _ARENA_MTIME:
+        _ARENA_MTIME = mtime
+        try:
+            _ARENA_CONFIG = load_arena_config(ARENA_CONFIG_PATH)
+            print("[arena] config loaded", flush=True)
+        except ArenaConfigError as exc:
+            print(f"[arena] keep last good config: {exc}", flush=True)
+        _check_local_tts_drift()
+    return _ARENA_CONFIG
+
+
+def _enabled_game_manifests() -> list[dict[str, Any]]:
+    return [m for m in get_games().all() if m.get("enabled", False)]
+
+
+def _check_local_tts_drift() -> None:
+    """A mid-run local-TTS config change must not switch the running engine."""
+    if _LOCAL_TTS_PIN is None:
+        return
+    try:
+        would_pin = resolve_local_tts_pin(get_arena_config(), _enabled_game_manifests())
+    except ArenaConfigError as exc:
+        print(
+            f"[arena] local TTS conflict appeared at runtime (frozen: {_LOCAL_TTS_PIN}): {exc}",
+            flush=True,
+        )
+        return
+    if would_pin and would_pin != _LOCAL_TTS_PIN:
+        print(
+            f"[arena] local TTS config now points at {would_pin} but the process "
+            f"is frozen on {_LOCAL_TTS_PIN}; restart to switch engines",
+            flush=True,
+        )
+
+
+def _is_local_tts(provider_id: str) -> bool:
+    """True when the id names a registered TTS component of local runtime kind.
+
+    Unregistered ids (typos, cloud-only entries without a package) never
+    count: they fail later at request time with the existing not-found error.
+    """
+    get_manifest = getattr(COMPONENTS, "get_manifest", None)
+    if not callable(get_manifest):
+        return False
+    try:
+        manifest = get_manifest(provider_id)
+    except DiceArenaError:
+        return False
+    if not isinstance(manifest, dict) or manifest.get("type") != "tts":
+        return False
+    package_dir = ROOT / "backend" / "components" / provider_id
+    try:
+        # The TTS loader, not the vision-profile one: each package kind
+        # validates its own config schema.
+        config = load_tts_component_config(package_dir)
+    except TtsConfigError:
+        return False  # a broken component config is health's failure to report
+    runtime = config.get("runtime", {})
+    return isinstance(runtime, dict) and runtime.get("kind", "local") == "local"
+
+
+def _single_local_tts_conflict(arena: dict[str, Any], registry: GameRegistry) -> str | None:
+    """Return the single-local-TTS conflict message, or None when consistent.
+
+    Checks every routing path — arena slot, enabled-game slots, and per-line
+    speech ``provider`` pins — against the components' runtime kind, so a
+    manifest line cannot route around the pinned local engine either.
+    """
+    manifests = [m for m in registry.all() if m.get("enabled", False)]
+    ids = collect_local_tts_ids(arena, manifests, _is_local_tts)
+    if len(ids) > 1:
+        return (
+            "multiple local TTS engines referenced "
+            f"(slots or per-line provider pins): {', '.join(ids)} — "
+            "keep exactly one local engine; remote/cloud engines may still be "
+            "mixed per line"
+        )
+    return None
+
+
+def _prewarm_pinned_local_tts(pin: str | None) -> None:
+    """Warm the pinned local TTS engine before the server starts serving.
+
+    Local engines are heavy resident processes with mandatory warmup (the
+    demo's first spoken line must not pay the model-load latency).  A missing
+    provider or a failed warmup refuses startup: a silent arena is a broken
+    arena, and the failure belongs at boot, not on stage.
+    """
+    if not pin:
+        return
+    try:
+        provider = COMPONENTS.require(pin, expected_type="tts")
+    except DiceArenaError as exc:
+        print(f"[arena] refusing to start: local TTS {pin} unavailable: {exc.message}", flush=True)
+        raise SystemExit(1) from exc
+    prewarm = getattr(provider, "prewarm", None)
+    if not callable(prewarm):
+        # HTTP-bridge engines (moss/qwen3) warm up in their lifecycle launcher.
+        print(f"[arena] local TTS {pin} has no prewarm hook (lifecycle engine)", flush=True)
+        return
+    try:
+        prewarm()
+    except Exception as exc:
+        print(f"[arena] refusing to start: local TTS {pin} prewarm failed: {exc}", flush=True)
+        raise SystemExit(1) from exc
+    print(f"[arena] local TTS {pin} prewarmed", flush=True)
+
+
+def _single_asr_conflict(arena: dict[str, Any], registry: GameRegistry) -> str | None:
+    """Return the single-ASR-engine conflict message, or None when consistent.
+
+    The ASR engine owns the microphone for the whole process run, so exactly
+    one engine id may be referenced anywhere (arena slot plus enabled-game
+    overrides) — a second one could never run anyway and must fail loudly.
+    """
+    manifests = [m for m in registry.all() if m.get("enabled", False)]
+    ids = collect_provider_slot_ids("asr", arena, manifests)
+    if len(ids) > 1:
+        return f"multiple ASR engines referenced: {', '.join(ids)} — keep exactly one (the engine owns the microphone)"
+    return None
+
+
+def _prewarm_resident_asr(arena: dict[str, Any]) -> None:
+    """Warm the resident ASR engine before the server starts serving.
+
+    Raises RuntimeError on a failed warmup (the caller refuses startup);
+    with the breaker off or the slot unconfigured the engine simply stays
+    down and voice input recovers lazily at the next attach.
+    """
+    if not arena_asr_enabled(arena):
+        print("[arena] asr_enabled=false: ASR engine stays down (voice input off)", flush=True)
+        return
+    provider_id = arena_slot_value(arena, "asr")
+    if not provider_id:
+        print("[arena] providers.asr not configured; skipping ASR prewarm", flush=True)
+        return
+    try:
+        provider = COMPONENTS.require(provider_id, expected_type="asr")
+    except DiceArenaError as exc:
+        raise RuntimeError(f"ASR provider {provider_id} unavailable: {exc.message}") from exc
+    prewarm = getattr(provider, "prewarm", None)
+    if not callable(prewarm):
+        print(f"[arena] ASR provider {provider_id} has no prewarm hook (per-session engine)", flush=True)
+        return
+    try:
+        prewarm()
+    except Exception as exc:
+        raise RuntimeError(f"ASR engine {provider_id} prewarm failed: {exc}") from exc
+    print(f"[arena] ASR engine {provider_id} prewarmed (resident)", flush=True)
+
+
+def _game_provider_id(game_id: str, provider_slot: str, fallback: str) -> str:
+    manifest = require_game(get_games(), game_id)
+    provider_id = resolve_provider_id(manifest, provider_slot)
+    if not provider_id:
+        provider_id = arena_slot_value(get_arena_config(), provider_slot)
+    return provider_id or fallback
+
+
+def _provider_health(
+    provider_id: str,
+    provider_type: str,
+    provider_role: str | None = None,
+) -> dict[str, Any]:
+    """Return health without allowing a broken optional provider to break /health."""
+    try:
+        provider = COMPONENTS.require(
+            provider_id,
+            expected_type=provider_type,
+            expected_role=provider_role,
+        )
+    except DiceArenaError as exc:
+        return {
+            "id": provider_id,
+            "type": provider_type,
+            "role": provider_role or "",
+            "ok": False,
+            "error": exc.message,
+        }
+    try:
+        health = provider.health()
+    except Exception as exc:
+        return {
+            "id": provider_id,
+            "type": provider_type,
+            "role": provider_role or "",
+            "ok": False,
+            "error": str(exc),
+        }
+    if not isinstance(health, dict):
+        return {
+            "id": provider_id,
+            "type": provider_type,
+            "role": provider_role or "",
+            "ok": False,
+            "error": "health() must return an object",
+        }
+    normalized = dict(health)
+    normalized.setdefault("id", provider.id)
+    normalized.setdefault("type", provider.type)
+    normalized.setdefault("role", provider.role)
+    return normalized
+
+
+def _selected_provider_id(game_id: str, provider_slot: str, fallback: str) -> str:
+    return _game_provider_id(game_id, provider_slot, fallback)
+
+
+def _primary_vision_game_id() -> str:
+    """The vision game the deployment-level health report should describe.
+
+    With more than one vision game loaded there is no single obvious answer, so
+    pick deterministically: the first **enabled** game declaring a
+    ``vision_profile``, else the first such game at all, else ``"dice"`` to keep
+    the historical value for a deployment that has none.  Callers already
+    tolerate an unknown id (``_game_provider_id`` falls back to the arena slot
+    when the manifest cannot be read).
+    """
+    try:
+        manifests = list(get_games().all())
+    except Exception:
+        return "dice"
+    fallback = ""
+    for manifest in manifests:
+        if not isinstance(manifest, dict):
+            continue
+        if not isinstance(manifest.get("vision_profile"), dict):
+            continue
+        game_id = manifest.get("id")
+        if not isinstance(game_id, str) or not game_id.strip():
+            continue
+        if manifest.get("enabled", False):
+            return game_id.strip()
+        if not fallback:
+            fallback = game_id.strip()
+    return fallback or "dice"
+
+
+def _selected_tts_id(game_id: str = "dice") -> str:
+    try:
+        return _tts_dispatcher().provider_id(game_id)
+    except DiceArenaError:
+        return "tts_qwen3"
+
+
+def _safe_profile_metadata(profile: dict[str, Any], base_url: str, runtime: dict[str, Any]) -> dict[str, Any]:
+    """Project one profile to public health fields; never recurse into registry metadata."""
+    video = profile.get("video", {})
+    path = video.get("path") if isinstance(video, dict) else ""
+    result: dict[str, Any] = {
+        "profile_id": profile.get("game_id", ""),
+        "video_enabled": bool(video.get("enabled", True)) if isinstance(video, dict) else False,
+        "video_path": path if isinstance(path, str) else "",
+        "mode": runtime.get("mode", ""),
+        "prewarm": bool(runtime.get("prewarm_camera", False)),
+        "runtime_mode": runtime.get("mode", ""),
+        "prewarm_camera": bool(runtime.get("prewarm_camera", False)),
+        "mediamtx_base_url": base_url,
+        "webrtc_base_url": base_url,
+    }
+    if result["video_enabled"] and result["video_path"] and isinstance(base_url, str):
+        try:
+            result["video_url"] = compose_video_url(base_url, result["video_path"])
+        except Exception:
+            pass
+    multi = profile.get("multi_view") if isinstance(profile.get("multi_view"), dict) else {}
+    views: list[dict[str, Any]] = []
+    for view in multi.get("views", []) if isinstance(multi.get("views", []), list) else []:
+        if not isinstance(view, dict) or not isinstance(view.get("id"), str):
+            continue
+        view_video = view.get("video") if isinstance(view.get("video"), dict) else {}
+        view_path = view_video.get("path", "")
+        item = {"id": view["id"], "video_path": view_path if isinstance(view_path, str) else ""}
+        if bool(view_video.get("enabled", True)) and item["video_path"] and isinstance(base_url, str):
+            try:
+                item["video_url"] = compose_video_url(base_url, item["video_path"])
+            except Exception:
+                pass
+        views.append(item)
+    result["multi_view"] = {
+        "enabled": bool(multi.get("enabled", False)),
+        "min_views": int(multi.get("min_views", 1)),
+        "views": views,
+    }
+    return result
+
+
+def _vision_profile_metadata(game_id: str, provider_id: str) -> dict[str, Any]:
+    """Expose safe, deployment-facing vision metadata without prompts/secrets."""
+    try:
+        manifest = require_game(get_games(), game_id)
+        # Underlay arena defaults (providers/participants/display and the
+        # deployment-wide video.webrtc_base_url) so metadata reports the same
+        # effective values a round would run with.
+        arena = get_arena_config()
+        manifest = with_global_defaults(manifest, arena)
+        profile = manifest.get("vision_profile")
+        if not isinstance(profile, dict):
+            return {}
+        package_dir = ROOT / "backend" / "components" / provider_id
+        config = load_component_config(package_dir)
+        video = profile.get("video", {}) if isinstance(profile.get("video"), dict) else {}
+        component_video = config.get("video", {}) if isinstance(config.get("video"), dict) else {}
+        runtime_video = {}
+        try:
+            runtime_config = load_runtime_config(resolve_runtime_config_path(config, profile=profile))
+            runtime_video = runtime_config.get("video", {}) if isinstance(runtime_config.get("video"), dict) else {}
+        except Exception:
+            runtime_video = {}
+        base_url = (
+            video.get("webrtc_base_url", "")
+            or runtime_video.get("webrtc_base_url", "")
+            or component_video.get("webrtc_base_url", "")
+        )
+        runtime = config.get("runtime", {})
+        runtime = runtime if isinstance(runtime, dict) else {}
+        metadata = _safe_profile_metadata(profile, base_url, runtime)
+        profile_metadata = []
+        for item in get_games().all():
+            item = with_global_defaults(item, arena)
+            item_profile = item.get("vision_profile")
+            if not isinstance(item_profile, dict):
+                continue
+            item_video = item_profile.get("video", {})
+            item_base = (
+                (item_video.get("webrtc_base_url", "") if isinstance(item_video, dict) else "")
+                or runtime_video.get("webrtc_base_url", "")
+                or component_video.get("webrtc_base_url", "")
+            )
+            profile_metadata.append(_safe_profile_metadata(item_profile, item_base, runtime))
+        metadata["profiles"] = profile_metadata
+        return metadata
+    except Exception:
+        # Provider health already reports component/configuration failures;
+        # metadata is optional and must never mask that primary signal.
+        return {}
+
+
+def _tts_provider(payload: dict[str, Any], game_id: str | None = None):
+    """Compatibility wrapper for callers that still import this helper."""
+    return _tts_dispatcher().provider(payload, game_id)
+
+
+def _tts_dispatcher() -> TtsDispatcher:
+    # Resolve on demand so tests and board operators can replace the registry
+    # or environment without restarting this module object.  Arena slots fill
+    # in behind the game manifest; the pinned local TTS engine (frozen at
+    # process start) overrides even later manifest edits.
+    return TtsDispatcher(
+        COMPONENTS,
+        get_games(),
+        slot_fallbacks=lambda slot: arena_slot_value(get_arena_config(), slot),
+        pinned_local_tts=_LOCAL_TTS_PIN,
+    )
+
+
+jobs: dict[str, ComponentJob] = {}
+jobs_lock = threading.Lock()
+active_job_id: str | None = None
+
+# Authoritative game rounds.  One active round at a time mirrors the
+# single-YOLO-job rule; creating a new round cancels a stale one so a
+# browser refresh (which abandons its round) cannot block the next session.
+rounds: dict[str, GameRound] = {}
+rounds_lock = threading.Lock()
+
+# A running round requires a live browser: its SSE stream doubles as the
+# presence signal.  When the last stream consumer disconnects (tab closed,
+# network lost, device asleep), the round gets a grace window — the browser's
+# EventSource reconnects on its own, so a blip must not cancel the game —
+# after which the round is cancelled, which also stops the ASR microphone.
+# Nothing here gates the physical buttons: they are server-side intents and
+# work with or without a browser.
+SSE_GRACE_SECONDS = 45.0
+_sse_connections: dict[str, int] = {}  # round_id -> live SSE consumer count
+_sse_presence: dict[str, float] = {}  # round_id -> monotonic deadline while detached
+_sse_presence_lock = threading.Lock()
+_sse_watchdog: threading.Thread | None = None
+
+
+def _sse_cancel_stale_rounds() -> None:
+    """Cancel running rounds whose SSE consumer stayed away past the grace."""
+    now = time.monotonic()
+    expired: list[str] = []
+    with _sse_presence_lock:
+        for round_id, deadline in list(_sse_presence.items()):
+            if deadline <= now:
+                expired.append(round_id)
+            elif rounds.get(round_id) is not None and rounds[round_id].status != "running":
+                # Terminal round: keep the presence table bounded.
+                _sse_presence.pop(round_id, None)
+    for round_id in expired:
+        with rounds_lock:
+            round_ = rounds.get(round_id)
+        if round_ is None:
+            with _sse_presence_lock:
+                _sse_presence.pop(round_id, None)
+            continue
+        if getattr(round_, "shared", False):
+            continue  # Shared-session presence includes hall and round subscribers.
+        if round_.status == "running":
+            print(f"[round:{round_id[:8]}] SSE 消费者离开超过 {SSE_GRACE_SECONDS:g}s，自动取消回合", flush=True)
+            round_.cancel()  # terminal → asr bridge watcher stops the mic
+        with _sse_presence_lock:
+            _sse_presence.pop(round_id, None)
+
+
+def _sse_watchdog_loop() -> None:
+    while True:
+        time.sleep(5.0)
+        try:
+            _sse_cancel_stale_rounds()
+        except Exception as exc:  # watchdog must never die silently
+            print(f"[round] sse watchdog error: {exc!r}", flush=True)
+
+
+def _ensure_sse_watchdog() -> None:
+    global _sse_watchdog
+    with _sse_presence_lock:
+        if _sse_watchdog is not None and _sse_watchdog.is_alive():
+            return
+        _sse_watchdog = threading.Thread(target=_sse_watchdog_loop, name="sse-watchdog", daemon=True)
+        _sse_watchdog.start()
+
+
+def _sse_stream_opened(round_id: str) -> None:
+    """One SSE consumer connected: presence is restored immediately."""
+    with _sse_presence_lock:
+        _sse_connections[round_id] = _sse_connections.get(round_id, 0) + 1
+        _sse_presence.pop(round_id, None)
+
+
+def _sse_stream_closed(round_id: str) -> None:
+    """One SSE consumer left: start the grace clock only when it was the last."""
+    if getattr(rounds.get(round_id), "shared", False):
+        with _sse_presence_lock:
+            remaining = _sse_connections.get(round_id, 0) - 1
+            if remaining > 0:
+                _sse_connections[round_id] = remaining
+            else:
+                _sse_connections.pop(round_id, None)
+        return
+    with _sse_presence_lock:
+        remaining = _sse_connections.get(round_id, 0) - 1
+        if remaining > 0:
+            _sse_connections[round_id] = remaining
+            return
+        _sse_connections.pop(round_id, None)
+        _sse_presence[round_id] = time.monotonic() + SSE_GRACE_SECONDS
+    _ensure_sse_watchdog()
+
+
+ASR_BRIDGE = AsrIntentBridge(components=COMPONENTS)
+
+# Vision streaming lifecycle.  Entering a game brings its camera/RTSP stream up
+# before any adjudication runs, so the table is already visible during the
+# rules/ready states and the round does not pay the spawn cost.  Whether the
+# stream outlives the game is the deployment-wide ``vision_always_on`` setting.
+VISION_STREAM = VisionStreamManager(components=COMPONENTS)
+
+
+# Screen-level ASR events (standby wake / game selection): no round is
+# running on those screens, so there is no per-round SSE stream to ride on.
+# A tiny global event bus serves what the mic heard to the polling frontend
+# endpoints.  Each screen (standby, list) owns its own bus; ``listen:true``
+# clears it, which starts a clean event epoch.
+class _AsrEventBus:
+    def __init__(self) -> None:
+        self._events: list[dict[str, Any]] = []
+        self._lock = threading.Lock()
+        self._sequence = 0
+        # 共享同一把锁：push 唤醒所有 SSE 推送协程，毫秒级送达且不受
+        # 浏览器后台标签页定时器节流（轮询在后台页会被钳到 1s/1min）。
+        self._changed = threading.Condition(self._lock)
+
+    def clear(self) -> int:
+        """Start a new epoch; returns the cursor history ends at."""
+        with self._changed:
+            self._events.clear()
+            return self._sequence
+
+    def push(self, event: dict[str, Any]) -> None:
+        with self._changed:
+            self._sequence += 1
+            self._events.append(
+                {
+                    **event,
+                    "timestamp_ms": int(time.time() * 1000),
+                    "sequence": self._sequence,
+                }
+            )
+            del self._events[:-30]
+            self._changed.notify_all()
+
+    def poll(self) -> list[dict[str, Any]]:
+        with self._changed:
+            return list(self._events)
+
+    def wait_for_push(self, timeout: float) -> None:
+        """阻塞直到有新 push 或超时（SSE 空闲心跳用）。"""
+        with self._changed:
+            self._changed.wait(timeout)
+
+
+_STANDBY_BUS = _AsrEventBus()
+_SELECT_BUS = _AsrEventBus()
+
+# Reserved select-table key for "enter the currently highlighted game"
+# (the green button / Enter affordance, spoken).  Its trigger words come
+# from the global config's ``game_select.confirm_phrases``.
+_SELECT_CONFIRM_KEY = "confirm"
+
+
+# ---- 板端物理键盘输入（input_board_enable=true 时的附加输入源）--------
+# 同一记板端按键会同时走两条路：服务端 evdev 直读 + 板子 Chromium 的本地
+# keydown（web 输入照常有效）。引擎对"相位不符的意图"天然幂等拒绝，唯一
+# 真正危险的是选关 Enter 连建两个回合——所以派发与建局都加 250ms 去重窗，
+# 对两条路径统一生效。
+_BOARD_DEDUP_SECONDS = 0.25
+_board_reader: BoardKeyReader | None = None
+_board_reader_lock = threading.Lock()
+_board_cursor: dict[str, str | None] = {"game_id": None}  # 板端导航光标
+_board_cursor_lock = threading.RLock()
+_board_dedup: dict[str, float] = {}
+# 读键与派发解耦：读键线程只往队列丢动作（永不阻塞，否则像 rounds_lock
+# 这样的长持锁会把它卡死——卡住期间按键堆在内核缓冲里，松锁后井喷或丢弃，
+# 现场表现为"按了没反应/慢半拍"）。派发线程慢慢拿锁。
+_board_actions: "queue.Queue[str]" = queue.Queue()
+
+
+def _board_enqueue(action: str) -> None:
+    _board_actions.put_nowait(action)
+
+
+def _board_dispatch_loop() -> None:
+    while True:
+        try:
+            _board_dispatch(_board_actions.get())
+        except Exception as exc:
+            print(f"[board-input] dispatch loop error: {exc}", flush=True)
+
+
+def _board_recent(key: str) -> bool:
+    now = time.monotonic()
+    last = _board_dedup.get(key)
+    if last is not None and now - last < _BOARD_DEDUP_SECONDS:
+        return True
+    _board_dedup[key] = now
+    if len(_board_dedup) > 32:
+        stale = sorted(_board_dedup.items(), key=lambda kv: kv[1])[:16]
+        for dead_key, _ in stale:
+            _board_dedup.pop(dead_key, None)
+    return False
+
+
+def _board_active_round() -> GameRound | None:
+    with rounds_lock:
+        for round_ in rounds.values():
+            if round_.status == "running":
+                return round_
+    return None
+
+
+def _board_local_client(peer: str, local: str) -> bool:
+    """Identify a board-local browser from socket addresses, never HTTP headers."""
+    try:
+        peer_ip = ip_address(peer)
+        local_ip = ip_address(local)
+    except ValueError:
+        return False
+    peer_ip = getattr(peer_ip, "ipv4_mapped", None) or peer_ip
+    local_ip = getattr(local_ip, "ipv4_mapped", None) or local_ip
+    return peer_ip.is_loopback or peer_ip == local_ip
+
+
+def _board_enabled_games() -> list[str]:
+    arena = get_arena_config()
+    return [m["id"] for m in get_games().all() if with_global_defaults(m, arena).get("enabled")]
+
+
+def _sync_board_selection(game_id: str) -> str:
+    """Accept the local page's highlight without starting a round or touching devices."""
+    manifest = with_global_defaults(get_games().get(game_id), get_arena_config())
+    if not manifest.get("enabled", False):
+        raise GameDisabledError(game_id)
+    if _SESSION is not None and _SESSION.enabled:
+        _SESSION.submit({"action": "select", "game": game_id})
+    with _board_cursor_lock:
+        _board_cursor["game_id"] = game_id
+    return game_id
+
+
+def _board_cursor_game(games: list[str]) -> str:
+    with _board_cursor_lock:
+        if _board_cursor["game_id"] not in games:
+            _board_cursor["game_id"] = games[0]
+        return _board_cursor["game_id"]
+
+
+def _board_dispatch(action: str) -> None:
+    """把一个板端按键动作派发到当前相位（局内意图 / 选关 / 待机唤醒）。"""
+    try:
+        if _SESSION is not None and _SESSION.enabled:
+            snapshot = _SESSION.snapshot()
+            current = snapshot.get("round") or {}
+            if _board_recent(f"shared:{snapshot.get('round_id')}:{current.get('state_version')}:{action}"):
+                return
+            _SESSION.submit(
+                {
+                    "action": "board",
+                    "key": action,
+                    "round_id": snapshot.get("round_id"),
+                    "state": current.get("state"),
+                    "state_version": current.get("state_version"),
+                },
+                wait=False,
+            )
+            return
+        if not arena_input_board_enabled(get_arena_config()):
+            return  # 每键现读：热加载，false 期间按键静默丢弃
+        round_ = _board_active_round()
+        if round_ is not None:
+            intent = resolve_intent(round_.game_id, round_.state, action)
+            if intent is None:
+                return
+            # 同一记板端 Enter 会先经板子 Chromium 本地 keydown 建局（web
+            # 路径），几十毫秒后本派发才看到"已有活跃回合"——若照常映射就
+            # 会把 rules 的 confirm 也投出去，规则页被一闪跳过。判定标准：
+            # 回合刚建不满 250ms 且动作是 confirm = 同一记按键的回声，跳过。
+            if intent == "confirm" and round_.state == "rules" and time.time() * 1000 - round_.created_at < 250:
+                return
+            if _board_recent(f"intent:{round_.id}:{intent}"):
+                return
+            try:
+                round_.submit_intent(intent, {"source": "board"})
+            except (IntentRejectedError, RoundClosedError):
+                pass  # 相位不符是正常玩法，与前端吞掉的是同一类
+            return
+        games = _board_enabled_games()
+        if not games:
+            return
+        if action in ("up", "down"):
+            with _board_cursor_lock:
+                idx = games.index(_board_cursor_game(games))
+                step = 1 if action == "down" else -1
+                game_id = games[(idx + step) % len(games)]
+                _board_cursor["game_id"] = game_id
+            _SELECT_BUS.push(
+                {
+                    "event": "asr",
+                    "status": "board_navigate",
+                    "game_id": game_id,
+                    "text": "board",
+                    "source": "board",
+                }
+            )
+            # 方向键也唤醒待机页（本地键盘的"任意键唤醒"同款语义）。
+            # 合成事件带 source:'board'——前端对按键来源只做动作、
+            # 不弹「听到…」语音浮条（按键不是语音）。
+            _STANDBY_BUS.push({"event": "asr", "status": "wake", "text": "board", "source": "board"})
+            return
+        if action == "confirm":
+            game_id = _board_cursor_game(games)
+            if _board_recent(f"select:{game_id}"):
+                return
+            # selected 进两条总线：待机页一批消费"唤醒+直达对局"（单次按压，
+            # 不用先唤醒再按一次）；列表页直接进入。进局相位守卫防双建局。
+            # source:'board' 让前端免弹语音浮条（同上）。
+            _STANDBY_BUS.push(
+                {
+                    "event": "asr",
+                    "status": "selected",
+                    "game_id": game_id,
+                    "text": "board",
+                    "source": "board",
+                }
+            )
+            _SELECT_BUS.push(
+                {
+                    "event": "asr",
+                    "status": "selected",
+                    "game_id": game_id,
+                    "text": "board",
+                    "source": "board",
+                }
+            )
+    except Exception as exc:  # 派发绝不能带死读取线程
+        print(f"[board-input] dispatch failed: {exc}", flush=True)
+
+
+def _board_input_status() -> dict:
+    with _board_reader_lock:
+        reader = _board_reader
+    status = reader.status() if reader is not None else {"running": False, "devices": []}
+    return {"enabled": arena_input_board_enabled(get_arena_config()), **status}
+
+
+def _board_input_source() -> dict[str, bool]:
+    status = _board_input_status()
+    return {
+        "enabled": status["enabled"],
+        "available": bool(status["enabled"] and status["running"] and status["devices"]),
+    }
+
+
+def _publish_board_input_source(previous: tuple[bool, bool] | None) -> tuple[bool, bool]:
+    """Keep existing hall/standby streams informed when the optional reader changes."""
+    source = _board_input_source()
+    current = (source["enabled"], source["available"])
+    if current != previous:
+        event = {"event": "asr", "status": "board_input", "source": "board", **source}
+        _SELECT_BUS.push(event)
+        _STANDBY_BUS.push(event)
+    return current
+
+
+def _supervise_board_input() -> None:
+    """按配置热启停读取线程：true 起线程、false 停并释放设备句柄。"""
+    global _board_reader
+    previous_source = None
+    while True:
+        try:
+            enabled = arena_input_board_enabled(get_arena_config())
+            with _board_reader_lock:
+                reader = _board_reader
+                running = reader is not None and reader.status()["running"]
+            if enabled and not running:
+                with _board_reader_lock:
+                    # 停过的 reader 对象还在（stop 不置 None），只要没在跑
+                    # 就重建——supervisor 单线程，无并发竞争。
+                    if _board_reader is None or not _board_reader.status()["running"]:
+                        _board_reader = BoardKeyReader(_board_enqueue)
+                        _board_reader.start()
+                        print("[board-input] reader started (input_board_enable=true)", flush=True)
+            elif not enabled and reader is not None and running:
+                reader.stop()
+                print("[board-input] reader stopped (input_board_enable=false)", flush=True)
+            previous_source = _publish_board_input_source(previous_source)
+        except Exception as exc:
+            print(f"[board-input] supervisor error: {exc}", flush=True)
+        time.sleep(2.0)
+
+
+def _start_board_input_supervisor() -> None:
+    # 派发线程常驻（派发内部自己检查开关），监督线程负责读取器生死。
+    threading.Thread(target=_board_dispatch_loop, name="board-input-dispatch", daemon=True).start()
+    threading.Thread(target=_supervise_board_input, name="board-input-supervisor", daemon=True).start()
+
+
+def _game_select_phrases() -> dict[str, list[str]]:
+    """Voice-selection trigger words per enabled game, in list order.
+
+    The game list is a deployment-level surface, so its vocabulary lives in
+    the arena config (``game_select.phrases``, hot-reloaded) — never in a
+    game manifest.  Games without an entry are not voice-selectable.
+    """
+    configured = arena_game_select_phrases(get_arena_config())
+    if not configured:
+        return {}
+    table: dict[str, list[str]] = {}
+    for manifest in get_games().all():
+        if not manifest.get("enabled", False):
+            continue
+        game_id = str(manifest["id"])
+        if game_id == _SELECT_CONFIRM_KEY:
+            continue  # reserved key: cannot double as a game id
+        words = configured.get(game_id)
+        if words:
+            table[game_id] = list(words)
+    return table
+
+
+def _select_broadcast(bus: _AsrEventBus) -> Callable[[str, str], None]:
+    """Dispatch one select-session hit: wake key, confirm key, or a game id."""
+
+    def on_select(key: str, text: str) -> None:
+        if key == "wake":
+            bus.push({"event": "asr", "status": "wake", "text": text})
+        elif key == _SELECT_CONFIRM_KEY:
+            bus.push({"event": "asr", "status": "confirm", "text": text})
+        else:
+            bus.push(
+                {
+                    "event": "asr",
+                    "status": "selected",
+                    "game_id": key,
+                    "text": text,
+                }
+            )
+
+    return on_select
+
+
+def _unmatched_broadcast(bus: _AsrEventBus) -> Callable[[str], None]:
+    def on_heard(text: str) -> None:
+        bus.push({"event": "asr", "status": "unmatched", "text": text})
+
+    return on_heard
+
+
+_ROUND_TIMEOUT_FALLBACK_SECONDS = JOB_TIMEOUT_SECONDS
+
+
+def _round_adjudicate_fn(game_id: str, arm_throw: dict | None = None):
+    """Bridge a round's adjudicate action onto the shared provider pipeline.
+
+    ``arm_throw`` is the round's shared robot-throw slot: when the game
+    prefetched the agent gesture (rps throws on the call-out wav instead of
+    after the vision lock), the pipeline reads the same dict the robot_fn
+    filled — the verdict then uses the gesture the arm actually played.
+    """
+
+    def adjudicate(manifest, on_event, is_cancelled, on_log):
+        return run_game(
+            get_games(),
+            game_id,
+            on_log,
+            is_cancelled,
+            on_event,
+            resolve_adjudication_timeout(require_game(get_games(), game_id), _ROUND_TIMEOUT_FALLBACK_SECONDS),
+            COMPONENTS,
+            defaults=get_arena_config(),
+            arm_throw=arm_throw,
+        )
+
+    return adjudicate
+
+
+def _round_robot_fn(game_id: str, arm_throw: dict | None = None):
+    """Bridge a round's robot actions onto the shared robot-arm provider.
+
+    Slot resolution mirrors the other provider slots (game manifest override
+    over the arena default).  A missing or broken provider never raises into
+    the round: the command returns a failure and the manifest's arm_failed
+    route takes over.
+
+    ``arm_throw`` is the round's shared robot-throw slot filled by the
+    ``throw_gesture`` command: the gesture is reset to pending on dispatch
+    (so a rematch never consumes the previous round's throw) and written
+    back on completion, so the adjudication pipeline consumes the exact
+    gesture the arm played (single source of truth for the agent's move).
+    """
+
+    def _mark_throw_failed(reason: str = "机械臂预备或出拳动作未完成") -> None:
+        if arm_throw is not None:
+            arm_throw.update(status="failed", gesture=None, reason=reason)
+
+    def run_robot(action, on_event, is_cancelled, on_log):
+        command = str(action.get("command") or "")
+        timeout = action.get("timeout_seconds")
+        try:
+            provider_id = _game_provider_id(game_id, "robot_arm", "")
+            if not provider_id:
+                if command in ("throw_gesture", "prepare_throw"):
+                    _mark_throw_failed("providers.robot_arm slot is not configured")
+                return {"status": "failed", "reason": "providers.robot_arm slot is not configured"}
+            provider = COMPONENTS.require(provider_id, expected_type="robot")
+        except DiceArenaError as exc:
+            if command in ("throw_gesture", "prepare_throw"):
+                _mark_throw_failed(exc.message)
+            return {"status": "failed", "reason": exc.message}
+        try:
+            if command == "grasp_cup":
+                return provider.grasp_cup(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout)
+            if command == "shake_dice":
+                return provider.shake_dice(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout)
+            if command == "settle_dice":
+                return provider.settle_dice(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout)
+            if command == "feedback":
+                return provider.feedback(
+                    str(action.get("kind") or ""),
+                    on_event=on_event,
+                    is_cancelled=is_cancelled,
+                    timeout_seconds=timeout,
+                )
+            if command == "reset_home":
+                return provider.reset_home(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout)
+            if command == "ensure_home":
+                # 检查式归位（2026-09-25）：地板 provider 无此方法时退化为
+                # 强制归位，"确保在家"永不静默跳过。
+                ensure = getattr(provider, "ensure_home", None)
+                if callable(ensure):
+                    return ensure(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout)
+                return provider.reset_home(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout)
+            if command == "prepare_throw":
+                _mark_throw_failed()  # Never reuse a previous round's gesture on prep failure.
+                outcome = provider.prepare_throw(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout)
+                if isinstance(outcome, dict) and outcome.get("status") == "completed":
+                    if arm_throw is not None:
+                        arm_throw.update(status="pending", gesture=None, reason=None)
+                else:
+                    _mark_throw_failed(
+                        str(outcome.get("reason") or "预备动作未完成")
+                        if isinstance(outcome, dict)
+                        else "预备动作未完成"
+                    )
+                return outcome
+            if command == "throw_gesture":
+                gesture = action.get("gesture")
+                # 派发即重置：再来一局/重试重新出拳时，消费方必须等到这份
+                # 新结果，而不是读到上一局的 completed（判分≠臂姿的竞态）。
+                if arm_throw is not None:
+                    arm_throw.update(status="pending", gesture=None, reason=None)
+                # 出拳时机参数：进入状态起延迟 N 秒再调 provider（与口令
+                # 音频/回执解耦）。重置在延迟之前——延迟期间槽必须是
+                # pending，分析侧的等待才会等这份新结果。可取消：分段睡
+                # 眠，回合取消/终态时中止且不再动臂。
+                delay = action.get("delay_seconds")
+                if isinstance(delay, (int, float)) and not isinstance(delay, bool) and delay > 0:
+                    deadline = time.monotonic() + float(delay)
+                    while time.monotonic() < deadline:
+                        if is_cancelled():
+                            if arm_throw is not None:
+                                arm_throw.update(status="failed", gesture=None)
+                            return {
+                                "status": "failed",
+                                "reason": "throw delay interrupted (cancelled)",
+                            }
+                        time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+                outcome = provider.throw_gesture(
+                    **({"prepared": True} if action.get("prepared") else {}),
+                    gesture=gesture if isinstance(gesture, str) and gesture else None,
+                    on_event=on_event,
+                    is_cancelled=is_cancelled,
+                    timeout_seconds=timeout,
+                )
+                if arm_throw is not None:
+                    arm_throw["status"] = (
+                        "completed" if isinstance(outcome, dict) and outcome.get("status") == "completed" else "failed"
+                    )
+                    arm_throw["reason"] = outcome.get("reason") if isinstance(outcome, dict) else "出拳动作未完成"
+                    arm_throw["gesture"] = outcome.get("gesture") if isinstance(outcome, dict) else None
+                return outcome
+            return {"status": "failed", "reason": f"unknown robot command {command!r}"}
+        except Exception as exc:
+            if command in ("throw_gesture", "prepare_throw"):
+                _mark_throw_failed(str(exc))
+            return {"status": "failed", "reason": str(exc)}
+
+    return run_robot
+
+
+def _manifest_uses_robot(manifest: dict) -> bool:
+    """True when the game drives the arm — via state actions or its pipeline.
+
+    两种形态都算：状态机 on_enter 声明 robot 动作（dice 抓/摇/归位、rps 出拳），
+    或游戏自身 manifest 显式声明 ``providers.robot_arm`` 槽位（管线直发的游戏
+    靠这个 opt-in）。必须传**合并全局默认前**的 manifest——合并后所有游戏都带
+    全局槽位，那不代表该游戏用臂。
+    """
+    machine = manifest.get("state_machine") or {}
+    for state in (machine.get("states") or {}).values():
+        if not isinstance(state, dict):
+            continue
+        for action in state.get("on_enter") or []:
+            if isinstance(action, dict) and action.get("action") == "robot":
+                return True
+    providers = manifest.get("providers")
+    if isinstance(providers, dict):
+        configured = providers.get("robot_arm")
+        if isinstance(configured, str) and configured.strip():
+            return True
+    return False
+
+
+# Robot rounds arm a best-effort post-round home reset.  The generation guard
+# makes a newer round's own ready.reset_home win when rounds overlap.
+_arm_reset_lock = threading.Lock()
+_arm_reset_generation = 0
+
+
+def _watch_round_arm_reset(round_id: str, game_id: str, generation: int) -> None:
+    """Reset the arm home once this robot-using round reaches a terminal status.
+
+    A round that ends mid-gesture (player leaves at the result page) parks the
+    arm off-home; the next round's ready.reset_home covers it in play, but an
+    idle table should not hold a pose either.  Fire-and-forget: failures only
+    log, and the provider's reset_home must not revive a dead runtime.
+    """
+
+    def watch() -> None:
+        while True:
+            time.sleep(0.5)
+            with _arm_reset_lock:
+                if generation != _arm_reset_generation:
+                    return
+            with rounds_lock:
+                round_ = rounds.get(round_id)
+            if round_ is None:
+                return
+            if round_.status == "running":
+                continue
+            break
+        try:
+            provider_id = _game_provider_id(game_id, "robot_arm", "")
+            if not provider_id:
+                return
+            provider = COMPONENTS.require(provider_id, expected_type="robot")
+            # 2026-09-25 起用检查式归位：探针（≈60ms 缓存读）确认在家则零动作，
+            # 未在家/探针失败/常驻死亡才执行归位（地板 provider 自动退化为强制）。
+            ensure = getattr(provider, "ensure_home", None)
+            if callable(ensure):
+                outcome = ensure(on_event=lambda event: None, is_cancelled=lambda: False)
+            else:
+                outcome = provider.reset_home(on_event=lambda event: None, is_cancelled=lambda: False)
+            if isinstance(outcome, dict) and outcome.get("status") != "completed":
+                print(f"[robot] post-round ensure_home: {outcome.get('reason')}", flush=True)
+        except Exception as exc:
+            print(f"[robot] post-round ensure_home failed: {exc!r}", flush=True)
+
+    threading.Thread(target=watch, name=f"arm-reset-{round_id[:8]}", daemon=True).start()
+
+
+def _prewarm_robot_provider(game_id: str) -> None:
+    """Start the robot resident runtime early (rules speech covers its warmup).
+
+    Best-effort: an arm that cannot start only means the first robot command
+    fails into arm_failed; it must never block game entry.
+    """
+    try:
+        provider_id = _game_provider_id(game_id, "robot_arm", "")
+        if not provider_id:
+            return
+        provider = COMPONENTS.require(provider_id, expected_type="robot")
+        ensure_started = getattr(provider, "ensure_started", None)
+        if callable(ensure_started):
+            ensure_started()
+    except Exception as exc:
+        print(f"[robot] resident prewarm failed: {exc!r}", flush=True)
+
+
+def _home_arm_on_boot() -> None:
+    """归位不变量的开机档：开始接收请求前把臂拉回 home 手势。
+
+    条件：任一启用游戏用臂（_manifest_uses_robot，看原始 manifest）且
+    provider 的 home_on_boot 开（没接臂的部署关它，免得白拉常驻进程）。
+    同步执行：启动完成即代表 HOME 已完成，归位拉起的常驻留活，第一局直接
+    复用。CAN 未起/无臂时失败只打日志、不重试，避免服务永久无法启动。
+    """
+    try:
+        # 任一用臂游戏解析出的都是同一个全局槽位；取第一个命中游戏的 id
+        # 走 _game_provider_id（它会按游戏覆盖→全局槽的顺序解析）。
+        robot_games = [game for game in _enabled_game_manifests() if _manifest_uses_robot(game)]
+        if not robot_games:
+            return
+        game_id = str(robot_games[0].get("id") or "")
+        provider_id = _game_provider_id(game_id, "robot_arm", "")
+        if not provider_id:
+            return
+        provider = COMPONENTS.require(provider_id, expected_type="robot")
+        if not bool(getattr(provider, "home_on_boot", False)):
+            return
+    except Exception as exc:
+        print(f"[robot] boot homing skipped: {exc!r}", flush=True)
+        return
+
+    try:
+        outcome = provider.reset_home(on_event=lambda event: None, is_cancelled=lambda: False)
+        if isinstance(outcome, dict) and outcome.get("status") != "completed":
+            print(f"[robot] boot reset_home: {outcome.get('reason')}", flush=True)
+        else:
+            print("[robot] boot homing done (arm parked at home)", flush=True)
+    except Exception as exc:
+        print(f"[robot] boot reset_home failed: {exc!r}", flush=True)
+
+
+# 单例：可停的巡检线程（测试里反复重启不会泄漏旧线程）。
+_home_patrol_thread: threading.Thread | None = None
+_home_patrol_stop = threading.Event()
+
+
+def _run_home_patrol() -> None:
+    """Idle-pose patrol（用户 2026-09-24 提议）：桌面空闲时盯臂是否离家。
+
+    事件驱动归位（终态 watcher / 失败页 / 开机）只覆盖程序知道的离开
+    时刻；巡检补的是程序不知道的位移——现场有人掰了臂、归位失败残留、
+    断电重启后臂被摆到别处。开关与周期热读全局 config：
+    ``robot_home_patrol``（默认 true）/``robot_home_patrol_seconds``（默认 30）。
+
+    巡检纪律：只在「无 running 回合且无活跃裁决 job」时动作——游戏内的
+    姿态是游戏的事（rps 出拳保持、人工摇骰都算）；query_pose 不复活死
+    常驻（skipped = 跳过本轮，复活只属于事件路径的 reset_home）；发现
+    离家才走 reset_home（可复活）。一切失败只打日志。
+    """
+    global _home_patrol_thread, _home_patrol_stop
+    _home_patrol_stop.set()
+    if _home_patrol_thread is not None:
+        _home_patrol_thread.join(timeout=2.0)
+    _home_patrol_stop = threading.Event()
+    stop = _home_patrol_stop
+
+    def _robot_provider_or_none():
+        robot_games = [game for game in _enabled_game_manifests() if _manifest_uses_robot(game)]
+        if not robot_games:
+            return None
+        provider_id = _game_provider_id(str(robot_games[0].get("id") or ""), "robot_arm", "")
+        if not provider_id:
+            return None
+        return COMPONENTS.require(provider_id, expected_type="robot")
+
+    def patrol() -> None:
+        while not stop.is_set():
+            try:
+                arena = get_arena_config()
+                if not bool(arena.get("robot_home_patrol", True)):
+                    time.sleep(5.0)
+                    continue
+                period = max(0.05, float(arena.get("robot_home_patrol_seconds", 30) or 30))
+            except Exception as exc:
+                print(f"[robot] patrol config error: {exc!r}", flush=True)
+                period = 30.0
+            # 分片睡眠：关开关后最多 5s 内退出（长周期不能拖住停机）。
+            slept = 0.0
+            while slept < period and not stop.is_set():
+                time.sleep(min(5.0, period - slept))
+                slept += min(5.0, period - slept)
+            if stop.is_set():
+                return
+            try:
+                # 游戏内（含活跃裁决 job）的姿态是游戏的事，一律不巡检。
+                with rounds_lock:
+                    game_live = any(r.status == "running" for r in rounds.values())
+                job_live = False
+                if active_job_id:
+                    job = jobs.get(active_job_id)
+                    # 终态（success/error/cancelled）都带 finished_at；
+                    # holding 视为活跃——裁决收尾期同样别碰臂。
+                    job_live = bool(job) and job.finished_at is None
+                if game_live or job_live:
+                    continue
+                provider = _robot_provider_or_none()
+                if provider is None:
+                    continue
+                outcome = provider.query_pose(on_event=lambda event: None, is_cancelled=lambda: False)
+                # 只有探针明确报"离家"才动臂：skipped（死常驻/无姿态反馈）
+                # 与 failed（CAN/worker 瞬断）都不知道状态，一律不猜。
+                if not isinstance(outcome, dict) or outcome.get("status") != "completed":
+                    continue
+                if outcome.get("at_home"):
+                    continue
+                reason = "pose not at home"
+                if outcome.get("delta_deg"):
+                    reason = f"max delta {max(abs(d) for d in outcome['delta_deg']):.1f} deg"
+                print(f"[robot] patrol: arm off home ({reason}); homing", flush=True)
+                outcome = provider.reset_home(on_event=lambda event: None, is_cancelled=lambda: False)
+                if isinstance(outcome, dict) and outcome.get("status") != "completed":
+                    print(
+                        f"[robot] patrol reset_home: {outcome.get('reason')}",
+                        flush=True,
+                    )
+            except Exception as exc:
+                print(f"[robot] patrol error: {exc!r}", flush=True)
+
+    _home_patrol_thread = threading.Thread(target=patrol, name="arm-home-patrol", daemon=True)
+    _home_patrol_thread.start()
+
+
+def create_round(game_id: str, *, shared: bool = False, event_sink=None) -> GameRound:
+    manifest = require_game(get_games(), game_id)
+    if not isinstance(manifest.get("state_machine"), dict):
+        raise InvalidRequestError(f"game {game_id} declares no state_machine")
+    # rps 这类管线直发机械臂的游戏靠自身 manifest 显式声明槽位来 opt-in
+    # 预热/终局归位，所以 _manifest_uses_robot 必须看合并前的原始 manifest。
+    uses_robot = _manifest_uses_robot(manifest)
+    # The round snapshots the *effective* manifest: arena defaults underlaid,
+    # the global ASR breaker applied.  Engine and ASR bridge read it as-is.
+    manifest = with_global_defaults(manifest, get_arena_config())
+    if "participants" not in manifest:
+        raise InvalidRequestError(f"game {game_id} declares no participants and the arena config provides none")
+    with rounds_lock:
+        for existing in list(rounds.values()):
+            if existing.status == "running":
+                existing.cancel()
+        # Finished rounds are dropped once the table grows past a small
+        # watermark; snapshots stay queryable for the current session.
+        finished = [rid for rid, item in rounds.items() if item.status != "running"]
+        for stale_id in finished[: max(0, len(rounds) - 16)]:
+            rounds.pop(stale_id, None)
+        # Round-shared robot-throw slot: the manifest's throw_gesture action
+        # (rps plays it right after the call-out wav, before adjudication)
+        # resets and fills this dict, and the adjudication pipeline consumes
+        # the same dict — the gesture the arm actually played is the one the
+        # round is judged on.
+        arm_throw: dict = {"status": "pending", "gesture": None}
+        round_ = GameRound(
+            game_id=game_id,
+            manifest=manifest,
+            adjudicate_fn=_round_adjudicate_fn(game_id, arm_throw),
+            robot_fn=_round_robot_fn(game_id, arm_throw),
+            log=lambda line: print(f"[round:{round_.id[:8]}] {line}", flush=True),
+            event_sink=(lambda event: event_sink(round_, event)) if event_sink else None,
+        )
+        round_.shared = shared
+        if shared:
+            round_.input_dispatch = lambda intent, payload: _shared_round_intent(round_, intent, payload)
+        rounds[round_.id] = round_
+    round_.start()
+    if uses_robot:
+        # Entering the game is when the arm's resident runtime comes up: the
+        # rules speech (~30s) comfortably covers its warmup, and the post-round
+        # home reset is armed for however this round ends.
+        global _arm_reset_generation
+        with _arm_reset_lock:
+            _arm_reset_generation += 1
+            arm_reset_generation = _arm_reset_generation
+        _watch_round_arm_reset(round_.id, game_id, arm_reset_generation)
+        _prewarm_robot_provider(game_id)
+    # A fresh round has no SSE consumer yet: it starts inside the presence
+    # grace window.  A browser subscribing clears it; nothing connecting
+    # (curl-driven rounds) is cancelled by the watchdog like any other
+    # abandoned round.
+    _sse_stream_closed(round_.id)
+    # Hand the microphone routing to this round.  The ASR engine is resident
+    # (warmed at startup), so this is an instant callback swap — start_for_
+    # round's own stop() releases any standby wake-word routing first.  Voice
+    # input never gates round creation: a broken ASR provider only means this
+    # round runs on buttons alone.
+    try:
+        if shared:
+            ASR_BRIDGE.stop()
+        ASR_BRIDGE.start_for_round(round_)
+    except Exception as exc:
+        print(f"[asr] failed to start for round {round_.id[:8]}: {exc!r}", flush=True)
+    # Entering the game is also when its camera comes up.  Streaming is
+    # best-effort: a broken camera must never block game entry, because
+    # adjudication starts the runtime lazily and reports the real error there.
+    # The arena config decides whether the stream also outlives this game.
+    try:
+        VISION_STREAM.start_for_round(round_, arena=get_arena_config(), on_event=round_.emit_observation)
+    except Exception as exc:
+        print(f"[vision] failed to start streaming for round {round_.id[:8]}: {exc!r}", flush=True)
+    return round_
+
+
+# Shared session is initialized by main or the explicit session API, never by import.
+_SESSION: SharedSession | None = None
+_SESSION_LOCK = threading.Lock()
+_SHARED_AUDIO: SharedAudio | None = None
+_AUDIO_LOCK = threading.Lock()
+
+
+def _produce_shared_audio(round_, directive, emit):
+    if directive.get("mode") == "audio":
+        path = resolve_game_audio_path(round_.game_id, str(directive.get("audio") or ""), root=_GAMES_ROOT)
+        emit(path.read_bytes())
+        return
+    dispatcher = _tts_dispatcher()
+    entry = {"mode": str(directive.get("mode") or "tts_local")}
+    if directive.get("provider"):
+        entry["provider"] = directive["provider"]
+    provider_id = dispatcher.provider_id_for_speech_entry(entry, round_.game_id)
+    payload = {
+        "game": round_.game_id,
+        "text": directive.get("text", ""),
+        "voice": directive.get("voice", "default"),
+        "speed": directive.get("speed", 1.0),
+    }
+    provider = dispatcher.provider(payload, game_id=round_.game_id, provider_id=provider_id)
+    if callable(getattr(provider, "stream", None)):
+        dispatcher.stream(payload, emit, game_id=round_.game_id, provider_id=provider_id)
+    else:
+        audio, _ = dispatcher.synthesize(payload, game_id=round_.game_id, provider_id=provider_id)
+        emit(audio)
+
+
+def _get_shared_audio():
+    global _SHARED_AUDIO
+    with _AUDIO_LOCK:
+        if _SHARED_AUDIO is None:
+            _SHARED_AUDIO = SharedAudio(produce=_produce_shared_audio)
+        return _SHARED_AUDIO
+
+
+def _create_shared_round(game, sink):
+    audio = _get_shared_audio()
+
+    def notify(round_, event):
+        sink(round_, event)
+        audio.enqueue(round_, event)
+
+    return create_round(game, shared=True, event_sink=notify)
+
+
+def _shared_round_intent(round_, intent, payload):
+    snap = round_.snapshot()
+    return _get_session().submit(
+        {
+            "action": "intent",
+            "round_id": round_.id,
+            "state": snap["state"],
+            "state_version": snap.get("state_version"),
+            "intent": intent,
+            "payload": payload,
+        }
+    )
+
+
+def _shared_hall_asr(phase):
+    if phase not in {"select", "standby"}:
+        ASR_BRIDGE.stop()
+        return
+    phrases = _game_select_phrases()
+    if phase == "standby":
+        phrases["wake"] = arena_standby(get_arena_config())["wake_phrases"]
+    else:
+        phrases[_SELECT_CONFIRM_KEY] = arena_game_select_confirm_phrases(get_arena_config())
+
+    def on_select(key, text):
+        if _SESSION is None or not _SESSION.enabled:
+            return
+        if key == "wake":
+            cmd = {"action": "wake"}
+        elif key == _SELECT_CONFIRM_KEY:
+            cmd = {"action": "enter"}
+        else:
+            cmd = {"action": "enter", "game": key}
+        _SESSION.submit(cmd, wait=False)
+
+    ASR_BRIDGE.start_select_session(
+        phrases=phrases,
+        asr_enabled=arena_asr_enabled(get_arena_config()),
+        provider_id=arena_slot_value(get_arena_config(), "asr"),
+        on_select=on_select,
+        on_heard=lambda text: None,
+    )
+
+
+def _get_session():
+    global _SESSION
+    with _SESSION_LOCK:
+        if _SESSION is None:
+            _SESSION = SharedSession(
+                config=get_arena_config,
+                games=_board_enabled_games,
+                create_round=_create_shared_round,
+                on_hall=_shared_hall_asr,
+                board_source=_board_input_source,
+                legacy_running=lambda: any(
+                    r.status == "running" and not getattr(r, "shared", False) for r in rounds.values()
+                ),
+            )
+        return _SESSION
+
+
+def _lookup_round(round_id: str) -> GameRound:
+    with rounds_lock:
+        round_ = rounds.get(round_id)
+    if round_ is None:
+        raise JobNotFoundError(round_id)
+    return round_
+
+
+def _shutdown_runtime_components() -> None:
+    """Stop provider-owned resident workers before the backend exits."""
+    if _SESSION is not None:
+        _SESSION.close()
+    if _SHARED_AUDIO is not None:
+        _SHARED_AUDIO.close()
+    try:
+        ASR_BRIDGE.stop()
+    except Exception as exc:
+        print(f"[asr] bridge stop failed: {exc!r}", flush=True)
+    # The vision stream may outlive individual rounds, but never the process.
+    try:
+        VISION_STREAM.stop()
+    except Exception as exc:
+        print(f"[vision] stream stop failed: {exc!r}", flush=True)
+    with jobs_lock:
+        active = jobs.get(active_job_id) if active_job_id else None
+    if active is not None and active.status in {"queued", "running"}:
+        active.cancel()
+
+    # Providers own their runtime processes and may expose a provider-specific
+    # shutdown hook.  Keep this seam optional so cloud/fixture providers do
+    # not need lifecycle code just to participate in the registry.
+    for component_id in COMPONENTS.ids():
+        try:
+            component = COMPONENTS.get(component_id)
+            shutdown = getattr(component, "shutdown", None)
+            if callable(shutdown):
+                shutdown()
+        except Exception as exc:
+            print(f"[components] shutdown failed for {component_id}: {exc}", flush=True)
+
+
+_ADJUDICATION_JOB_PREFIXES = ("/api/adjudicate/", "/api/analyze/")
+
+
+def _adjudication_job_remainder(path: str) -> str | None:
+    """Return the job-route suffix for the canonical or legacy endpoint."""
+    for prefix in _ADJUDICATION_JOB_PREFIXES:
+        if path.startswith(prefix):
+            return path[len(prefix) :]
+    return None
+
+
+def create_adjudication_job(game_id: str) -> ComponentJob:
+    global active_job_id
+    require_game(get_games(), game_id)  # raises GameNotFoundError / GameDisabledError
+    with jobs_lock:
+        if active_job_id:
+            active = jobs.get(active_job_id)
+            if active and active.status in {"queued", "running"}:
+                raise JobAlreadyExistsError(active_job_id)
+
+        def run_fn(on_log, is_cancelled, on_event):
+            return run_game(
+                get_games(),
+                game_id,
+                on_log,
+                is_cancelled,
+                on_event,
+                resolve_adjudication_timeout(require_game(get_games(), game_id), JOB_TIMEOUT_SECONDS),
+                COMPONENTS,
+                defaults=get_arena_config(),
+            )
+
+        job = ComponentJob(run_fn=run_fn, name=f"{game_id}-job")
+        jobs[job.id] = job
+        active_job_id = job.id
+        job.start()
+        return job
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "DiceArenaK3/0.3"
+
+    protocol_version = "HTTP/1.1"
+
+    def _is_board_local_client(self) -> bool:
+        return _board_local_client(self.client_address[0], self.connection.getsockname()[0])
+
+    def log_message(self, fmt: str, *args: Any) -> None:
+        # Keep the board console readable; analysis logs are exposed per job.
+        print(f"[web] {self.address_string()} {fmt % args}", flush=True)
+
+    def send_json(self, payload: dict[str, Any], status: int = HTTPStatus.OK) -> None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_error_json(self, error: DiceArenaError) -> None:
+        """Send a standardized error response from a DiceArenaError."""
+        self.send_json(error.to_dict(), error.status)
+
+    def read_json(self) -> dict[str, Any]:
+        length = int(self.headers.get("Content-Length", "0"))
+        if length <= 0:
+            return {}
+        if length > 65536:
+            raise InvalidRequestError("request body too large (max 64KB)")
+        try:
+            raw = self.rfile.read(length)
+            value = json.loads(raw.decode("utf-8"))
+            if not isinstance(value, dict):
+                raise InvalidRequestError("request body must be a JSON object")
+            return value
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise InvalidRequestError(f"invalid JSON: {exc}") from exc
+
+    def send_sse_snapshot(self, snapshot: dict[str, Any], event: str = "update") -> None:
+        payload = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
+        self.wfile.write(f"event: {event}\ndata: {payload}\n\n".encode("utf-8"))
+        self.wfile.flush()
+
+    def stream_session(self, session):
+        session.connected()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache, no-store")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        try:
+            snapshot = session.snapshot()
+            self.send_sse_snapshot(snapshot, "snapshot")
+            while not session.closed:
+                previous = snapshot["revision"]
+                snapshot = session.wait_for_update(previous)
+                self.send_sse_snapshot(snapshot, "update" if snapshot["revision"] != previous else "heartbeat")
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        finally:
+            session.disconnected()
+            self.close_connection = True
+
+    def _stream_bus(self, bus: _AsrEventBus) -> None:
+        """SSE 推送一条选关/待机总线（板端键盘与语音事件的消费通道）。
+
+        EventSource 不吃浏览器后台标签页的定时器节流——轮询版被钳到
+        1s/1min 就是"按键好一会才反应"的根因。``id:`` 用事件序号，
+        断线重连由 EventSource 带 Last-Event-ID 续传，不重放旧事件。
+        """
+        last_id = self.headers.get("Last-Event-ID", "")
+        try:
+            cursor = int(last_id)
+        except ValueError:
+            # 新连接（无 Last-Event-ID）：从当前水位开始，不重放历史——
+            # 页面有 POST listen 清总线 + 10s 保鲜窗兜底，这里不添乱。
+            cursor = max((int(e.get("sequence", 0)) for e in bus.poll()), default=0)
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache, no-store")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        try:
+            while True:
+                events = [e for e in bus.poll() if e.get("sequence", 0) > cursor]
+                if events:
+                    for event in events:
+                        cursor = int(event.get("sequence", 0))
+                        payload = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
+                        self.wfile.write(f"id: {cursor}\nevent: bus\ndata: {payload}\n\n".encode("utf-8"))
+                    self.wfile.flush()
+                    continue
+                bus.wait_for_push(timeout=15.0)
+                # 超时无新事件：注释行心跳，防中间层掐空闲连接。
+                self.wfile.write(b": heartbeat\n\n")
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return
+
+    @staticmethod
+    def job_stream_delta(snapshot: dict[str, Any], after_sequence: int) -> dict[str, Any]:
+        """Build a compact SSE update instead of resending logs/event history."""
+        return {
+            "job_id": snapshot["job_id"],
+            "status": snapshot["status"],
+            "phase": snapshot["phase"],
+            "error": snapshot["error"],
+            "cancelled": snapshot["cancelled"],
+            "result": snapshot["result"],
+            "events": [event for event in snapshot["events"] if int(event.get("sequence", 0)) > after_sequence],
+            "event_sequence": snapshot["event_sequence"],
+            "revision": snapshot["revision"],
+            "started_at": snapshot["started_at"],
+            "finished_at": snapshot["finished_at"],
+        }
+
+    def stream_job_events(self, job: ComponentJob) -> None:
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache, no-store")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        snapshot = job.snapshot()
+        revision = snapshot["revision"]
+        event_sequence = snapshot["event_sequence"]
+        self.send_sse_snapshot(snapshot, "snapshot")
+        try:
+            while snapshot["status"] in {"queued", "running"}:
+                snapshot = job.wait_for_update(revision, timeout=15.0)
+                if snapshot["revision"] <= revision:
+                    self.send_sse_snapshot(
+                        {
+                            "job_id": job.id,
+                            "revision": revision,
+                            "event_sequence": event_sequence,
+                        },
+                        "heartbeat",
+                    )
+                    continue
+                delta = self.job_stream_delta(snapshot, event_sequence)
+                revision = snapshot["revision"]
+                event_sequence = snapshot["event_sequence"]
+                if snapshot["status"] in {"success", "error"}:
+                    self.send_sse_snapshot(delta, "complete")
+                    return
+                self.send_sse_snapshot(delta)
+            self.send_sse_snapshot(self.job_stream_delta(snapshot, event_sequence), "complete")
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            self.close_connection = True
+
+    @staticmethod
+    def round_stream_delta(snapshot: dict[str, Any], after_sequence: int) -> dict[str, Any]:
+        """Build a compact SSE update for one authoritative round."""
+        return {
+            "round_id": snapshot["round_id"],
+            "game_id": snapshot["game_id"],
+            "status": snapshot["status"],
+            "state": snapshot["state"],
+            "state_version": snapshot.get("state_version"),
+            "speech_active": snapshot.get("speech_active", False),
+            "ui": snapshot.get("ui", {}),
+            "observations": snapshot.get("observations", []),
+            "error": snapshot["error"],
+            "result": snapshot["result"],
+            "events": [event for event in snapshot["events"] if int(event.get("sequence", 0)) > after_sequence],
+            "event_sequence": snapshot["event_sequence"],
+            "revision": snapshot["revision"],
+        }
+
+    def stream_round_events(self, round_: GameRound) -> None:
+        _sse_stream_opened(round_.id)
+        session = _get_session() if getattr(round_, "shared", False) else None
+        if session is not None:
+            session.connected()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache, no-store")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        snapshot = round_.snapshot()
+        revision = snapshot["revision"]
+        event_sequence = snapshot["event_sequence"]
+        self.send_sse_snapshot(snapshot, "snapshot")
+        try:
+            while snapshot["status"] == "running":
+                snapshot = round_.wait_for_update(revision, timeout=15.0)
+                if snapshot["revision"] <= revision:
+                    self.send_sse_snapshot(
+                        {
+                            "round_id": round_.id,
+                            "revision": revision,
+                            "event_sequence": event_sequence,
+                        },
+                        "heartbeat",
+                    )
+                    continue
+                delta = self.round_stream_delta(snapshot, event_sequence)
+                revision = snapshot["revision"]
+                event_sequence = snapshot["event_sequence"]
+                if snapshot["status"] != "running":
+                    self.send_sse_snapshot(delta, "complete")
+                    return
+                self.send_sse_snapshot(delta)
+            self.send_sse_snapshot(self.round_stream_delta(snapshot, event_sequence), "complete")
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            # The stream is the browser's presence signal: one consumer left.
+            # A still-running round with zero consumers enters the grace
+            # window (EventSource reconnects on its own, so a blip is
+            # tolerated) after which the watchdog cancels it — releasing the
+            # ASR microphone with it.  Terminal rounds just drop the entry.
+            _sse_stream_closed(round_.id)
+            if session is not None:
+                session.disconnected()
+            self.close_connection = True
+
+    def send_shared_speech_frames(self, round_, directive_id):
+        directive = round_.find_directive(directive_id)
+        if directive is None:
+            self.send_error_json(InvalidRequestError("speech directive not found"))
+            return
+        audio = _get_shared_audio()
+        clip = audio.ensure(round_, directive)
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/x-dice-arena-wav-stream")
+        self.send_header("X-Dice-Speech-Directive", directive_id)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Accel-Buffering", "no")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        try:
+            for wav in audio.frames(clip, live=True):
+                self.wfile.write(encode_audio_frame(wav))
+                self.wfile.flush()
+            self.wfile.write(encode_end_frame())
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception as exc:
+            try:
+                self.wfile.write(encode_error_frame(str(exc)))
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+        finally:
+            self.close_connection = True
+
+    def send_round_speech_frames(self, round_: GameRound, directive_id: str) -> None:
+        """Stream one directive's audio: manifest WAV or provider TTS frames."""
+        if getattr(round_, "shared", False):
+            self.send_shared_speech_frames(round_, directive_id)
+            return
+        directive = round_.find_directive(directive_id)
+        if directive is None:
+            self.send_error_json(
+                DiceArenaError(
+                    f"speech directive not found: {directive_id}",
+                    "SPEECH_DIRECTIVE_NOT_FOUND",
+                    404,
+                )
+            )
+            return
+        game_id = round_.game_id
+        provider = None
+        speech_provider_id = None
+        speech_payload: dict[str, Any] | None = None
+        frame: bytes | None = None
+        if directive.get("mode") == "audio":
+            try:
+                audio_path = resolve_game_audio_path(game_id, str(directive.get("audio") or ""), root=_GAMES_ROOT)
+                frame = encode_audio_frame(audio_path.read_bytes())
+            except FileNotFoundError as exc:
+                self.send_error_json(DiceArenaError(f"audio file not found: {exc}", "AUDIO_FILE_NOT_FOUND", 404))
+                return
+            except (OSError, ValueError) as exc:
+                self.send_error_json(DiceArenaError(str(exc), "AUDIO_CONFIG_ERROR", 400))
+                return
+        else:
+            entry: dict[str, Any] = {"mode": str(directive.get("mode") or "tts_local")}
+            if directive.get("provider"):
+                entry["provider"] = str(directive["provider"])
+            try:
+                dispatcher = _tts_dispatcher()
+                speech_provider_id = dispatcher.provider_id_for_speech_entry(entry, game_id)
+                speech_payload = {
+                    "game": game_id,
+                    "text": str(directive.get("text") or ""),
+                    "voice": str(directive.get("voice") or "default"),
+                    "speed": directive.get("speed", 1.0),
+                }
+                provider = dispatcher.provider(speech_payload, game_id=game_id, provider_id=speech_provider_id)
+                if not callable(getattr(provider, "stream", None)):
+                    raise InvalidRequestError(f"TTS provider {provider.id} does not implement stream()")
+            except DiceArenaError as exc:
+                self.send_error_json(exc)
+                return
+
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/x-dice-arena-wav-stream")
+        self.send_header("X-Dice-Speech-Directive", directive_id)
+        self.send_header("X-Dice-Speech-Mode", str(directive.get("mode") or "tts_local"))
+        if provider is not None:
+            self.send_header("X-Dice-TTS-Provider", provider.id)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Accel-Buffering", "no")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        try:
+            if provider is not None and speech_payload is not None:
+
+                def write_frame(audio: bytes) -> None:
+                    self.wfile.write(encode_audio_frame(audio))
+                    self.wfile.flush()
+
+                _tts_dispatcher().stream(
+                    speech_payload,
+                    write_frame,
+                    game_id=game_id,
+                    provider_id=speech_provider_id,
+                )
+            elif frame is not None:
+                self.wfile.write(frame)
+            self.wfile.write(encode_end_frame())
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception as exc:
+            print(f"[round] speech stream directive={directive_id} failed: {exc}", flush=True)
+            try:
+                self.wfile.write(encode_error_frame(str(exc)))
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+    def do_GET(self) -> None:  # noqa: N802
+        parsed_url = urlsplit(self.path)
+        path = parsed_url.path
+        if path == "/api/session":
+            payload = _get_session().snapshot()
+            payload["local_client"] = self._is_board_local_client()
+            self.send_json(payload)
+            return
+        if path == "/api/session/stream":
+            self.stream_session(_get_session())
+            return
+        if path == "/api/health":
+            component_items = COMPONENTS.all(include_health=True)
+            tts_id = _selected_tts_id()
+            tts_health = _provider_health(tts_id, "tts")
+            # Health describes whichever vision game is actually deployed.
+            # Hardcoding "dice" here would report the wrong game's slots and
+            # profile once a second vision game exists — and raise outright if
+            # dice is ever removed.
+            vision_game_id = _primary_vision_game_id()
+            remote_id = _selected_provider_id(vision_game_id, "tts_remote", "")
+            remote_health = (
+                _provider_health(remote_id, "tts")
+                if remote_id
+                else {
+                    "id": "",
+                    "type": "tts",
+                    "role": "",
+                    "ok": False,
+                    "configured": False,
+                }
+            )
+            adjudicator_id = _selected_provider_id(vision_game_id, "vision_adjudicator", "vision_yolov8_objdetect")
+            adjudicator_health = _provider_health(adjudicator_id, "vision", "adjudicator")
+            adjudicator_health = {
+                **adjudicator_health,
+                **_vision_profile_metadata(vision_game_id, adjudicator_id),
+            }
+            self.send_json(
+                {
+                    "ok": True,
+                    "backend": "k3-local-component-bridge",
+                    "components": component_items,
+                    "adjudicator_provider": adjudicator_id,
+                    "adjudicator": adjudicator_health,
+                    # Compatibility alias for existing dashboards/clients.
+                    "vision": adjudicator_health,
+                    "yolo_binary": adjudicator_health.get("binary", ""),
+                    "yolo_ready": bool(adjudicator_health.get("ready", False)),
+                    "tts_provider": tts_id,
+                    "tts": tts_health,
+                    "tts_url": tts_health.get("url", ""),
+                    "tts_ready": bool(tts_health.get("ok", False)),
+                    "tts_engine": tts_health.get("engine", ""),
+                    "tts_speaker": tts_health.get("speaker", ""),
+                    "tts_remote_provider": remote_id,
+                    "tts_remote": {**remote_health, "configured": bool(remote_id)},
+                    "board_input": _board_input_status(),
+                    "shared_audio": _SHARED_AUDIO.health() if _SHARED_AUDIO else {"worker_running": False},
+                    "camera": "config.json",
+                }
+            )
+            return
+        if path == "/api/tts/health":
+            requested = parse_qs(parsed_url.query).get("provider", [""])[0]
+            provider_id = requested or _selected_tts_id("dice")
+            health = _provider_health(provider_id, "tts")
+            self.send_json(health, HTTPStatus.OK if health.get("ok") is not False else HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+        if path == "/api/components":
+            self.send_json({"components": COMPONENTS.all(include_health=True)})
+            return
+        if path == "/api/games":
+            arena = get_arena_config()
+            self.send_json(
+                {
+                    "games": get_games().public_all(arena),
+                    "standby": arena_standby(arena),
+                    "board_input": {
+                        "local_client": self._is_board_local_client(),
+                        **_board_input_source(),
+                    },
+                }
+            )
+            return
+        if path == "/api/asr/standby/events":
+            # Standby-screen wake/selection events (no round → no SSE
+            # stream): the frontend polls this while the standby mic listens.
+            self.send_json({"events": _STANDBY_BUS.poll()})
+            return
+        if path == "/api/asr/select/events":
+            # Game-list selection events, same polling pattern as standby.
+            self.send_json({"events": _SELECT_BUS.poll()})
+            return
+        if path == "/api/asr/standby/stream":
+            self._stream_bus(_STANDBY_BUS)
+            return
+        if path == "/api/asr/select/stream":
+            self._stream_bus(_SELECT_BUS)
+            return
+        if path.startswith("/api/game/rounds/"):
+            remainder = path[len("/api/game/rounds/") :]
+            round_id, _, suffix = remainder.partition("/")
+            try:
+                round_ = _lookup_round(round_id)
+            except JobNotFoundError as exc:
+                self.send_error_json(exc)
+                return
+            if suffix == "speech/current" and getattr(round_, "shared", False):
+                audio = _get_shared_audio()
+                snap = round_.snapshot()
+                current = audio.current(round_)
+                if current is None and snap["speech_active"]:
+                    latest = next(
+                        (
+                            e
+                            for e in reversed(snap["events"])
+                            if e.get("event") == "speech" and e.get("state_version") == snap.get("state_version")
+                        ),
+                        None,
+                    )
+                    if latest:
+                        audio.ensure(round_, latest)
+                        current = audio.current(round_)
+                self.send_json({"directive": current})
+            elif suffix == "stream":
+                self.stream_round_events(round_)
+            else:
+                self.send_json(round_.snapshot())
+            return
+        remainder = _adjudication_job_remainder(path)
+        if remainder is not None:
+            job_id, _, suffix = remainder.partition("/")
+            with jobs_lock:
+                job = jobs.get(job_id)
+            if not job:
+                self.send_error_json(JobNotFoundError(job_id))
+            elif suffix == "stream":
+                self.stream_job_events(job)
+            elif suffix == "events":
+                snapshot = job.snapshot()
+                self.send_json(
+                    {
+                        "job_id": job_id,
+                        "status": snapshot["status"],
+                        "phase": snapshot["phase"],
+                        "events": snapshot["events"],
+                        "event_sequence": snapshot["event_sequence"],
+                        "revision": snapshot["revision"],
+                    }
+                )
+            else:
+                self.send_json(job.snapshot())
+            return
+        self.serve_static(path)
+
+    def drain_body(self) -> None:
+        """Consume an unread POST body so keep-alive framing stays intact.
+
+        A body left in the socket buffer is parsed as the next pipelined
+        request line on this persistent connection and corrupts it.
+        """
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        if length > 0:
+            self.rfile.read(length)
+
+    def do_POST(self) -> None:  # noqa: N802
+        path = urlsplit(self.path).path
+        if path == "/api/session/actions":
+            try:
+                command = self.read_json()
+                if command.get("action") == "intent" and (
+                    not isinstance(command.get("state"), str) or not isinstance(command.get("state_version"), int)
+                ):
+                    raise InvalidRequestError("state and state_version are required for a session intent")
+                self.send_json(_get_session().submit(command))
+            except DiceArenaError as exc:
+                self.send_error_json(exc)
+            return
+        if path == "/api/tts/stream":
+            try:
+                payload = self.read_json()
+                dispatcher = _tts_dispatcher()
+                provider = dispatcher.provider(payload)
+                if not callable(getattr(provider, "stream", None)):
+                    raise InvalidRequestError(f"TTS provider {provider.id} does not implement stream()")
+            except DiceArenaError as exc:
+                self.send_error_json(exc)
+                return
+            except Exception as exc:
+                self.send_error_json(DiceArenaError(str(exc), "TTS_PROVIDER_ERROR", 502))
+                return
+
+            provider_health = _provider_health(provider.id, "tts")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/x-dice-arena-wav-stream")
+            self.send_header("X-Dice-TTS-Provider", provider.id)
+            self.send_header("X-Dice-TTS-Engine", str(provider_health.get("engine", provider.id)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Accel-Buffering", "no")
+            self.send_header("Connection", "close")
+            self.end_headers()
+
+            def write_frame(audio: bytes) -> None:
+                self.wfile.write(encode_audio_frame(audio))
+                self.wfile.flush()
+
+            try:
+                dispatcher.stream(payload, write_frame)
+                self.wfile.write(encode_end_frame())
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            except Exception as exc:
+                print(f"[tts] stream provider={provider.id} failed: {exc}", flush=True)
+                try:
+                    self.wfile.write(encode_error_frame(str(exc)))
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+            return
+        if path == "/api/tts/synthesize":
+            try:
+                payload = self.read_json()
+                dispatcher = _tts_dispatcher()
+                provider = dispatcher.provider(payload)
+                audio, headers = dispatcher.synthesize(payload)
+            except DiceArenaError as exc:
+                self.send_error_json(exc)
+            except Exception as exc:
+                self.send_error_json(DiceArenaError(str(exc), "TTS_PROVIDER_ERROR", 502))
+            else:
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", headers.pop("Content-Type", "audio/wav"))
+                self.send_header("Content-Length", str(len(audio)))
+                self.send_header("X-Dice-TTS-Provider", provider.id)
+                self.send_header("Cache-Control", "no-store")
+                for name, value in headers.items():
+                    self.send_header(name, value)
+                self.end_headers()
+                try:
+                    self.wfile.write(audio)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+            return
+        if path in {"/api/adjudicate", "/api/analyze"}:
+            try:
+                payload = self.read_json()
+                game_id = str(payload.get("game") or "dice")
+                job = create_adjudication_job(game_id)
+                self.send_json(job.snapshot(), HTTPStatus.ACCEPTED)
+            except DiceArenaError as exc:
+                self.send_error_json(exc)
+            return
+        if path == "/api/input/board/selection":
+            try:
+                payload = self.read_json()  # Drain even a rejected request on keep-alive.
+                if not self._is_board_local_client():
+                    raise DiceArenaError(
+                        "board selection may only be synced from the board itself",
+                        code="BOARD_SELECTION_LOCAL_ONLY",
+                        status=HTTPStatus.FORBIDDEN,
+                    )
+                game_id = payload.get("game")
+                if not isinstance(game_id, str) or not game_id.strip():
+                    raise InvalidRequestError("game must be a non-empty string")
+                self.send_json({"game": _sync_board_selection(game_id)})
+            except DiceArenaError as exc:
+                self.send_error_json(exc)
+            return
+        if path == "/api/asr/standby":
+            # The frontend asks for wake-word listening while the screen is
+            # in standby, and releases it on wake/round start.  Round sessions
+            # always win: create_round stops the standby routing first.  The
+            # phrase table also carries the game names: game keys come BEFORE
+            # the wake key so "我想玩摇骰子游戏" selects the dice game even
+            # though the wake word "游戏" occurs in it too.
+            try:
+                payload = self.read_json()
+            except DiceArenaError as exc:
+                self.send_error_json(exc)
+                return
+            if _SESSION is not None and _SESSION.enabled:
+                self.send_json({"listening": arena_asr_enabled(get_arena_config()), "shared": True})
+                return
+            if payload.get("listen") is not True:
+                ASR_BRIDGE.stop()
+                self.send_json({"listening": False})
+                return
+            standby = arena_standby(get_arena_config())
+            # A fresh listening session starts a clean event epoch: events
+            # from earlier standby periods (room noise, an earlier wake) must
+            # never replay into a newly loaded page — that is what made a
+            # page refresh instantly "wake" with a stale word (2026-09-03).
+            cursor = _STANDBY_BUS.clear()
+            game_phrases = _game_select_phrases()
+            phrases = {**game_phrases, "wake": list(standby["wake_phrases"])}
+            started = ASR_BRIDGE.start_select_session(
+                phrases=phrases,
+                asr_enabled=arena_asr_enabled(get_arena_config()),
+                provider_id=arena_slot_value(get_arena_config(), "asr"),
+                on_select=_select_broadcast(_STANDBY_BUS),
+                on_heard=_unmatched_broadcast(_STANDBY_BUS),
+            )
+            self.send_json(
+                {
+                    "listening": started,
+                    "wake_phrases": standby["wake_phrases"] if started else [],
+                    "games": [{"id": game_id, "phrases": words} for game_id, words in game_phrases.items()]
+                    if started
+                    else [],
+                    "cursor": cursor,
+                }
+            )
+            return
+        if path == "/api/asr/select":
+            # Game-list voice selection: same routing pattern as standby,
+            # but the phrase table holds game names plus the optional
+            # "enter the selected game" confirm words (wake words mean
+            # nothing once the list is already on screen).  Table order is
+            # priority: a named game beats the generic confirm command.
+            try:
+                payload = self.read_json()
+            except DiceArenaError as exc:
+                self.send_error_json(exc)
+                return
+            if _SESSION is not None and _SESSION.enabled:
+                self.send_json({"listening": arena_asr_enabled(get_arena_config()), "shared": True})
+                return
+            if payload.get("listen") is not True:
+                ASR_BRIDGE.stop()
+                self.send_json({"listening": False})
+                return
+            cursor = _SELECT_BUS.clear()
+            game_phrases = _game_select_phrases()
+            confirm_phrases = arena_game_select_confirm_phrases(get_arena_config())
+            phrases = dict(game_phrases)
+            if confirm_phrases:
+                phrases[_SELECT_CONFIRM_KEY] = confirm_phrases
+            started = ASR_BRIDGE.start_select_session(
+                phrases=phrases,
+                asr_enabled=arena_asr_enabled(get_arena_config()),
+                provider_id=arena_slot_value(get_arena_config(), "asr"),
+                on_select=_select_broadcast(_SELECT_BUS),
+                on_heard=_unmatched_broadcast(_SELECT_BUS),
+            )
+            self.send_json(
+                {
+                    "listening": started,
+                    "games": [{"id": game_id, "phrases": words} for game_id, words in game_phrases.items()]
+                    if started
+                    else [],
+                    "confirm_phrases": confirm_phrases if started else [],
+                    "cursor": cursor,
+                }
+            )
+            return
+        if path == "/api/game/rounds":
+            try:
+                payload = self.read_json()
+                game_id = str(payload.get("game") or "dice")
+                if _SESSION is not None and _SESSION.enabled:
+                    result = _SESSION.submit({"action": "enter", "game": game_id})
+                    self.send_json(result["round"], HTTPStatus.CREATED)
+                else:
+                    round_ = create_round(game_id)
+                    self.send_json(round_.snapshot(), HTTPStatus.CREATED)
+            except DiceArenaError as exc:
+                self.send_error_json(exc)
+            return
+        if path.startswith("/api/game/rounds/"):
+            remainder = path[len("/api/game/rounds/") :]
+            round_id, _, suffix = remainder.partition("/")
+            if suffix in {"intents", "cancel", "speech"}:
+                try:
+                    round_ = _lookup_round(round_id)
+                except JobNotFoundError as exc:
+                    self.send_error_json(exc)
+                    return
+                if suffix == "speech":
+                    try:
+                        payload = self.read_json()
+                        directive_id = str(payload.get("directive_id") or "").strip()
+                        if not directive_id:
+                            raise InvalidRequestError("directive_id is required")
+                    except DiceArenaError as exc:
+                        self.send_error_json(exc)
+                        return
+                    self.send_round_speech_frames(round_, directive_id)
+                    return
+                if suffix == "cancel":
+                    self.drain_body()
+                    if getattr(round_, "shared", False):
+                        _get_session().submit({"action": "detach", "round_id": round_.id})
+                    else:
+                        round_.cancel()
+                    self.send_json(round_.snapshot())
+                    return
+                # intents
+                try:
+                    payload = self.read_json()
+                    intent = str(payload.get("intent") or "").strip()
+                    if not intent:
+                        raise InvalidRequestError("intent is required")
+                    if getattr(round_, "shared", False):
+                        _get_session().submit(
+                            {
+                                "action": "intent",
+                                "round_id": round_.id,
+                                "intent": intent,
+                                "payload": payload,
+                                "state": payload.get("state"),
+                                "state_version": payload.get("state_version"),
+                                "request_id": payload.get("request_id"),
+                            }
+                        )
+                        self.send_json(round_.snapshot())
+                    else:
+                        self.send_json(round_.submit_intent(intent, payload))
+                except DiceArenaError as exc:
+                    self.send_error_json(exc)
+                except Exception as exc:
+                    self.send_error_json(DiceArenaError(str(exc), "ROUND_INTENT_ERROR", 500))
+                return
+        remainder = _adjudication_job_remainder(path)
+        if remainder is not None and remainder.endswith("/cancel"):
+            job_id = remainder[: -len("/cancel")].rstrip("/")
+            with jobs_lock:
+                job = jobs.get(job_id)
+            if not job:
+                self.send_error_json(JobNotFoundError(job_id))
+            else:
+                self.drain_body()
+                job.cancel()
+                self.send_json(job.snapshot())
+            return
+        self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
+
+    def serve_static(self, path: str) -> None:
+        relative = path.lstrip("/") or "index.html"
+        candidate = (WEB_ROOT / relative).resolve()
+        try:
+            candidate.relative_to(WEB_ROOT.resolve())
+        except ValueError:
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        if not candidate.is_file():
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        body = candidate.read_bytes()
+        content_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="K3 Dice Arena provider bridge")
+    # A whole-process freeze (e.g. a leaked lock) is diagnosable on demand:
+    # kill -USR1 <pid> dumps every thread's Python stack into the web log.
+    faulthandler.register(signal.SIGUSR1, file=sys.stderr)
+    parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
+    args = parser.parse_args()
+    # The local TTS engine is chosen exactly once per process: startup pins
+    # it and later config edits cannot switch it (a resident engine cannot
+    # be swapped mid-run).  A configuration naming two engines refuses to
+    # start rather than silently picking one.
+    global _LOCAL_TTS_PIN
+    try:
+        _LOCAL_TTS_PIN = resolve_local_tts_pin(get_arena_config(), _enabled_game_manifests())
+    except ArenaConfigError as exc:
+        print(f"[arena] refusing to start: {exc}", flush=True)
+        raise SystemExit(1) from exc
+    # The pin check above covers slots only; per-line speech ``provider``
+    # pins must not route around it either (they would drag a second local
+    # engine's daemon into RAM via referenced startup).
+    arena_config = get_arena_config()
+    conflict = _single_local_tts_conflict(arena_config, get_games())
+    if conflict is not None:
+        print(f"[arena] refusing to start: {conflict}", flush=True)
+        raise SystemExit(1)
+    # The ASR engine owns the microphone for the whole run: exactly one
+    # engine id may be referenced (arena slot plus enabled-game overrides).
+    conflict = _single_asr_conflict(arena_config, get_games())
+    if conflict is not None:
+        print(f"[arena] refusing to start: {conflict}", flush=True)
+        raise SystemExit(1)
+    # Both resident engines warm before the server starts serving: the local
+    # TTS (mandatory, fail-fast) and the ASR engine (when the breaker is on).
+    # They run in parallel — matcha loads on the A100 EP cores, zipformer on
+    # the X100 cores — so boot pays max(~3.5s, ~2.6s), not the sum.
+    asr_prewarm_failure: list[BaseException] = []
+
+    def _run_asr_prewarm() -> None:
+        try:
+            _prewarm_resident_asr(arena_config)
+        except BaseException as exc:  # reported by the main thread below
+            asr_prewarm_failure.append(exc)
+
+    asr_prewarm_thread = threading.Thread(target=_run_asr_prewarm, name="asr-prewarm", daemon=True)
+    asr_prewarm_thread.start()
+    _prewarm_pinned_local_tts(_LOCAL_TTS_PIN)
+    asr_prewarm_thread.join()
+    if asr_prewarm_failure:
+        print(f"[arena] refusing to start: {asr_prewarm_failure[0]}", flush=True)
+        raise SystemExit(1)
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    print(f"Dice Arena K3 backend listening on http://{args.host}:{args.port}", flush=True)
+    print(f"Local TTS provider: {_LOCAL_TTS_PIN or 'none'}", flush=True)
+    _get_session()
+    _start_board_input_supervisor()
+    adjudicator = next(
+        (
+            item
+            for item in COMPONENTS.all(include_health=True)
+            if item["type"] == "vision" and item["role"] == "adjudicator"
+        ),
+        None,
+    )
+    print(
+        f"Vision adjudicator provider: {adjudicator.get('id') if adjudicator else 'none'}",
+        flush=True,
+    )
+    print(f"Components: {', '.join(COMPONENTS.ids()) or 'none'}", flush=True)
+    # 归位不变量的开机档：开始服务前把臂拉回 home。失败只打日志，避免
+    # 没接臂的部署永久无法启动；成功则第一局复用已经热好的常驻控制器。
+    _home_arm_on_boot()
+    # 空闲姿态巡检：桌面不在游戏里时盯臂是否离家（robot_home_patrol 开关）。
+    _run_home_patrol()
+    shutdown_requested = threading.Event()
+
+    def request_shutdown(signum: int, _frame: Any) -> None:
+        if shutdown_requested.is_set():
+            return
+        shutdown_requested.set()
+        print(f"Received signal {signum}; shutting down runtime components", flush=True)
+        _shutdown_runtime_components()
+        # ``serve_forever`` must be stopped from another thread when called
+        # by a signal handler on the serving thread.
+        threading.Thread(target=server.shutdown, daemon=True).start()
+
+    signal.signal(signal.SIGTERM, request_shutdown)
+    signal.signal(signal.SIGINT, request_shutdown)
+    try:
+        server.serve_forever(poll_interval=0.5)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        _shutdown_runtime_components()
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()
