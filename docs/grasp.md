@@ -35,6 +35,11 @@ bash calibrate.sh apply
 | `auto` | 沿路线运动、采样并求解 |
 | `register` | 登记固定参考板 |
 | `apply` | 备份并安装外参，生成现场算法配置，采集并登记桌面 |
+| `solve` | 用已有数据集重新求解外参，不采样 |
+| `restore` | 相机移动后，回 HOME 并通过固定参考板恢复外参 |
+| `status` | 只读，显示当前配置和标定进度 |
+
+各步骤加 `--dry-run` 只显示将执行的操作，不访问设备。
 
 结果保存在 `SITE/calibration/`，现场算法配置为 `SITE/green_cup.json`。
 
