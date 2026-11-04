@@ -4,7 +4,7 @@
   "conf": 0.3,
   "stable_frames": 30,
   "divider_detection": true,
-  "camera": "/dev/v4l/by-id/usb-046d_HD_Pro_Webcam_C920_9395301F-video-index0",
+  "camera": "/dev/v4l/by-id/usb-046d_HD_Pro_Webcam_C920_*-video-index0",
   "device": "",
   "width": 1280,
   "height": 720,

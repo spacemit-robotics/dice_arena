@@ -9,6 +9,8 @@ are dropped, never queued) and the child is restarted with a backoff when it
 dies; publishing failures never propagate to the capture pipeline.
 """
 
+import logging
+import socket
 import subprocess
 import threading
 import time
@@ -41,6 +43,7 @@ class RtspStreamer:
             raise ValueError("RTSP stream dimensions must be positive integers")
         if type(fps) is not int or fps <= 0:
             raise ValueError("RTSP stream fps must be a positive integer")
+        self._address = (host, port)
         self._url = f"rtsp://{host}:{port}{path}"
         self._width, self._height = width, height
         self._fps = fps
@@ -55,6 +58,7 @@ class RtspStreamer:
         self._stdin = None
         self._spawned = 0
         self._restart_not_before = 0.0
+        self._unavailable_reported = False
         self._slot_lock = threading.Lock()
         self._slot = None
         self._wakeup = threading.Event()
@@ -154,24 +158,43 @@ class RtspStreamer:
             except (BrokenPipeError, OSError) as exc:
                 self.last_error = str(exc)
                 self._kill_child()
+                self._restart_not_before = time.monotonic() + self._backoff
 
     def _ensure_running(self):
-        if self._proc is not None and self._proc.poll() is None:
-            return True
-        self._kill_child()
+        if self._stopped.is_set():
+            return False
+        if self._proc is not None:
+            status = self._proc.poll()
+            if status is None:
+                return True
+            self.last_error = f"RTSP publisher exited with status {status}"
+            self._kill_child()
+            self._restart_not_before = time.monotonic() + self._backoff
         if time.monotonic() < self._restart_not_before:
             return False
         try:
+            # Preview is optional: do not launch the encoder while its server is absent.
+            # This probe runs only in the writer thread, never in camera capture or motion.
+            with socket.create_connection(self._address, timeout=0.2):
+                pass
+            if self._stopped.is_set():
+                return False
             # stdout is devnull'd: the VPU encoder library chats on stdout and
             # must never reach this process' JSON-lines stdout; stderr passes
             # through so real GStreamer errors stay visible.
             self._proc = subprocess.Popen(self.command(), stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=None)
             self._stdin = self._proc.stdin
             self._spawned += 1
+            self._unavailable_reported = False
             return True
         except OSError as exc:
             self.last_error = str(exc)
             self._restart_not_before = time.monotonic() + self._backoff
+            if not self._unavailable_reported:
+                logging.getLogger(__name__).warning(
+                    "RTSP preview unavailable at %s; retrying in background: %s", self._url, exc
+                )
+                self._unavailable_reported = True
             return False
 
     def _kill_child(self):

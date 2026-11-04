@@ -86,7 +86,8 @@ if(BUILD_TESTING)
     set(MANIPULATION_DEVICE "" CACHE FILEPATH "Device executable for full Mock integration tests")
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME dice_arena_resources
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_assets.py)
+        COMMAND ${Python3_EXECUTABLE} -m unittest discover
+        -s ${CMAKE_CURRENT_SOURCE_DIR}/tests -p "test_*assets.py")
     add_test(NAME dice_arena_cup_contract
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cup.py)
     set_tests_properties(dice_arena_cup_contract PROPERTIES TIMEOUT 30)

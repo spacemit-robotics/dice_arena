@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Mapping, Iterator
+import glob
 import json
 import os
 import subprocess
@@ -40,6 +41,23 @@ def build_rtsp_args(config: Mapping[str, Any], selected_video: Mapping[str, Any]
     if video_path is not None:
         args.extend(["--rtsp-path", str(video_path).rstrip("/") or "/"])
     return args
+
+
+def resolve_camera_pattern(camera: str) -> str:
+    """A camera selector with wildcards must name exactly one existing device node.
+
+    Stable /dev/v4l/by-id names carry the camera's serial number; a pattern such as
+    /dev/v4l/by-id/usb-046d_HD_Pro_Webcam_C920_*-video-index0 accepts any unit of that model.
+    """
+    if not any(character in camera for character in "*?["):
+        return camera
+    matches = sorted(glob.glob(camera))
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"camera pattern {camera!r} matches {len(matches)} devices; connect exactly one such camera "
+            "or set its device path"
+        )
+    return matches[0]
 
 
 def load_runtime_defaults(
@@ -192,10 +210,15 @@ class YoloRuntimeProcess:
                 if camera.strip().isdigit():
                     runtime_overrides.extend(["--camera", camera.strip()])
                 else:
-                    runtime_overrides.extend(["--device", camera.strip()])
+                    runtime_overrides.extend(["--device", resolve_camera_pattern(camera.strip())])
             selected_video = selected_view.get("video")
         else:
             selected_video = profile.get("video") if isinstance(profile, Mapping) else None
+            # The runtime config's camera may be a pattern; the runtime itself opens literal paths only.
+            camera = runtime_config.get("camera") if isinstance(runtime_config, Mapping) else None
+            device = runtime_config.get("device") if isinstance(runtime_config, Mapping) else None
+            if isinstance(camera, str) and not device and resolve_camera_pattern(camera) != camera:
+                runtime_overrides.extend(["--device", resolve_camera_pattern(camera)])
 
         control_read, control_write = os.pipe()
         event_read, event_write = os.pipe()

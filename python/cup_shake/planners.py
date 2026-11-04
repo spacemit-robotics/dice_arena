@@ -4,6 +4,7 @@
 
 import hashlib
 from pathlib import Path
+import sys
 
 
 class FixturePlanner:
@@ -28,6 +29,18 @@ def file_hash(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def preserved_legacy_resources(source_root):
+    """The former share/cup_shake directory an upgrade kept in place, when a site still uses it.
+
+    Installation never replaces an existing cup_shake directory with the dice_arena alias, so a
+    configuration written before the merge keeps reading those resources and misses later updates.
+    """
+    for directory in (source_root, *source_root.parents):
+        if directory.name == "cup_shake" and (directory.parent / "dice_arena").is_dir():
+            return None if directory.is_symlink() else directory
+    return None
+
+
 def make_planner(config, state, driver, directory=None):
     kind = config["type"]
     if kind == "fixture":
@@ -47,5 +60,11 @@ def make_planner(config, state, driver, directory=None):
         base = Path.cwd() if directory is None else Path(directory)
         for key in ("source_root", "config", "session_directory"):
             resolved[key] = str((base / config[key]).resolve())
+        legacy = preserved_legacy_resources(Path(resolved["source_root"]))
+        if legacy is not None:
+            current = legacy.parent / "dice_arena"
+            print(f"warning: planner.source_root uses {legacy}, the former resources an upgrade kept; current "
+                  f"resources are in {current}. Delete {legacy} and the old cup_shake build directory, then "
+                  f"reinstall; or point source_root at {current / 'algorithms'}.", file=sys.stderr, flush=True)
         return LegacyGreenPlanner(resolved, state)
     raise ValueError("unknown planner registration: " + kind)

@@ -1,91 +1,154 @@
 # Dice Arena 骰子游戏
 
-集成视觉抓杯、摇杯放杯、手眼标定、游戏网页、语音播报和骰子识别。
-设备控制统一经过 `manipulation`；C++ 管理动作阶段，Python 负责视觉规划与游戏调度。
+提供视觉抓杯、摇杯放杯、手眼标定、骰子识别、语音播报和网页游戏。
 
-## 构建与模拟运行
+## 硬件准备
 
-在 SDK 根目录执行：
+| 设备 | 型号或规格 | 连接与用途 |
+| --- | --- | --- |
+| 主控 | SpacemiT K3 开发板 | 运行 SDK、视觉规划、骰子识别、语音与游戏网页 |
+| 机械臂 | 松灵 Nero 七轴机械臂 | 固定基座，通过 USB-CAN 适配器连接 K3，执行抓杯、摇杯与放杯 |
+| 末端执行器 | Revo2 右手灵巧手，六个控制通道 | 安装在机械臂末端，经机械臂末端口接入，与机械臂共用控制器连接 |
+| CAN 适配器 | 支持 SocketCAN 的 USB-CAN 适配器 | USB 连接 K3，CAN 连接机械臂，通信速率 1 Mbps |
+| 抓杯与标定相机 | Intel RealSense D435i | USB 连接 K3，固定安装在机械臂外，用于杯体定位与手眼标定 |
+| 骰子相机 | Logitech C920 | USB 连接 K3，画面覆盖开盖后的骰子区域，用于点数识别 |
+| 标定板 | ChArUco 末端标定板与固定参考板各一块 | 分别固定在末端与桌面，尺寸、字典和格数与标定配置一致 |
+| 音频输出 | 音箱，型号不限 | 接入 K3 的系统音频输出，用于规则讲解与结果播报 |
+| 游戏道具 | 绿色杯子与骰子 | 杯体尺寸与抓杯配置一致，放置于相机可见的桌面工作区 |
+
+随附的视觉规划、自动标定与手型参数适用于上述设备组合。
+更换机械臂或末端需要适配驱动、规划、标定和手型，不能只替换设备配置。
+
+## 安装
+
+需要 Linux、C++17 编译器、CMake 3.16+、Python 3.10+，以及网络和系统依赖安装权限。
+深度相机采集另需与主机架构、Python 版本匹配的 `pyrealsense2`。
+从 SDK 根目录开始，在同一终端依次执行：
 
 ```bash
 source build/envsetup.sh
 bash components/thirdparty/pyagxarm/tools/setup_sdk.sh
 cd application/native/dice_arena
-mm --with-deps
-dice-arena mock
-dice-arena check
 ```
 
-`mock` 检查抓、摇、放，`check` 检查游戏接口；均不连接机械臂、相机或音频设备。
-需要 C++17、CMake 3.16+、Python 3.10+。`mm` 检查并提示安装声明的系统依赖；骰子识别在 K3 上编译。
+后续命令均在应用目录执行。新终端须先在 SDK 根目录执行 `source build/envsetup.sh`。
 
 ## 运行资源
 
-源码仓库不包含推理模型、机械臂与手部网格、MediaMTX 可执行文件。
-按 [runtime_assets.json](runtime_assets.json) 列出的相对路径放置或链接资源，再校验并重新安装：
+下载模型、设备网格、音频和视频服务程序，然后构建安装应用：
 
 ```bash
-python3 tools/check_assets.py --verify
+python3 tools/download_assets.py
 mm --with-deps
 ```
 
-清单记录文件大小和 SHA-256；校验不连接设备。仓库不提供这些资源的下载地址。
-缺少运行资源时只能运行 Mock，不能进行视觉抓杯或启动完整游戏。
+资源源站为 `https://archive.spacemit.com/ros2/manipulation/`，清单为 `runtime_assets.json`。
+`mm` 提示安装声明的系统依赖。骰子识别程序在 K3 上编译；随附 MediaMTX 适用于 Linux RISC-V 64 位。
 
-## 硬件准备
+从独立的旧版 `cup_shake` 应用升级时，先删除旧版本的安装目录和构建目录，再执行 `mm --with-deps`：
 
-Nero 通过 CAN 连接主机，右 Revo2 与机械臂共用连接；外置 RealSense 用于抓杯和标定，
-C920 用于骰子识别，摄像头通过 USB 连接主机，并准备音箱。
-先完成[设备配置与运动检查](https://github.com/spacemit-robotics/manipulation#3-连接-nero)。
-Nero 断电会坍塌；现场须有人看护且可急停，不用断电代替软件停止。
+```bash
+rm -rf "${PREFIX:?}/share/cup_shake" \
+  "${SROBOTIS_OUTPUT_ROOT:?}/build/cmake/pkgs/application_native_cup_shake"
+```
+
+安装会把 `share/cup_shake` 重新创建为指向 `share/dice_arena` 的兼容链接。
+
+## 配置设备
+
+下文 `SITE` 表示现场目录，默认 `~/.local/share/spacemit-manipulation/site/`，可用 `MANIPULATION_SITE` 指定。
+为随附的机械臂与灵巧手组合生成设备配置：
+
+```bash
+manipulation configure nero --variant revo2_right
+```
+
+配置保存到 `SITE/device.yaml`，包含驱动、连接参数、关节限位和末端通道；已有文件不覆盖。
+型号只在此处选择，后续应用命令共用该配置。
+
+退出厂商 Web、遥操及其他控制程序，按实际接口名启用 CAN。随附配置使用 `can0`、1 Mbps：
+
+```bash
+sudo ip link set can0 up type can bitrate 1000000
+```
+
+机械臂按设备规程使能并进入位置控制模式；应用不自动使能或清错。
+现场须有人看护、急停可达，工作区无人且无障碍。Nero 断电会坍塌，不用断电或失能代替软件停止。
 
 ## 手眼标定
 
-从本应用目录启动标定网页或命令行，退出其他占用设备的程序：
+固定相机、机械臂基座和两块标定板。在 `calibration/config/calibration_workflow.json` 中填写
+相机序列号、标定板尺寸、空手起始位（HOME）和采集参数；工具中心点（TCP）须匹配实际安装。
+标定与抓杯使用相同的分辨率、裁剪区域和相机内参，不复用其他安装的外参。
+
+自动采样会驱动机械臂，须预留整条路线的运动空间。退出其他设备控制程序，设置工程师 PIN 并启动标定网页：
 
 ```bash
+bash calibrate_web.sh --set-pin
 bash calibrate_web.sh --host 0.0.0.0
 ```
 
-网页地址为 `http://<K3地址>:8091/`，首次启动用 `--set-pin` 设置工程师 PIN。
-也可使用命令行，不与标定网页同时操作设备：
+浏览器打开 `http://<主机地址>:8091/`，按顺序完成：
 
-```bash
-bash calibrate.sh auto
-bash calibrate.sh apply
-```
+1. 示教并设置标定板可见区域。
+2. 生成路线，自动采样并求解外参。
+3. 登记固定参考板，应用结果并采集、登记桌面。
 
-`auto` 按示教路线采样和求解，`apply` 安装外参并采集、登记桌面；两者会访问真机。
-`first/window/plan/register/restore/table/status` 分别提供示教、可见范围、路线、固定板、恢复、桌面和状态操作。
-后台网页服务用 `bash calibration_web_service.sh start|stop|status` 管理。
-参数在 `calibration/config/calibration_workflow.json`，结果保存在 `SITE/calibration/`。
+结果保存在 `SITE/calibration/`，应用结果时生成 `SITE/green_cup.json`。
+更换相机、基座或外参后须重新登记桌面。完成后按 Ctrl+C 退出标定网页。
 
 ## 抓杯与游戏
 
-完成标定、桌面登记，确认 HOME、TCP、手型和杯体参数适用，退出标定程序后执行：
+### 生成应用配置
+
+完成标定和桌面登记并退出标定程序后执行：
 
 ```bash
 dice-arena configure
-dice-arena inspect
+```
+
+配置保存到 `SITE/cup_application.json`，已有文件不覆盖。
+HOME、TCP、杯体尺寸和手型须匹配当前安装。`open_positions`、`grip_positions` 为 `[0,1]` 归一化通道目标，
+通道顺序与方向由设备配置和工具适配定义。
+
+### 单次抓杯、摇杯和放杯
+
+以下命令会驱动真机。机械臂须空手位于 HOME，杯子位于视觉工作区，操作者能观察完整动作：
+
+```bash
 dice-arena cycle
+```
+
+`cycle` 执行一次抓杯、摇杯和放杯。默认闭手后直接抬杯，不检测是否抓稳。
+需要回 HOME 时，先排除持物和路径障碍，再执行 `dice-arena home`；该命令同时张手。
+故障或持杯取消后不自动归位、张手或恢复，由现场操作者处理。
+
+### 启动游戏
+
+将装好骰子的杯子放在视觉工作区，机械臂位于 HOME 且手张开，启动游戏：
+
+```bash
 dice-arena serve
 ```
 
-`cycle` 会驱动机械臂抓杯、摇杯和放杯；单次实体流程通过后再启动游戏。
-游戏网页为 `http://<K3地址>:8080/`，Ctrl+C 停止游戏和视频；语音服务保持运行供下次复用。
-首次启动显示语音模型加载和短句预热阶段。`dice-arena status` 查看游戏组件状态。
-现场配置默认保存在 `~/.local/share/spacemit-manipulation/site/`，重新安装不覆盖。
-`cup-shake` 保留为抓杯操作的兼容命令，不是独立应用包。
+浏览器打开 `http://<主机地址>:8080/`。Ctrl+C 停止游戏和视频服务，语音服务保留供下次复用。
 
-默认闭手后直接抬杯，没有力觉或触觉抓稳验证；需要人工确认时设置 `grip_confirmation: operator`。
-故障或持杯取消后不自动归位、张手或恢复；先由操作者检查持物与机械臂状态。
-完整操作见[抓杯操作](docs/grasp.md)、[游戏运行](docs/real_robot.md)，参数见[配置参考](docs/configuration.md)。
+## 现场文件
+
+| 文件 | 内容 |
+| --- | --- |
+| `SITE/device.yaml` | 设备驱动、连接、关节限位与末端通道 |
+| `SITE/green_cup.json` | 相机、外参、桌面、HOME、TCP、杯体与动作配方 |
+| `SITE/cup_application.json` | 设备配置引用、规划器、手型与持物确认方式 |
+| `SITE/dice_arena/config.json` | 游戏、语音与视频设置，首次启动游戏时生成 |
+
+重新安装不覆盖现场配置和标定结果。
 
 ## 代码结构
 
 ```text
-src/、include/                C++ 动作阶段与持物状态机
-python/cup_shake/             抓杯视觉规划、动作编排和兼容接口
+src/、include/                动作控制与持物状态管理
+python/cup_shake/             抓杯规划与动作编排
 python/spacemit_dice_arena/    dice-arena 统一命令入口
 algorithms/                  抓杯算法、模型、TCP 和手部几何
 calibration/                 手眼标定 CLI/Web、配置与示教路线
@@ -93,6 +156,12 @@ game/                        游戏后端、网页、语音与骰子识别
 mediamtx/                    实时视频转发
 config/、tools/、tests/       配置、部署工具与无硬件测试
 ```
+
+## 参考文档
+
+- [标定与抓杯操作](docs/grasp.md)：命令行标定、桌面更新与人工持物确认。
+- [游戏服务与排障](docs/real_robot.md)：服务端口、状态查询与离线测试。
+- [配置与接口](docs/configuration.md)：配置字段、动作参数与业务接口。
 
 ## 许可
 

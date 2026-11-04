@@ -3,6 +3,7 @@
 """Create a new site config from reviewed algorithm resources; never connect hardware."""
 
 import argparse
+import errno
 import importlib
 import json
 import os
@@ -16,6 +17,10 @@ def main():
     for name in ("prefix", "device_plan", "source_root", "green_config", "runtime_directory", "output"):
         parser.add_argument(name)
     args = parser.parse_args()
+    destination = Path(args.output).absolute()
+    if os.path.lexists(destination):
+        raise FileExistsError(errno.EEXIST, "configuration already exists", str(destination))
+    destination = destination.resolve()
     prefix = Path(args.prefix).resolve()
     layout = json.loads((prefix / ".spacemit-manipulation.json").read_text())
     source, runtime = Path(args.source_root).resolve(), Path(args.runtime_directory).resolve()
@@ -28,7 +33,6 @@ def main():
     green = pipeline.validate(cfg)
     subprocess.run([str(prefix / layout["bindir"] / "manipulation-device"), "validate", str(plan)], check=True)
     gestures = json.loads((source / "configs/actions/gestures/result_feedback.json").read_text())["gestures"]
-    destination = Path(args.output).resolve()
 
     def relative(path):
         return os.path.relpath(path, destination.parent)
@@ -63,4 +67,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except FileExistsError as error:
+        print(f"configuration already exists; existing file kept: {error.filename}", file=sys.stderr)
+        raise SystemExit(1) from None
