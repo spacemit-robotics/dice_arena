@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Stdlib-only feedback checks and measurements for the isolated SDK runner."""
 
 import bisect

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 # Hand-eye calibration commands (first/window/plan/auto/solve/register/restore/apply/table/status)
-# of the cup-shake application. Configuration and resources are in
+# of the dice-arena application. Configuration and resources are in
 # calibration/config and calibration/trajectories; data goes to the manipulation site directory.
 # The arm and hand are reached only through the installed framework (MANIPULATION_PREFIX).
 set -euo pipefail

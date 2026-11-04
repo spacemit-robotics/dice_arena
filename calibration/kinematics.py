@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Joint model for offline route planning, from the framework's robot description (URDF)."""
 
 from dataclasses import dataclass

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Exercise control boundaries without importing an SDK or opening hardware."""
 
 import json
@@ -23,7 +25,7 @@ def service(tmp_path, monkeypatch):
     )
     write(tmp_path / "config.json", cfg)
     monkeypatch.setattr(module, "occupied", lambda **kw: [])
-    monkeypatch.setattr(module, "device_lock", lambda channel: tmp_path / "device.lock")
+    monkeypatch.setattr(module, "device_lock", lambda: tmp_path / "device.lock")
     service = Service(tmp_path / "config.json", tmp_path / "web")
     yield service
     if service.active:

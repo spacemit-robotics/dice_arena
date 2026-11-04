@@ -20,7 +20,7 @@ class SpacemitRobotProvider(RobotProvider):
 
     def __init__(self, manifest=None):
         super().__init__(manifest)
-        # The site's cup application (`cup-shake configure`); `dice-arena serve` passes it explicitly.
+        # The site's cup application (`dice-arena configure`); `dice-arena serve` passes it explicitly.
         application = Path(os.environ.get("SPACEMIT_CUP_APPLICATION") or Path(default_site()) / "cup_application.json")
         self.app = CupApplication(application.resolve())
         self._lock = threading.Lock()

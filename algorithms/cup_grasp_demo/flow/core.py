@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Offline comparison geometry. No camera, CAN, SDK, or control side effects."""
 
 from dataclasses import asdict

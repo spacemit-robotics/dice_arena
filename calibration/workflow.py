@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Config-driven calibration commands; existing collectors remain authoritative."""
 
 import argparse
@@ -25,7 +27,7 @@ def read(path):
 
 
 def site_pipeline(path):
-    """cup-shake's green-cup configuration in the site, made once from its algorithm template.
+    """The application's green-cup configuration in the site, made once from its algorithm template.
 
     Relative resource paths stay relative to the algorithm source; the installed hand-eye result and
     the table registration are site files, and the gate stays closed until the table is registered.
@@ -86,7 +88,6 @@ def validate(c):
                 raise ValueError(f"Invalid measurement.{key}")
     for key in (
         "serial",
-        "channel",
         "reference_id",
         "hand_board",
         "reference_board",
@@ -203,8 +204,6 @@ class Workflow:
         return [
             "--home",
             resolve(c["home"]),
-            "--channel",
-            c["channel"],
             "--speed-percent",
             c["motion"]["speed_percent"],
             "--smooth-speed-deg-s",
@@ -238,8 +237,6 @@ class Workflow:
                 c["serial"],
                 "--tcp",
                 c["tcp"],
-                "--channel",
-                c["channel"],
                 "--board",
                 board,
                 "--dataset",

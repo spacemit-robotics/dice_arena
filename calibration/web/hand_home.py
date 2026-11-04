@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Web HOME hand reset through the framework session, without waiting for hand feedback."""
 
 import math
@@ -25,7 +27,7 @@ def reset_hand(arm, job):
         monitor()
         commanded_at = time.time()
         command_sent = True  # From here the command may have reached the hand.
-        result = arm.move_hand([0.0] * 6, DURATION_S)  # Returns after the commanded duration.
+        result = arm.move_hand([1.0] * 6, DURATION_S)  # Returns after the commanded duration.
         monitor()
         measured = result.get("status") == "succeeded"
         proof = dict(

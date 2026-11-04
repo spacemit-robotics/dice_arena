@@ -1,3 +1,5 @@
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
 // Shared session transport. Browser input never creates a private game round.
 export function createSessionClient({ requestJson, onSnapshot, onConnection = () => {} }) {
   let snapshot = null;

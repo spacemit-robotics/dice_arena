@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Bounded, synchronized joint reciprocation. No SDK, numpy or hardware imports."""
 
 import math

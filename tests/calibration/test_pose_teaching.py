@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 import json
 import tempfile
 import unittest
@@ -5,7 +7,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import numpy as np
 from pose_teaching import export_poses
-from sensors import NeroFeedback
+from sensors import ArmFeedback
 
 
 class TeachingTest(unittest.TestCase):
@@ -24,7 +26,7 @@ class TeachingTest(unittest.TestCase):
             self.assertEqual(json.loads((p / "teaching_poses.json").read_text()), r)
 
     def test_requires_new_joint_feedback(self):
-        reader = NeroFeedback.__new__(NeroFeedback)
+        reader = ArmFeedback.__new__(ArmFeedback)
         reader.device = Mock()
         reader.last_sample = 1
         def state(i, q):

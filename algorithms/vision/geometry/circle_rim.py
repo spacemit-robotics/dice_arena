@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Fit one upright circular rim jointly in the two calibrated IR images.
 
 RGB selects the object and supplies initial guesses only. Metric scale comes from

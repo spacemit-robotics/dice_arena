@@ -14,14 +14,14 @@ def main():
     parser.add_argument("source_root")
     parser.add_argument("--config", type=Path, help="site configuration with registered calibration and table")
     args = parser.parse_args()
-    from cup_shake.legacy_green import LegacyGreenPlanner
+    from cup_shake.green_cup import GreenCupPlanner
     from spacemit_manipulation.urdf_fk import UrdfKinematics
 
     source = Path(args.source_root).resolve()
     with tempfile.TemporaryDirectory(prefix="planning-port-") as temporary:
         configuration = args.config.resolve() if args.config else source / "configs/green_cup.json"
         config = dict(source_root=str(source), config=str(configuration), session_directory=temporary)
-        planner = LegacyGreenPlanner(config, lambda: dict(joints_rad=[0] * 7))
+        planner = GreenCupPlanner(config, lambda: dict(joints_rad=[0] * 7))
         try:
             if "pyAgxArm" in sys.modules or planner.workflow._vision is not None:
                 raise RuntimeError("offline planner initialization created a hardware dependency")

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Local HTTP bridge for the board-local MOSS-TTS-Nano runtime.
 
 The bridge imports the packaged K3 delivery from Dice Arena's

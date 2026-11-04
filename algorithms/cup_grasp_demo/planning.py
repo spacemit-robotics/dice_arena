@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Pure camera-to-base geometry and TCP inversion for a *proposed* cup target.
 
 No camera, CAN, SDK, segmentation, grasp-offset, or motion dependency lives here.

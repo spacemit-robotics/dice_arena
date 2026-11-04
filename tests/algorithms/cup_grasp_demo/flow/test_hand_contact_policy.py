@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Target-cup contact permission must retain table, arm and transit checks."""
 
 from copy import deepcopy

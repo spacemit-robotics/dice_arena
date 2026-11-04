@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """RTSP publishing through a gst-launch subprocess fed with raw BGR frames.
 
 The publish pipeline mirrors dice-game's yolov8_segdetect streamer

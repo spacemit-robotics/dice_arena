@@ -1,4 +1,6 @@
-"""cup-shake delivers each phase as the original FAST executor did: checked against the original
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
+"""The application delivers each phase as the original FAST executor did: checked against the original
 algorithm functions (joint_delivery trapezoid, joint_profile shake commands). No device."""
 
 import json
@@ -12,7 +14,7 @@ sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT.parents[2] / "components/control/manipulation/bindings/python"))
 sys.path.insert(0, str(ROOT / "algorithms"))
 from cup_grasp_demo.flow import joint_delivery, joint_profile  # noqa: E402
-from cup_shake.legacy_green import LegacyGreenPlanner  # noqa: E402
+from cup_shake.green_cup import GreenCupPlanner  # noqa: E402
 
 LIMITS = [
     dict(
@@ -30,7 +32,7 @@ RECIPE = json.loads((ROOT / "algorithms/configs/actions/joint_shake.json").read_
 
 def planner():
     """The planner's motion methods without the camera/table/calibration it is normally built with."""
-    instance = object.__new__(LegacyGreenPlanner)
+    instance = object.__new__(GreenCupPlanner)
     instance.g = CONFIG["green_cup"]
     instance.cfg = CONFIG
     instance.delivery, instance.profile = joint_delivery, joint_profile
@@ -198,7 +200,7 @@ def test_lift_endpoint_is_solved_while_the_arm_approaches():
 
 def test_stored_geometry_is_the_computed_geometry(tmp_path):
     from cup_grasp_demo.flow import core
-    from cup_shake.legacy_green import load_geometry, save_geometry
+    from cup_shake.green_cup import load_geometry, save_geometry
 
     instance = planner()
     with instance.geometry():
@@ -258,7 +260,7 @@ def test_feedback_gestures_are_the_original_recipes():
             recipe.get("hand_sequence"), recipe["hand_0_100"], recipes["finger_max_wait_s"]
         )
         assert motion["effector_schedule"] == [
-            (i * interval, [v / 100 for v in pose], 0.01) for i, pose in enumerate(poses)
+            (i * interval, [1 - v / 100 for v in pose], 0.01) for i, pose in enumerate(poses)
         ]
         assert math.isclose(motion["hold_s"], recipes["finger_max_wait_s"] - 0.01)
         # Each streamed command (knots interpolated at command_rate_hz) stays within max_step_rad.
@@ -271,4 +273,4 @@ def test_home_action_opens_the_hand_at_home():
     motion = instance.gesture("home", dict(joints_rad=[0.1] * 7, controller_limits=LIMITS))
     home = json.loads((ROOT / "algorithms/configs/actions/home.json").read_text())["joints_rad"]
     assert motion["positions_rad"][-1] == home and motion["hand_open"]
-    assert motion["effector_schedule"] == [(0.0, [0.0] * 6, 0.01)]
+    assert motion["effector_schedule"] == [(0.0, [1.0] * 6, 0.01)]

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Generic async job lifecycle with structured provider events.
 
 A job exposes two deliberately separate channels:

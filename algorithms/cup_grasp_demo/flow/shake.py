@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Plan a table-tangent shake without importing or commanding hardware.
 
 Planning checks a local IK branch and configured velocity/acceleration limits.

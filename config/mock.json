@@ -1,5 +1,5 @@
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "executable": "../../../../output/manipulation-dev/core/manipulation-device",
     "device_plan": "../../../../components/control/manipulation/examples/mock_device.yaml",
     "policy_library": "../../../../output/manipulation-dev/arena/libcup_task.so",
@@ -15,12 +15,12 @@
         }
     },
     "speed_scale": 0.05,
-    "open_positions": [0, 0, 0, 0, 0, 0],
-    "grip_positions": [0.2, 0.2, 0.3, 0.3, 0.3, 0.3],
+    "open_positions": [1, 1, 1, 1, 1, 1],
+    "grip_positions": [0.8, 0.8, 0.7, 0.7, 0.7, 0.7],
     "duration_s": 0.5,
     "gestures": {
-        "win": [0.1, 0.1, 0, 0, 0, 0],
+        "win": [0.9, 0.9, 1, 1, 1, 1],
         "lose": [0, 0, 0.3, 0.3, 0.3, 0.3],
-        "draw": [0, 0, 0, 0, 0, 0]
+        "draw": [1, 1, 1, 1, 1, 1]
     }
 }

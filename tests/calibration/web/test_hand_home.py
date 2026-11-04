@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 from unittest.mock import Mock
 
 import pytest
@@ -9,7 +11,7 @@ READY = {"enabled": True, "fault": False, "moving": False, "position_mode": True
 
 
 @pytest.mark.parametrize("mode", ["unverified", "measured", "moving", "fault", "cancel", "send_error"])
-def test_zero_command_through_framework(tmp_path, monkeypatch, mode):
+def test_open_command_through_framework(tmp_path, monkeypatch, mode):
     clock = [100.0]
     monkeypatch.setattr(hand_home.time, "time", lambda: clock[0])
     sent = []
@@ -39,7 +41,7 @@ def test_zero_command_through_framework(tmp_path, monkeypatch, mode):
         assert read(tmp_path / "hand_home.json")["status"] == "failed"
         assert read(tmp_path / "hand_home.json")["confirmed"] is False
     if mode not in ("cancel", "send_error"):
-        assert sent == [([0.0] * 6, 1.0)]
+        assert sent == [([1.0] * 6, 1.0)]
     arm.move.assert_not_called()
 
 
@@ -106,7 +108,7 @@ def test_home_adapter_changes_only_web_motion_actions(tmp_path, monkeypatch, act
 
     for obj, name in (
         (sensors, "RealSenseCamera"),
-        (sensors, "NeroFeedback"),
+        (sensors, "ArmFeedback"),
         (calibrate, "capture_sample"),
         (auto_collect, "capture_sample"),
         (auto_collect, "AutoCollectionView"),

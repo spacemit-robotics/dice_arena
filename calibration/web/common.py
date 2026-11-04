@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Small, hardware-independent helpers shared by the web server and worker."""
 
 import fcntl
@@ -62,11 +64,9 @@ def lock_file(path):
     return stream
 
 
-def device_lock(channel):
-    """One calibration job per channel. The CAN lock itself belongs to the framework session."""
-    if not channel.isalnum() or len(channel) > 20:
-        raise ValueError("无效的 CAN 通道")
-    return Path("/tmp") / f"nero_{channel}_calibration_job.lock"
+def device_lock():
+    """One calibration job at a time. The device lease itself belongs to the framework session."""
+    return Path("/tmp") / "manipulation_calibration_job.lock"
 
 
 def occupied(exclude=()):

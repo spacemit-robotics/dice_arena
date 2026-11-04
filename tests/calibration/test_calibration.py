@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 import json
 from pathlib import Path
 import signal
@@ -7,7 +9,7 @@ from unittest.mock import patch, Mock
 import numpy as np
 import cv2
 from core import pose_matrix, matrix_pose, inverse, matrix, tcp_transform, PALM, HAND_BASE, solve
-from sensors import CharucoDetector, assert_still, opencv_distortion, NeroFeedback
+from sensors import CharucoDetector, assert_still, opencv_distortion, ArmFeedback
 from calibrate import read_dataset, read_resume_dataset, write_new, main, capture_sample
 
 ROOT = Path(__file__).resolve().parents[2] / "calibration"
@@ -272,7 +274,7 @@ class CalibrationTests(unittest.TestCase):
             assert_still([t, pose_matrix([0.005, 0, 0, 0, 0, 0])])
 
     def test_stale_feedback_is_rejected(self):
-        reader = NeroFeedback.__new__(NeroFeedback)
+        reader = ArmFeedback.__new__(ArmFeedback)
         reader.last_sample = 100
         reader.device = Mock()
         reader.device.state.return_value = {"arm_sample_id": 100, "joints_rad": [0.0] * 7, "source_time_s": 1.0}
@@ -352,7 +354,7 @@ class CalibrationTests(unittest.TestCase):
             fresh = {**duplicate, "T_base_flange": flange.tolist()}
             with (
                 patch("sensors.RealSenseCamera", return_value=cam),
-                patch("sensors.NeroFeedback", return_value=arm),
+                patch("sensors.ArmFeedback", return_value=arm),
                 patch("calibrate.capture_sample", side_effect=[(duplicate, image, image), (fresh, image, image)]),
                 patch("builtins.input", side_effect=["", "", "q"]),
                 patch("builtins.print"),
@@ -384,7 +386,7 @@ class CalibrationTests(unittest.TestCase):
             cam.close.side_effect = stop_camera
             with (
                 patch("sensors.RealSenseCamera", return_value=cam),
-                patch("sensors.NeroFeedback", return_value=arm),
+                patch("sensors.ArmFeedback", return_value=arm),
                 patch("builtins.input", side_effect=KeyboardInterrupt),
                 patch("builtins.print"),
             ):
@@ -403,7 +405,7 @@ class CalibrationTests(unittest.TestCase):
             cam.info = camera_info
             with (
                 patch("sensors.RealSenseCamera", return_value=cam),
-                patch("sensors.NeroFeedback", return_value=arm),
+                patch("sensors.ArmFeedback", return_value=arm),
                 patch("builtins.input", side_effect=EOFError),
                 patch("builtins.print"),
             ):
@@ -442,7 +444,7 @@ class CalibrationTests(unittest.TestCase):
                 camera.assert_not_called()
             cam = Mock()
             cam.info = {**camera_info, "camera_matrix": [[601.0, 0.0, 320.0], [0.0, 600.0, 240.0], [0.0, 0.0, 1.0]]}
-            with patch("sensors.RealSenseCamera", return_value=cam), patch("sensors.NeroFeedback") as arm:
+            with patch("sensors.RealSenseCamera", return_value=cam), patch("sensors.ArmFeedback") as arm:
                 with self.assertRaisesRegex(ValueError, "identity/intrinsics"):
                     main(["collect", "--tcp", "palm", "--dataset", str(path), "--resume"])
                 arm.assert_not_called()

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Job ownership, quality approval, device leases and durable operation records."""
 
 import collections
@@ -198,7 +200,7 @@ class Service:
             try:
                 if action in HARDWARE:
                     self.idle()
-                    device = lock_file(device_lock(self.config["channel"]))
+                    device = lock_file(device_lock())
                     workflow_lock = lock_file(resolve(self.config["state_file"]).with_suffix(".lock"))
                     self.idle()
                 job_id = time.strftime("%Y%m%d_%H%M%S") + "_" + secrets.token_hex(4)

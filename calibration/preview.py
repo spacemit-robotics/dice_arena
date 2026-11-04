@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Optional OpenCV/X11 collection window. Never commands robot motion."""
 
 import os
@@ -11,7 +13,7 @@ import numpy as np
 
 
 class CollectionPreview:
-    TITLE = "Nero hand-eye calibration | Enter: sample | Q: quit"
+    TITLE = "Hand-eye calibration | Enter: sample | Q: quit"
 
     def __init__(self):
         if sys.platform.startswith("linux") and not os.environ.get("DISPLAY"):

@@ -1,3 +1,5 @@
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
 #ifndef YOLOV8_DETECTOR_H
 #define YOLOV8_DETECTOR_H
 

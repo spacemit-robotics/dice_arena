@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Game-agnostic visual adjudication pipeline.
 
 Every vision game runs the same three steps: resolve the adjudicator slot for

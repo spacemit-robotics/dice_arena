@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Small runtime adapters shared by the provider and snapshot tests.
 
 The full resident-process orchestration is implemented in the provider task.

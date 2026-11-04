@@ -49,8 +49,7 @@ def serve(context, args):
     busy = [port for port in (*VIDEO_PORTS, args.port) if port_in_use(port)]
     if busy:
         raise RuntimeError(
-            f"ports {busy} are in use: stop the other game or video service first "
-            "(a former mediamtx user service: systemctl --user disable --now mediamtx)"
+            f"ports {busy} are in use: stop the other game or video service first"
         )
     if port_in_use(TTS_PORT) and not own_tts_daemon(runtime, game):
         raise RuntimeError(f"port {TTS_PORT} is held by another MOSS-TTS daemon (another installation); stop it first")

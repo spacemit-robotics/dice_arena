@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Read-only upright cup geometry in the color optical frame (meters)."""
 
 from dataclasses import dataclass

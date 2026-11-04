@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Game-facing contract for robot-arm providers.
 
 A robot provider drives exactly one physical arm.  The state machine calls it

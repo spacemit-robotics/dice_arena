@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Role-specific interfaces for visual providers.
 
 The implementation algorithm (YOLO, another detector, or a multimodal model)

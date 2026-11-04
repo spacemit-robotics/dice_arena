@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Runtime registry for pluggable model/device providers.
 
 A provider is a small adapter package with a ``manifest.json`` and an entry

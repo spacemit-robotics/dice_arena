@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """HOME -> green open-cup GRASP -> lifted joint SHAKE -> PLACE -> HOME."""
 
 import hashlib

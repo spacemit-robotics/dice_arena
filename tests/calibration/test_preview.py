@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Collection UI tests; all camera, CAN and X11 access is mocked."""
 
 import json
@@ -49,7 +51,7 @@ class PreviewTests(unittest.TestCase):
             ui.read_command.side_effect = preview_frame
             with (
                 patch("sensors.RealSenseCamera", return_value=camera),
-                patch("sensors.NeroFeedback", return_value=arm),
+                patch("sensors.ArmFeedback", return_value=arm),
                 patch("preview.CollectionPreview", return_value=ui),
                 patch("builtins.print"),
             ):
@@ -95,7 +97,7 @@ class PreviewTests(unittest.TestCase):
             ui.read_command.side_effect = ["", "", "q"]
             with (
                 patch("sensors.RealSenseCamera", return_value=cam),
-                patch("sensors.NeroFeedback", return_value=arm),
+                patch("sensors.ArmFeedback", return_value=arm),
                 patch("preview.CollectionPreview", return_value=ui),
                 patch("cv2.imread", return_value=image),
                 patch("calibrate.capture_sample", side_effect=[(sample, image, image), (fresh, image, image)]),
@@ -119,7 +121,7 @@ class PreviewTests(unittest.TestCase):
             tempfile.TemporaryDirectory() as tmp,
             patch.dict(os.environ, {}, clear=True),
             patch("sensors.RealSenseCamera") as camera,
-            patch("sensors.NeroFeedback") as arm,
+            patch("sensors.ArmFeedback") as arm,
         ):
             with self.assertRaisesRegex(RuntimeError, "ssh -X"):
                 main(["collect", "--preview", "--dataset", str(Path(tmp) / "new")])
@@ -168,7 +170,7 @@ class PreviewTests(unittest.TestCase):
             ui.read_command.side_effect = RuntimeError("Display disconnected")
             with (
                 patch("sensors.RealSenseCamera", return_value=camera),
-                patch("sensors.NeroFeedback", return_value=arm),
+                patch("sensors.ArmFeedback", return_value=arm),
                 patch("preview.CollectionPreview", return_value=ui),
                 patch("builtins.print"),
             ):

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Adapters installed only inside a dedicated web worker, never in legacy CLI runs."""
 
 import math

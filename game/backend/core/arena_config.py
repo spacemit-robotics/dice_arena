@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Project-wide (arena) configuration: deployment defaults under game manifests.
 
 ``backend/config.json`` describes what kind of machine this deployment is:

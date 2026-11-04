@@ -31,8 +31,11 @@ class CupApplication:
             "duration_s",
         }
         allowed = required | {"grip_ack_directory", "gestures", "home_tolerance_rad", "grip_confirmation"}
-        if set(self.config) - allowed or required - set(self.config) or self.config["schema_version"] != 1:
+        if set(self.config) - allowed or required - set(self.config):
             raise ValueError("invalid cup application configuration")
+        if self.config["schema_version"] != 2:  # Version 2: hand positions are 0 closed, 1 open.
+            raise ValueError("cup application configuration needs schema_version 2; "
+                             "move it aside and generate a new one with `dice-arena configure`")
         self._lock = threading.Lock()
         self.client = self.planner = self.policy = None
         for name in ("speed_scale", "duration_s"):

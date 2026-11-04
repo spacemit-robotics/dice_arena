@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Two-role game participant placement and physical winner mapping.
 
 Besides the mapping itself this owns the **game-agnostic half of result

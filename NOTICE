@@ -1,0 +1,27 @@
+SpacemiT Dice Arena Application
+Copyright 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+
+This product includes software developed at
+SpacemiT (Hangzhou) Technology Co. Ltd. (https://www.spacemit.com/).
+
+---------------------------------------------------------------------------
+Third-party Software Notices:
+---------------------------------------------------------------------------
+
+The following are downloaded as runtime assets or included with their own
+license terms:
+
+1. MOSS-TTS-Nano model and runtime (game/tts/moss-tts-nano/)
+   License: game/tts/moss-tts-nano/licenses/MOSS-TTS-Nano-LICENSE
+
+2. SpaceMIT EP integration code (game/tts/moss-tts-nano/)
+   License: game/tts/moss-tts-nano/licenses/spacemit-ep-LICENSE
+
+3. LXGW WenKai font (game/web/assets/fonts/)
+   License: SIL OFL 1.1, see game/web/assets/fonts/OFL-LXGWWenKai.txt
+
+4. MediaMTX v1.20.1 (mediamtx/)
+   License: MIT, see mediamtx/LICENSE
+
+5. Revo2 hand geometry (algorithms/nero_revo2_control/models/hand_geometry/)
+   License: see algorithms/nero_revo2_control/models/hand_geometry/LICENSE

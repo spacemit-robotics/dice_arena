@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Fault-injection tests for fresh feedback and separate camera publication."""
 
 import os
@@ -126,7 +128,7 @@ import framework
 framework.pin = lambda motion: None
 framework.close = lambda: None
 sensors.RealSenseCamera=Camera
-sensors.NeroFeedback=Arm
+sensors.ArmFeedback=Arm
 from calibration.web.worker import main
 main()
 """
@@ -244,7 +246,7 @@ def test_board_validation_at_capture_not_startup(tmp_path, monkeypatch, action, 
     ready, detector = Mock(), Mock()
     for obj, name, value in [
         (sensors, "RealSenseCamera", sensors.RealSenseCamera),
-        (sensors, "NeroFeedback", sensors.NeroFeedback),
+        (sensors, "ArmFeedback", sensors.ArmFeedback),
         (sensors, "CharucoDetector", detector),
         (calibrate, "capture_sample", capture),
         (preview, "CollectionPreview", preview.CollectionPreview),
@@ -329,7 +331,7 @@ def test_home_completion_requires_arrival_and_fresh_stationary_feedback(tmp_path
     move = Mock(return_value=target)
     monkeypatch.setattr(home_start, "return_home", move)
     arm = Mock()
-    monkeypatch.setattr(sensors, "NeroFeedback", Mock(return_value=arm))
+    monkeypatch.setattr(sensors, "ArmFeedback", Mock(return_value=arm))
     proof = {
         "confirmed": True,
         "joints_rad": target if feedback == "home" else [v + 0.1 for v in target],

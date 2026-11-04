@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Small K3-local HTTP bridge for the Dice Arena web UI.
 
 The bridge owns only HTTP routing, static serving, and per-round job lifecycle.

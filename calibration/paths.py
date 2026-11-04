@@ -1,12 +1,14 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Where this program's files are.
 
 ROOT: this application (application/native/dice_arena). Relative paths in the configuration name
   resources shipped here: calibration/config/ (workflow, HOME, boards), calibration/trajectories/.
 SITE: the manipulation site directory. Paths written `site:...` in the configuration live there:
   datasets and Web state (SITE/calibration/), the installed result and the green-cup pipeline
-  configuration that cup-shake uses (SITE/green_cup.json).
+  configuration that the application uses (SITE/green_cup.json).
 SOURCE: the green-cup vision and grasp algorithms of this application (algorithms/), used by
-  `apply`/`table` for table capture and registration, as cup-shake uses them for grasping.
+  `apply`/`table` for table capture and registration, as the application uses them for grasping.
 """
 
 import os

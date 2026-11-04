@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Validation for the game state-machine section of a game manifest.
 
 A state machine is an explicitly named directed graph: ``states`` keys are

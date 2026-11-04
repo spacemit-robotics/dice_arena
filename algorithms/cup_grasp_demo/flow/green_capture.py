@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Capture profile from vision/camera.json; keep the calibrated RGB stream unchanged."""
 
 

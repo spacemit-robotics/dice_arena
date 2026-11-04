@@ -38,59 +38,6 @@ class ApplicationLayoutTests(unittest.TestCase):
         for resource in ("algorithms", "calibration", "game", "python/cup_shake"):
             self.assertTrue((ROOT / resource).is_dir(), resource)
 
-    def test_site_using_preserved_former_resources_is_reported(self):
-        from cup_shake.planners import preserved_legacy_resources
-
-        with tempfile.TemporaryDirectory(prefix="dice former resources ") as temporary:
-            share = Path(temporary) / "share"
-            (share / "dice_arena/algorithms").mkdir(parents=True)
-            (share / "cup_shake/algorithms").mkdir(parents=True)
-            self.assertEqual(preserved_legacy_resources(share / "cup_shake/algorithms"), share / "cup_shake")
-            self.assertIsNone(preserved_legacy_resources(share / "dice_arena/algorithms"))
-            (share / "cup_shake/algorithms").rmdir()
-            (share / "cup_shake").rmdir()
-            (share / "cup_shake").symlink_to("dice_arena")  # The alias of a fresh installation.
-            self.assertIsNone(preserved_legacy_resources(share / "cup_shake/algorithms"))
-
-    @unittest.skipUnless(os.environ.get("DICE_COMPATIBILITY_SCRIPT"), "install script not supplied")
-    def test_resource_alias_preserves_existing_installations(self):
-        script = os.environ["DICE_COMPATIBILITY_SCRIPT"]
-        environment = dict(os.environ)
-        environment.pop("DESTDIR", None)
-        with tempfile.TemporaryDirectory(prefix="dice install upgrade ") as temporary:
-            prefix = Path(temporary)
-            resources = prefix / os.environ["DICE_DATADIR"]
-            resources.mkdir(parents=True)
-            canonical = resources / "dice_arena"
-            canonical.mkdir()
-            legacy = resources / "cup_shake"
-
-            def install_alias(expected=0):
-                result = subprocess.run(
-                    ["cmake", "-DCMAKE_INSTALL_PREFIX=" + str(prefix), "-P", script],
-                    env=environment,
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-                self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
-
-            install_alias()
-            self.assertEqual(os.readlink(legacy), "dice_arena")
-            self.assertTrue(legacy.samefile(canonical))
-            install_alias()  # Repeated installation keeps the same relative link.
-            legacy.unlink()
-            legacy.mkdir()
-            saved = legacy / "site-resource.json"
-            saved.write_text('{"preserve": true}\n')
-            install_alias()
-            self.assertFalse(legacy.is_symlink())
-            self.assertEqual(saved.read_text(), '{"preserve": true}\n')
-            saved.unlink()
-            legacy.rmdir()
-            legacy.symlink_to("operator-resource", target_is_directory=True)
-            install_alias(expected=1)
-            self.assertEqual(os.readlink(legacy), "operator-resource")
 
 
 class SiteConfigurationTests(unittest.TestCase):
@@ -158,8 +105,8 @@ class SiteConfigurationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(self.marker.is_file())
         config = json.loads(self.destination.read_text())
-        self.assertEqual(config["open_positions"], [0] * 6)
-        self.assertEqual(config["grip_positions"], [0.1] * 6)
+        self.assertEqual(config["open_positions"], [1] * 6)  # hand_0_100 0 is open; framework 1 is open.
+        self.assertEqual(config["grip_positions"], [0.9] * 6)
         self.assertEqual(config["duration_s"], 0.5)
         for key in ("executable", "device_plan", "policy_library"):
             self.assertFalse(Path(config[key]).is_absolute())
@@ -243,16 +190,27 @@ class PolicyTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.complete(name)
 
+    def test_configuration_of_the_former_hand_scale_is_refused(self):
+        from cup_shake.runtime import CupApplication
+
+        with tempfile.TemporaryDirectory(prefix="dice schema ") as temporary:
+            config = json.loads((ROOT / "config/mock.json").read_text(encoding="utf-8"))
+            config["schema_version"] = 1
+            path = Path(temporary) / "cup_application.json"
+            path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "schema_version 2"):
+                CupApplication(path)
+
     def test_visual_paths_resolve_from_application_configuration(self):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary) / "site"
             config = dict(
-                type="legacy_green",
+                type="green_cup",
                 source_root="../assets",
                 config="../assets/config.json",
                 session_directory="runtime/sessions",
             )
-            with patch("cup_shake.legacy_green.LegacyGreenPlanner") as planner:
+            with patch("cup_shake.green_cup.GreenCupPlanner") as planner:
                 make_planner(config, lambda: None, "agx_nero_revo2", base)
                 actual = planner.call_args.args[0]
                 self.assertEqual(Path(actual["source_root"]), Path(temporary) / "assets")

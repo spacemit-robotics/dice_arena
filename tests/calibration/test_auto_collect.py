@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Offline checks for automatic hand-eye teaching and replay."""
 
 import json
@@ -163,7 +165,6 @@ class AutoCollectionTests(unittest.TestCase):
             run.assert_called_once_with(
                 Path("plan.json"),
                 Path("automatic"),
-                "can0",
                 40,
                 None,
                 20.0,
@@ -364,7 +365,7 @@ class AutoCollectionTests(unittest.TestCase):
             }
             with (
                 patch("auto_collect.RealSenseCamera", return_value=camera),
-                patch("auto_collect.NeroFeedback", return_value=arm),
+                patch("auto_collect.ArmFeedback", return_value=arm),
                 patch("auto_collect.CharucoDetector", return_value=detector),
                 patch("auto_collect.load_model", return_value=FakeModel()),
                 patch("auto_collect.ensure_can_control"),
@@ -372,7 +373,7 @@ class AutoCollectionTests(unittest.TestCase):
                 patch("auto_collect.move_and_watch") as move,
                 patch("auto_collect.capture_sample", return_value=(sample, frame, frame)),
             ):
-                self.assertEqual(run_plan(plan_path, output, "can0", 10), 8)
+                self.assertEqual(run_plan(plan_path, output, 10), 8)
             self.assertGreater(move.call_count, 8)
             self.assertEqual(len(list(output.glob("sample_*.json"))), 8)
             self.assertFalse((output / "AUTO_INCOMPLETE.json").exists())
@@ -384,7 +385,7 @@ class AutoCollectionTests(unittest.TestCase):
             camera.close.assert_called_once()
             (source / "teaching_frames.jsonl").write_text("changed\n")
             with self.assertRaisesRegex(ValueError, "changed after planning"):
-                run_plan(plan_path, root / "another", "can0", 10)
+                run_plan(plan_path, root / "another", 10)
 
     def test_capture_only_plan_retraces_from_last_pose_and_samples_all(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -415,7 +416,7 @@ class AutoCollectionTests(unittest.TestCase):
             }
             with (
                 patch("auto_collect.RealSenseCamera", return_value=camera),
-                patch("auto_collect.NeroFeedback", return_value=arm),
+                patch("auto_collect.ArmFeedback", return_value=arm),
                 patch("auto_collect.CharucoDetector", return_value=detector),
                 patch("auto_collect.load_model", return_value=FakeModel()),
                 patch("auto_collect.ensure_can_control"),
@@ -425,7 +426,7 @@ class AutoCollectionTests(unittest.TestCase):
                 patch("auto_collect.AutoCollectionView") as view_factory,
                 patch("auto_collect.capture_sample", return_value=(sample, frame, frame)),
             ):
-                self.assertEqual(run_plan(plan_path, output, "can0", 10, show=True), 8)
+                self.assertEqual(run_plan(plan_path, output, 10, show=True), 8)
             self.assertEqual(move.call_count, 8)
             self.assertEqual(stream.call_count, 8)
             self.assertEqual(view_factory.return_value.status.call_count, 8)
@@ -470,7 +471,7 @@ class AutoCollectionTests(unittest.TestCase):
 
                 with (
                     patch("auto_collect.RealSenseCamera", return_value=camera),
-                    patch("auto_collect.NeroFeedback", return_value=arm),
+                    patch("auto_collect.ArmFeedback", return_value=arm),
                     patch("auto_collect.CharucoDetector"),
                     patch("auto_collect.load_model", return_value=FakeModel()),
                     patch("auto_collect.ensure_can_control"),
@@ -482,12 +483,12 @@ class AutoCollectionTests(unittest.TestCase):
                 ):
                     if home_failed:
                         with self.assertRaisesRegex(RuntimeError, "HOME failed"):
-                            run_plan(plan_path, output, "can0", 10, start_home=True, home_path=home_path)
+                            run_plan(plan_path, output, 10, start_home=True, home_path=home_path)
                         self.assertEqual(events, ["HOME"])
                         self.assertTrue((output / "AUTO_INCOMPLETE.json").exists())
                     else:
                         self.assertEqual(
-                            run_plan(plan_path, output, "can0", 10, start_home=True, home_path=home_path), 8
+                            run_plan(plan_path, output, 10, start_home=True, home_path=home_path), 8
                         )
                         self.assertTrue((output / "home_start.json").exists())
                 arm.close.assert_called_once()
@@ -514,10 +515,10 @@ class AutoCollectionTests(unittest.TestCase):
             camera.info = dict(self.camera, fps=6)
             with (
                 patch("auto_collect.RealSenseCamera", return_value=camera) as open_camera,
-                patch("auto_collect.NeroFeedback", side_effect=RuntimeError("mock stop")),
+                patch("auto_collect.ArmFeedback", side_effect=RuntimeError("mock stop")),
             ):
                 with self.assertRaisesRegex(RuntimeError, "mock stop"):
-                    run_plan(root / "plan.json", root / "automatic", "can0", 10, fps=6)
+                    run_plan(root / "plan.json", root / "automatic", 10, fps=6)
             self.assertEqual(open_camera.call_args.kwargs["image_profile"]["fps"], 6)
             camera.close.assert_called_once()
             self.assertEqual(json.loads((source / "manifest.json").read_text())["camera"]["fps"], 15)

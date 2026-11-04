@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Offline evidence capture must not change sample selection or hide rejected frames."""
 
 from unittest.mock import Mock

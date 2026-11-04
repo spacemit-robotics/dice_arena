@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """One process per web job. Legacy module adapters exist only in this process."""
 
 import importlib
@@ -52,7 +54,7 @@ class BrowserWorkflow(Workflow):
 
     def return_to_home(self):
         from home_start import load_home, return_home
-        from sensors import NeroFeedback
+        from sensors import ArmFeedback
         import math
 
         self.save(home_required=True, home_return=None, home_check=None)
@@ -68,8 +70,8 @@ class BrowserWorkflow(Workflow):
         home = resolve(self.c["home"])
         target = load_home(home)
         motion = self.c["motion"]
-        return_home(home, self.c["channel"], motion["speed_percent"], motion["speed_deg_s"], motion["acc_deg_s2"])
-        arm = NeroFeedback(self.c["channel"])
+        return_home(home, motion["speed_percent"], motion["speed_deg_s"], motion["acc_deg_s2"])
+        arm = ArmFeedback()
         try:
             proof = confirm_stationary(arm)
             error = math.degrees(max(abs(a - b) for a, b in zip(proof["joints_rad"], target)))
@@ -203,7 +205,7 @@ def install_adapters(job, request, config, on_motion_ready=None):
     import preview
     from core import distance, inverse, matrix
 
-    base_camera, base_arm = sensors.RealSenseCamera, sensors.NeroFeedback
+    base_camera, base_arm = sensors.RealSenseCamera, sensors.ArmFeedback
     cameras = []
     stop_evidence = []
     motion_armed = False
@@ -255,7 +257,7 @@ def install_adapters(job, request, config, on_motion_ready=None):
                 super().close()
 
     sensors.RealSenseCamera = camera_factory
-    sensors.NeroFeedback = WebArm
+    sensors.ArmFeedback = WebArm
     preview.CollectionPreview = lambda: BrowserPreview(job)
 
     original_capture = calibrate.capture_sample
@@ -328,7 +330,7 @@ def inspect_devices(job, config, base_arm, camera_factory):
     board = read(resolve(config["hand_board"]))
     camera = camera_factory(config["serial"], image_profile=board.get("image_profile"))
     detector = sensors.CharucoDetector(board)
-    arm = base_arm(config["channel"])
+    arm = base_arm()
     try:
         while True:
             joints = arm.read_joints()
@@ -441,7 +443,7 @@ def main():
         if action in HARDWARE and base_arm is not None and device_open:
             arm = None
             try:
-                arm = base_arm(config["channel"])
+                arm = base_arm()
                 proof = confirm_stationary(arm)
                 event(job / "stop.json", **proof)
                 if action in MOTION or action == "inspect":

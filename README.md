@@ -45,15 +45,6 @@ mm --with-deps
 资源源站为 `https://archive.spacemit.com/ros2/manipulation/`，清单为 `runtime_assets.json`。
 `mm` 提示安装声明的系统依赖。骰子识别程序在 K3 上编译；随附 MediaMTX 适用于 Linux RISC-V 64 位。
 
-从独立的旧版 `cup_shake` 应用升级时，先删除旧版本的安装目录和构建目录，再执行 `mm --with-deps`：
-
-```bash
-rm -rf "${PREFIX:?}/share/cup_shake" \
-  "${SROBOTIS_OUTPUT_ROOT:?}/build/cmake/pkgs/application_native_cup_shake"
-```
-
-安装会把 `share/cup_shake` 重新创建为指向 `share/dice_arena` 的兼容链接。
-
 ## 配置设备
 
 下文 `SITE` 表示现场目录，默认 `~/.local/share/spacemit-manipulation/site/`，可用 `MANIPULATION_SITE` 指定。
@@ -108,8 +99,8 @@ dice-arena configure
 ```
 
 配置保存到 `SITE/cup_application.json`，已有文件不覆盖。
-HOME、TCP、杯体尺寸和手型须匹配当前安装。`open_positions`、`grip_positions` 为 `[0,1]` 归一化通道目标，
-通道顺序与方向由设备配置和工具适配定义。
+HOME、TCP、杯体尺寸和手型须匹配当前安装。`open_positions`、`grip_positions` 按设备配置的通道顺序给出
+归一化位置，`0` 为闭合、`1` 为张开。
 
 ### 单次抓杯、摇杯和放杯
 
@@ -163,9 +154,6 @@ config/、tools/、tests/       配置、部署工具与无硬件测试
 - [游戏服务与排障](docs/real_robot.md)：服务端口、状态查询与离线测试。
 - [配置与接口](docs/configuration.md)：配置字段、动作参数与业务接口。
 
-## 许可
+## License
 
-自有控制与适配代码按 [Apache-2.0](https://github.com/spacemit-robotics/manipulation/blob/HEAD/LICENSE) 使用。
-`algorithms/`、`calibration/` 与游戏源码的上游未声明统一许可证，抓杯和骰子识别模型未明确再分发授权；
-对外分发前须确认。厂商 SDK 见 [pyAgxArm 许可](https://github.com/spacemit-robotics/pyagxarm/blob/HEAD/README.vendor.md)，
-语音、字体、手部几何和视频服务见 [第三方许可](THIRD_PARTY.md)。
+本组件源码文件头声明为 Apache-2.0，最终以本目录 `LICENSE` 文件为准。第三方声明见 `NOTICE`。

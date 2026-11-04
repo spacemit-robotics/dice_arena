@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Lifecycle hook for the local MOSS-TTS-Nano HTTP process."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """统一错误类型与响应格式。
 
 所有业务错误继承 DiceArenaError，携带 HTTP 状态码和机器可读的错误码。

@@ -1,3 +1,5 @@
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
 #ifndef OPENCL_PREPROCESS_H
 #define OPENCL_PREPROCESS_H
 

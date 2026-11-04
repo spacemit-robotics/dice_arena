@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """HTTP boundaries: CSRF, readonly controls, file isolation and PIN session scope."""
 
 import http.client

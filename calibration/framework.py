@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Arm and hand access through the SpacemiT manipulation framework.
 
 The only module of this program that reaches hardware. Routes are continuous joint paths and

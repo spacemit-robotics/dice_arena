@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Arm feedback (through the manipulation framework) and camera capture."""
 
 import time
@@ -6,15 +8,14 @@ from core import distance
 import framework
 
 
-class NeroFeedback:
+class ArmFeedback:
     """The original read interface over the framework session; motion needs motion=True.
 
     read() and read_joints() return only newly sampled feedback, as before. The flange pose is
     the URDF forward kinematics of that feedback (identical URDF to the controller model).
     """
 
-    def __init__(self, channel, motion=False):
-        self.channel = channel
+    def __init__(self, motion=False):
         self.device = framework.acquire(motion)
         self.last_sample = 0
         self.speed_percent = framework.MAX_SPEED_PERCENT

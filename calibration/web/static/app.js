@@ -1,3 +1,5 @@
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 const $ = (id) => document.getElementById(id);
 const tab = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>

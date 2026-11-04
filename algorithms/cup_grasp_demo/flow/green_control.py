@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """JSON-lines and terminal control for one persistent green-cup pipeline process.
 
 The resident process is a ready-state dispatcher over one SDK/CAN connection:

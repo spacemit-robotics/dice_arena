@@ -1,3 +1,5 @@
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
 /* Read-only gallery; never starts a job or requests device control. */
 (() => {
   const el = (id) => document.getElementById(`gallery-${id}`);

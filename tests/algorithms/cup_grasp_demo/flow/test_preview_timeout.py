@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Bounded preview must return or interrupt; never waitKey(0) in green STEP."""
 
 import unittest

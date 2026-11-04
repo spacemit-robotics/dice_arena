@@ -1,3 +1,5 @@
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
 // 时空游乐舱前端引擎：跨游戏通用的视图切换、语音指令播放、网络与游戏选择。
 // 游戏流程由后端权威状态机驱动：前端通过 RoundClient 创建对局、提交意图、
 // 订阅事件流并渲染；台词以后端下发的 speech 指令播放，await 指令播完回执。

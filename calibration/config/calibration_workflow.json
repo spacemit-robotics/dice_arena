@@ -5,7 +5,6 @@
     "angle_deg": 5
   },
   "serial": "346222071954",
-  "channel": "can0",
   "tcp": "flange",
   "hand_board": "calibration/config/board_hand_redcloth_cover_fixed.json",
   "reference_board": "calibration/config/board_reference_redcloth.json",

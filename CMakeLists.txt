@@ -34,9 +34,6 @@ install(DIRECTORY tools DESTINATION ${CMAKE_INSTALL_DATADIR}/dice_arena
 install(PROGRAMS calibrate.sh calibrate_web.sh calibration_web_service.sh
     DESTINATION ${CMAKE_INSTALL_DATADIR}/dice_arena)
 
-# Relative compatibility alias for existing site configurations. Never remove an existing directory.
-configure_file(tools/compatibility.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/compatibility.cmake @ONLY)
-install(SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/compatibility.cmake)
 
 # The game as the original runs it: backend, web page and local MOSS-TTS with its models.
 install(DIRECTORY game/backend game/web game/tts DESTINATION ${GAME_DESTINATION}
@@ -66,21 +63,16 @@ else()
     message(STATUS "MediaMTX runtime asset is absent; game serving requires runtime resources")
 endif()
 install(FILES mediamtx/mediamtx.yml mediamtx/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/dice_arena/mediamtx)
-install(FILES THIRD_PARTY.md runtime_assets.json DESTINATION ${CMAKE_INSTALL_DATADIR}/dice_arena)
+install(FILES LICENSE NOTICE runtime_assets.json DESTINATION ${CMAKE_INSTALL_DATADIR}/dice_arena)
 
 install(DIRECTORY python/spacemit_dice_arena DESTINATION python PATTERN "__pycache__" EXCLUDE)
 install(FILES tests/check_game.py tests/check_runtime.py tests/check_tts_startup.py
     DESTINATION ${CMAKE_INSTALL_DATADIR}/dice_arena/tests)
 file(RELATIVE_PATH COMMAND_PREFIX_FROM_BINDIR "/${CMAKE_INSTALL_BINDIR}" "/")
-foreach(COMMAND_NAME IN ITEMS dice-arena cup-shake)
-    if(COMMAND_NAME STREQUAL "dice-arena")
-        set(COMMAND_MODULE spacemit_dice_arena.operator)
-    else()
-        set(COMMAND_MODULE cup_shake.operator)
-    endif()
-    configure_file(tools/command.in ${CMAKE_CURRENT_BINARY_DIR}/${COMMAND_NAME} @ONLY)
-    install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/${COMMAND_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
-endforeach()
+set(COMMAND_NAME dice-arena)
+set(COMMAND_MODULE spacemit_dice_arena.operator)
+configure_file(tools/command.in ${CMAKE_CURRENT_BINARY_DIR}/${COMMAND_NAME} @ONLY)
+install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/${COMMAND_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(BUILD_TESTING)
     set(MANIPULATION_DEVICE "" CACHE FILEPATH "Device executable for full Mock integration tests")
@@ -94,8 +86,6 @@ if(BUILD_TESTING)
     set_property(TEST dice_arena_cup_contract PROPERTY ENVIRONMENT
         "CUP_TASK_LIBRARY=$<TARGET_FILE:cup_task>"
         "MANIPULATION_DEVICE=${MANIPULATION_DEVICE}"
-        "DICE_COMPATIBILITY_SCRIPT=${CMAKE_CURRENT_BINARY_DIR}/compatibility.cmake"
-        "DICE_DATADIR=${CMAKE_INSTALL_DATADIR}"
         "PYTHONDONTWRITEBYTECODE=1")
     add_test(NAME dice_arena_calibration COMMAND ${Python3_EXECUTABLE} -m pytest -q -p no:cacheprovider
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/calibration)

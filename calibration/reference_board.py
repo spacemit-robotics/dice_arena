@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Observe/register a fixed board. Only restore-auto moves the arm."""
 
 import argparse
@@ -211,7 +213,6 @@ def restore_auto(
     frame_count=20,
     allow_provisional=False,
     home_path=None,
-    channel="can0",
     speed_percent=15,
     speed_deg_s=4.0,
     acc_deg_s2=6.0,
@@ -234,7 +235,7 @@ def restore_auto(
         raise ValueError("Invalid camera identity, board ROI or frame count")
     if output.exists():
         raise ValueError("Automatic restore output directory already exists")
-    home_feedback = return_home(home_path or DEFAULT_HOME, channel, speed_percent, speed_deg_s, acc_deg_s2)
+    home_feedback = return_home(home_path or DEFAULT_HOME, speed_percent, speed_deg_s, acc_deg_s2)
     observation = observe(board_path, serial, reference_id, output, frame_count)
     result = restore(registration, observation, allow_provisional)
     result["sources"] = {"registration": origin, "observation": str((output / "observation.json").resolve())}
@@ -267,7 +268,6 @@ def main(argv=None):
     auto.add_argument("--frames", type=int, default=20)
     auto.add_argument("--allow-provisional", action="store_true")
     auto.add_argument("--home", type=Path)
-    auto.add_argument("--channel", default="can0")
     auto.add_argument("--speed-percent", type=int, default=15)
     auto.add_argument("--smooth-speed-deg-s", type=float, default=4.0)
     auto.add_argument("--smooth-acc-deg-s2", type=float, default=6.0)
@@ -282,7 +282,6 @@ def main(argv=None):
             args.frames,
             args.allow_provisional,
             args.home,
-            args.channel,
             args.speed_percent,
             args.smooth_speed_deg_s,
             args.smooth_acc_deg_s2,

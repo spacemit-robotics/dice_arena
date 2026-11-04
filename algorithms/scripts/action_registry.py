@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Gesture registry: scan configs/actions/gestures/*.json and merge flat.
 
 Each group file keeps the result_feedback.json shape (top-level defaults +

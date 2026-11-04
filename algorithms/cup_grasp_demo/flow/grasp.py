@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Side approach planning, isolated from the flange/TCP comparison workflow."""
 
 from copy import deepcopy

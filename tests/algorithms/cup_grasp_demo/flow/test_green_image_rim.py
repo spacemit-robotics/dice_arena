@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Known-geometry synthetic and archived RGB-D tests, with no hardware commands."""
 
 import unittest

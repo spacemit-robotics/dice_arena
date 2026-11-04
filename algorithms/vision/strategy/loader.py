@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Grasp strategy loader; one JSON per object type, pipeline reads via this API."""
 
 import json

@@ -8,11 +8,11 @@
 
 | 字段 | 默认 / 含义 |
 | --- | --- |
-| `schema_version` | 必填 `1` |
+| `schema_version` | 必填 `2` |
 | `executable` / `device_plan` / `policy_library` | 必填路径，相对配置文件或绝对路径 |
-| `planner` | 必填策略配置，已实现 `fixture`、`legacy_green` |
-| `speed_scale` | 必填 `(0,0.1]` 倍率，仅用于 Fixture；`legacy_green` 使用算法配置中的 FAST 速度 |
-| `open_positions` / `grip_positions` | 必填非空归一化通道数组 |
+| `planner` | 必填策略配置，已实现 `fixture`、`green_cup` |
+| `speed_scale` | 必填 `(0,0.1]` 倍率，仅用于 Fixture；`green_cup` 使用算法配置中的 FAST 速度 |
+| `open_positions` / `grip_positions` | 必填非空通道数组，`0` 闭合、`1` 张开 |
 | `duration_s` | 必填 `(0,2.55]` s，手指动作时长；`configure` 取算法配置的 `fast_finger_duration_s` |
 | `home_tolerance_rad` | 可选，默认 0.5°，范围 `(0,0.01]` rad |
 | `grip_confirmation` | 可选 `none`（默认，闭手指令完成即抬杯）或 `operator`（每次等待人工确认） |
@@ -20,7 +20,7 @@
 | `gestures` | 可选，名称到归一化手型的映射；完成后回空手手型 |
 
 Fixture 字段为 `home_rad` 和各阶段 `targets`。它仅用于 Mock。
-`legacy_green` 只有 `source_root`、`config`、`session_directory` 三项，相对应用配置文件解析。
+`green_cup` 只有 `source_root`、`config`、`session_directory` 三项，相对应用配置文件解析。
 碰撞几何首次计算后保存在 `session_directory` 同级的 `geometry/`，按其全部源文件内容校验；源文件变化时重新计算。
 各阶段参数来自算法配置 `green_cup.json`：
 
@@ -30,7 +30,7 @@ Fixture 字段为 `home_rad` 和各阶段 `targets`。它仅用于 Mock。
 | 抬杯 | 同上，`fast_speed_percent`（30%），抬起 `lift_mm` |
 | 摇杯 | `joint_test_config`（`configs/actions/joint_shake.json`）配方：关节、幅度、速度、加速度、周期数、200 Hz 混合指令 |
 | 放杯 | `lower_command_mode: controller_endpoint`：控制器规划的点位运动，速度 100%，偏差超过 0.5° 期间每 50 ms 重发同一目标，连续两次反馈在 0.5° 内即张手；到位偏差超过 `place_arrival_tolerance_mm` 时按 `precision_error_action` 记录或中止 |
-| 手指 | `grip_targets_0_100` / `open_targets_0_100`，时长 `fast_finger_duration_s` |
+| 手指 | `grip_targets_0_100` / `open_targets_0_100`，时长 `fast_finger_duration_s`；算法配方沿用灵巧手刻度（`0` 张开、`100` 闭合），`configure` 转换为上述归一化位置 |
 
 接近、抬杯、摇杯和回 HOME 发完最后一个指令即进入下一段，机械臂可继续完成上一段运动；
 放杯在 0.5° 内即张手。灵巧手动作期间，机械臂可继续接近上一段目标；其他移动不得超过 1°。
@@ -59,19 +59,9 @@ Fixture 字段为 `home_rad` 和各阶段 `targets`。它仅用于 Mock。
 `--site` 和 `--source` 写在子命令前；`configure` 拒绝覆盖已有输出。
 手眼标定与桌面登记使用 `calibrate.sh`。
 
-`share/cup_shake` 仅用于兼容旧现场配置；新配置引用 `share/dice_arena`。
-安装不会删除已有的旧资源目录，也不覆盖 `SITE` 中的配置或标定数据。
-现场配置仍使用保留的旧目录时，抓杯命令启动时会提示。处理方法是删除旧版本的安装目录和构建目录，再重新安装：
-
-```bash
-rm -rf "${PREFIX:?}/share/cup_shake" \
-  "${SROBOTIS_OUTPUT_ROOT:?}/build/cmake/pkgs/application_native_cup_shake"
-mm --with-deps
-```
-
-或将 `planner.source_root` 改为 `share/dice_arena/algorithms`，修改前先备份。
+安装不覆盖 `SITE` 中的配置或标定数据。
 
 ## 3. 相关接口
 
-- [组合设备接口参考](https://github.com/spacemit-robotics/manipulation/blob/HEAD/docs/reference.md)
+- [组合设备接口参考](../../../../components/control/manipulation/docs/reference.md)
 - [标定与抓杯操作](grasp.md)

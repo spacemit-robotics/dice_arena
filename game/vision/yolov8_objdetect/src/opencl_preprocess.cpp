@@ -1,3 +1,5 @@
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
 #include "opencl_preprocess.h"
 
 #define CL_TARGET_OPENCL_VERSION 120

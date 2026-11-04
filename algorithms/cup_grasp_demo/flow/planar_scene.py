@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Independent table capture for shaking; never detects cups or controls joints."""
 
 from pathlib import Path

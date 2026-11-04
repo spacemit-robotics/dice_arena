@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Install one hand-eye result and require a fresh table registration."""
 
 import argparse
@@ -13,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from calibration.paths import SITE  # noqa: E402
 
-# Installed results stay in the manipulation site directory, beside cup-shake's pipeline config.
+# Installed results stay in the manipulation site directory, beside the application's pipeline config.
 ROOT = SITE
 DEFAULT_CONFIG = ROOT / "green_cup.json"
 DEFAULT_DESTINATION = ROOT / "calibration/handeye_result.json"

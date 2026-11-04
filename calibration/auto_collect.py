@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Teach a camera window, preview a joint replay, and collect hand-eye samples."""
 
 import argparse
@@ -20,7 +22,7 @@ from calibrate import capture_sample, read_dataset, write_image_new, write_new  
 from core import inverse, matrix  # noqa: E402
 from kinematics import load_model  # noqa: E402
 from reference_board import same_camera_geometry  # noqa: E402
-from sensors import CharucoDetector, NeroFeedback, RealSenseCamera  # noqa: E402
+from sensors import CharucoDetector, ArmFeedback, RealSenseCamera  # noqa: E402
 
 
 def digest(path):
@@ -368,7 +370,7 @@ def live_board(camera, detector, manifest, calibration, box, margin_px, image=No
 class AutoCollectionView:
     """Optional X11 view; drawing and event pumping never read the camera during motion."""
 
-    TITLE = "Nero automatic hand-eye calibration"
+    TITLE = "Automatic hand-eye calibration"
 
     def __init__(self, box, total):
         if sys.platform.startswith("linux") and not os.environ.get("DISPLAY"):
@@ -501,7 +503,6 @@ def capture_after_settling(arm, camera, detector, frame_check, attempts=3):
 def run_plan(
     plan_path,
     output,
-    channel,
     speed_percent,
     fps=None,
     smooth_speed_deg_s=4.0,
@@ -538,7 +539,7 @@ def run_plan(
         if show:
             preview = AutoCollectionView(box, len(plan["targets_rad"]))
             preview.update(camera.capture(), "READY", 0)
-        arm = NeroFeedback(channel, motion=True)
+        arm = ArmFeedback(motion=True)
         detector = CharucoDetector(manifest["board"])
         capture_only = plan.get("visibility_policy") == "capture_only"
         if not capture_only and not start_home:
@@ -722,7 +723,6 @@ def main(argv=None):
     q = sub.add_parser("run", help="Move the arm and acquire a new dataset")
     q.add_argument("--plan", type=Path, required=True)
     q.add_argument("--output", type=Path, required=True)
-    q.add_argument("--channel", default="can0")
     q.add_argument("--speed-percent", type=int, default=15)
     q.add_argument("--smooth-speed-deg-s", type=float, default=4.0)
     q.add_argument("--smooth-acc-deg-s2", type=float, default=6.0)
@@ -766,7 +766,6 @@ def main(argv=None):
         run_plan(
             args.plan,
             args.output,
-            args.channel,
             args.speed_percent,
             args.fps,
             args.smooth_speed_deg_s,

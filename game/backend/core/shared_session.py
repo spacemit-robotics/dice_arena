@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """One display session and one input queue for all board/web/ASR clients.
 
 Providers stay outside this module. The injected round factory owns hardware;

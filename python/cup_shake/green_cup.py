@@ -94,11 +94,11 @@ def stamp(path):
 class _NoVendorSdk(importlib.abc.MetaPathFinder):
     def find_spec(self, name, path=None, target=None):
         if name.partition(".")[0] == "pyAgxArm":
-            raise ImportError("cup-shake reaches the arm only through the manipulation framework")
+            raise ImportError("The application reaches the arm only through the manipulation framework")
         return None
 
 
-class LegacyGreenPlanner:
+class GreenCupPlanner:
     def __init__(self, config, state):
         root = Path(config["source_root"]).resolve()
         if not any(isinstance(finder, _NoVendorSdk) for finder in sys.meta_path):
@@ -427,7 +427,8 @@ class LegacyGreenPlanner:
             motion["positions_rad"] = [list(start)] + motion["positions_rad"]
         execution = FINGER_MAX_SPEED_S if maximum else wait
         motion["effector_schedule"] = [
-            (first + i * interval, [value / 100 for value in pose], execution) for i, pose in enumerate(poses)
+            # hand_0_100 is the hand's scale (0 open, 100 closed); the framework's is 0 closed, 1 open.
+            (first + i * interval, [1 - value / 100 for value in pose], execution) for i, pose in enumerate(poses)
         ]
         motion["hold_s"] = wait - execution  # The original waits the whole finger time after the last target.
         motion["hand_open"] = all(value == 0 for value in poses[-1])

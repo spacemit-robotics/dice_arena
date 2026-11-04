@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Independent synthetic stereo geometry and failure cases; no hardware actions."""
 
 import unittest

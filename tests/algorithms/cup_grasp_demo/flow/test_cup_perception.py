@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """One-class decoding, geometry selection, frozen model identity and replay."""
 
 from copy import deepcopy

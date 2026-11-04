@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Offline Nero seven-axis kinematics from the official URDF joint chain.
 
 All transforms are base_link -> link7 (the arm flange). This module reads only a

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Transactional parameter refresh at CONTROL's serialized idle boundary.
 
 No watcher thread touches hardware or an in-flight plan. Configuration errors

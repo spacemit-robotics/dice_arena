@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Shared, explicitly requested arm HOME stage for calibration workflows."""
 
 import json
@@ -62,11 +64,11 @@ def move_home(arm, route, speed_deg_s, acc_deg_s2, preview=None):
     return actual
 
 
-def return_home(home_path=DEFAULT_HOME, channel="can0", speed_percent=15, speed_deg_s=4.0, acc_deg_s2=6.0):
+def return_home(home_path=DEFAULT_HOME, speed_percent=15, speed_deg_s=4.0, acc_deg_s2=6.0):
     """Move only the arm, settle, then release CAN; never change the fingers."""
     from auto_collect import ensure_can_control
     from kinematics import load_model
-    from sensors import NeroFeedback
+    from sensors import ArmFeedback
 
     if (
         not 1 <= speed_percent <= 100
@@ -79,7 +81,7 @@ def return_home(home_path=DEFAULT_HOME, channel="can0", speed_percent=15, speed_
     home = load_home(home_path)
     model = load_model()
     joint_route(home, home, model)
-    arm = NeroFeedback(channel, motion=True)
+    arm = ArmFeedback(motion=True)
     try:
         route = joint_route(arm.read_joints()["joints_rad"], home, model)
         ensure_can_control(arm)

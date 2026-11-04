@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Optional single-class YOLOv8-seg cup masks with registered depth geometry."""
 
 import ast

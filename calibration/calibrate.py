@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """NERO eye-to-hand calibration. Commands never move/enable/reset the arm."""
 
 import argparse
@@ -190,7 +192,6 @@ def main(argv=None):
     q.add_argument("--target-tcp-pose", type=float, nargs=6)
     q = sub.add_parser("feedback-check", help="Read current flange/TCP without moving")
     add_tcp(q)
-    q.add_argument("--channel", default="can0")
     for command in ["camera-check", "collect"]:
         q = sub.add_parser(command)
         q.add_argument("--board", type=Path, default=ROOT / "calibration/config/board_perceptive.json")
@@ -198,7 +199,6 @@ def main(argv=None):
         q.add_argument("--dataset", type=Path, required=True, help="Output directory")
         if command == "collect":
             add_tcp(q)
-            q.add_argument("--channel", default="can0")
             q.add_argument("--resume", action="store_true", help="Append to a validated existing session")
             q.add_argument("--preview", action="store_true", help="Open live OpenCV/X11 sampling window")
     q = sub.add_parser("solve")
@@ -217,10 +217,10 @@ def main(argv=None):
         print(json.dumps(out, indent=2))
         return 0
     if args.command == "feedback-check":
-        from sensors import NeroFeedback, assert_still
+        from sensors import ArmFeedback, assert_still
 
         t = tcp_transform(args.tcp, args.tcp_config)
-        arm = NeroFeedback(args.channel)
+        arm = ArmFeedback()
         try:
             poses = [arm.read() for _ in range(8)]
             assert_still(poses)
@@ -247,7 +247,7 @@ def main(argv=None):
         print(json.dumps({"result": str(args.output), "quality_passed": result["quality_passed"]}))
         return 0 if result["quality_passed"] else 2
     import cv2
-    from sensors import RealSenseCamera, NeroFeedback, CharucoDetector
+    from sensors import RealSenseCamera, ArmFeedback, CharucoDetector
 
     cfg = json.loads(args.board.read_text())
     detector = CharucoDetector(cfg)
@@ -302,7 +302,7 @@ def main(argv=None):
             except ValueError as exc:
                 print(json.dumps({"camera": camera.info, "board_detected": False, "reason": str(exc)}))
                 return 2
-        arm = NeroFeedback(args.channel)
+        arm = ArmFeedback()
         print("静止后 Enter 采样，q 退出。程序只读取反馈，不移动/使能/失能机械臂。", flush=True)
         count = len(existing)
         accepted = [matrix(sample["T_base_flange"]) for sample in existing]

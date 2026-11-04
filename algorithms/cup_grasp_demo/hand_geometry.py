@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Read-only NERO/right-Revo2 hand geometry against the observed cup and table.
 
 Frames are column-vector, metres, radians. The tabletop is the observed

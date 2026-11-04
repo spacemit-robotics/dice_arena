@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Backend-authoritative game state machine engine.
 
 One :class:`GameRound` drives one game session through the state graph

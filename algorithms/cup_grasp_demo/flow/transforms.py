@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Rigid TCP transforms and eye-to-hand solve. No hardware imports."""
 
 import json

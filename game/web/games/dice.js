@@ -1,3 +1,5 @@
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
 import { resolveDisplayLayout, applyScoreLayout } from '../display-layout.js';
 
 // 摇骰子游戏模块：后端权威状态机的声明式前端。
