@@ -17,13 +17,9 @@ sys.path.insert(0, str(ROOT))
 DEFAULT_SYSTEM = ROOT / "configs/green_cup.json"
 INTERACTIVE_ACTIONS = (
     ("win", "骰子：机械臂赢（V 手势）"),
-    ("lose", "骰子：机械臂输（点赞）"),
-    ("draw", "骰子：平局"),
-    ("rock", "猜拳：石头"),
-    ("paper", "猜拳：布"),
-    ("scissors", "猜拳：剪刀"),
+    ("lose", "骰子：机械臂输（竖拇指）"),
+    ("draw", "骰子：平局（开合手势）"),
     ("home", "归位：HOME（六路手指张开）"),
-    ("rps-ready", "猜拳：预备位置（抬臂同时张手）"),
 )
 
 

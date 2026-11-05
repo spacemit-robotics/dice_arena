@@ -14,30 +14,6 @@
       "remote_path": "dice_arena/algorithms/meshes/nero/base_link.stl"
     },
     {
-      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/gripper_base.stl",
-      "size_bytes": 1837884,
-      "sha256": "041b1c8ffa29bff9a5e9350ec9d3e1a0129a5abcba1f347b29b5ad7367ba5f5a",
-      "remote_path": "dice_arena/algorithms/meshes/nero/gripper_base.stl"
-    },
-    {
-      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/gripper_flange.stl",
-      "size_bytes": 665584,
-      "sha256": "1ae6d1c5af001582a3328564839e8eb5f2acec02e7e2b19e65fc3c43f8a9c95a",
-      "remote_path": "dice_arena/algorithms/meshes/nero/gripper_flange.stl"
-    },
-    {
-      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/gripper_link1.stl",
-      "size_bytes": 104384,
-      "sha256": "475a7d8db056524d7659fadf5a2c307d62791047b6214d733dfc7846ed1c613d",
-      "remote_path": "dice_arena/algorithms/meshes/nero/gripper_link1.stl"
-    },
-    {
-      "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/gripper_link2.stl",
-      "size_bytes": 104384,
-      "sha256": "3f88d534a85e28a33ef7d2061adacbd1d25214aa9325f9e464aad0f9e4b74606",
-      "remote_path": "dice_arena/algorithms/meshes/nero/gripper_link2.stl"
-    },
-    {
       "path": "algorithms/nero_revo2_control/models/hand_geometry/nero/meshes/link1.stl",
       "size_bytes": 1130084,
       "sha256": "0e38bf33ce41f04d7e70e471768c00fa144ba4016a878b9a6d8303c319736e09",
@@ -110,12 +86,6 @@
       "remote_path": "dice_arena/algorithms/meshes/revo2_right_hand/right_index_proximal_link.STL"
     },
     {
-      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_index_tip.STL",
-      "size_bytes": 117684,
-      "sha256": "4af36131feedb7f83a695ff8e7d09a7e8893df96f971b2d363c0d359e3a82bbf",
-      "remote_path": "dice_arena/algorithms/meshes/revo2_right_hand/right_index_tip.STL"
-    },
-    {
       "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_index_touch_link.STL",
       "size_bytes": 99984,
       "sha256": "a7f7b054539a858173b3e002be2df5ebc60a3e3d8bdf38e32f490a1475809251",
@@ -132,12 +102,6 @@
       "size_bytes": 333384,
       "sha256": "56d9f019bad093daf93a736596ab4e7d9b17fb3c79e2be4181d909958cf76a37",
       "remote_path": "dice_arena/algorithms/meshes/revo2_right_hand/right_middle_proximal_link.STL"
-    },
-    {
-      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_middle_tip.STL",
-      "size_bytes": 117684,
-      "sha256": "844204b7bcf3de3ad500232e2e30ac15a8ec41728be281d0670c7ad1a2b09e34",
-      "remote_path": "dice_arena/algorithms/meshes/revo2_right_hand/right_middle_tip.STL"
     },
     {
       "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_middle_touch_link.STL",
@@ -158,12 +122,6 @@
       "remote_path": "dice_arena/algorithms/meshes/revo2_right_hand/right_pinky_proximal_link.STL"
     },
     {
-      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_pinky_tip.STL",
-      "size_bytes": 117684,
-      "sha256": "f632c67971d2d6dc8a5edcfcac4db8b3078e346540270bd89a9e9c783d304415",
-      "remote_path": "dice_arena/algorithms/meshes/revo2_right_hand/right_pinky_tip.STL"
-    },
-    {
       "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_pinky_touch_link.STL",
       "size_bytes": 68584,
       "sha256": "96ed796046634fead6ac789be979e3b013c3a6d32ba866a31ea92f7c3ebf19ee",
@@ -180,12 +138,6 @@
       "size_bytes": 281484,
       "sha256": "89c64252e891bc91567241b74de18d986e20e4e57d74cd10289d7171f6c57dc6",
       "remote_path": "dice_arena/algorithms/meshes/revo2_right_hand/right_ring_proximal_link.STL"
-    },
-    {
-      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_ring_tip.STL",
-      "size_bytes": 117684,
-      "sha256": "c3be3c69a1b7cba72d4b09c8ca4e04f3ad15ef2e47f8212bb547be7487f88022",
-      "remote_path": "dice_arena/algorithms/meshes/revo2_right_hand/right_ring_tip.STL"
     },
     {
       "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_ring_touch_link.STL",
@@ -216,12 +168,6 @@
       "size_bytes": 735284,
       "sha256": "0c415499f0b28609062d1364cd2500cd801a5f4e6a8a2083ae82b8a870404495",
       "remote_path": "dice_arena/algorithms/meshes/revo2_right_hand/right_thumb_proximal_visual_link.STL"
-    },
-    {
-      "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_thumb_tip.STL",
-      "size_bytes": 117684,
-      "sha256": "0e53267b1a3abdbcb41b190b264f805bf83f650e79ea2c22b4974e404e78e454",
-      "remote_path": "dice_arena/algorithms/meshes/revo2_right_hand/right_thumb_tip.STL"
     },
     {
       "path": "algorithms/nero_revo2_control/models/hand_geometry/revo2/meshes/revo2_right_hand/right_thumb_touch_link.STL",

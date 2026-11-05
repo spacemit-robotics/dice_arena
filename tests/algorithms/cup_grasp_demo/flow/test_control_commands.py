@@ -18,7 +18,7 @@ class TerminalCommandsTest(unittest.TestCase):
             "g": dict(command="advance", until="RETURN_HOME"),
             "until lift": dict(command="advance", until="LIFT"),
             "home": dict(command="action", name="home"),
-            "action rps-ready": dict(command="action", name="rps-ready"),
+            "action home": dict(command="action", name="home"),
             "quit": dict(command="close"),
             "q": dict(command="close"),
             "?": dict(command="help"),

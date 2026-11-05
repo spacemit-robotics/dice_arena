@@ -29,7 +29,7 @@ import numpy as np
 # Routes are bounded by their speed/acceleration profile and use the configured percentage.
 MAX_SPEED_PERCENT = 10
 # Routes run in the controller's streaming (js) mode, which stops a few tenths of a degree short;
-# arrival at a route's end is judged within this tolerance, as the original program did.
+# arrival at a route's end is judged within this tolerance.
 ROUTE_TOLERANCE_DEG = 0.8
 HOLD_SPEED_PERCENT = 5
 MOVE_TIMEOUT_S = 120
