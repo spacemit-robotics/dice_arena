@@ -48,7 +48,7 @@
 | `ep_affinity` | `14;15` | `14;15` | EP 推理线程绑定的核，分号分隔，核数须等于 `intra_threads` |
 | `queue_depth` | `2` | `2` | 帧队列深度，限制在 1～8 |
 | `rtsp.enabled` | `true` | `false` | 向 MediaMTX 推送 H.264 |
-| `rtsp.host`、`rtsp.port` | `127.0.0.1`、`8554` | `0.0.0.0`、`8554` | MediaMTX 的 RTSP 地址；推流路径取游戏 manifest 的 `video.path`（`/dice/det`） |
+| `rtsp.host`、`rtsp.port` | `127.0.0.1`、`8554` | `127.0.0.1`、`8554` | MediaMTX 的 RTSP 地址；推流路径取游戏 manifest 的 `video.path`（`/dice/det`） |
 
 其他可用键：
 

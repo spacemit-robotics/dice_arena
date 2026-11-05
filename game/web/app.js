@@ -210,7 +210,7 @@ function setPhase(phase, meta) {
 // 优先级高于唤醒词）直达对局。
 const IDLE_ENTER_SECONDS = 120; // /api/games 不可用或未配置时的兜底
 let idleTimer = null;
-let standbySettings = { enabled: true, idle_seconds: IDLE_ENTER_SECONDS, boot_standby: false, wake_phrases: [] };
+let standbySettings = { enabled: true, idle_seconds: IDLE_ENTER_SECONDS, boot_standby: true, wake_phrases: [] };
 let standbySource = null;
 
 function applyStandbySettings(settings) {
@@ -218,7 +218,7 @@ function applyStandbySettings(settings) {
   standbySettings = {
     enabled: settings.enabled !== false,
     idle_seconds: Number(settings.idle_seconds) > 0 ? Number(settings.idle_seconds) : IDLE_ENTER_SECONDS,
-    boot_standby: settings.boot_standby === true,
+    boot_standby: settings.boot_standby !== false,
     wake_phrases: Array.isArray(settings.wake_phrases) ? settings.wake_phrases : [],
   };
   resetIdleTimer();

@@ -163,11 +163,11 @@ def arena_standby(arena: Mapping[str, Any] | None) -> dict[str, Any]:
     if not isinstance(standby, Mapping):
         standby = {}
     enabled = standby.get("enabled", True)
-    boot = standby.get("boot_standby", False)
+    boot = standby.get("boot_standby", True)
     return {
         "enabled": enabled if isinstance(enabled, bool) else True,
         "idle_seconds": standby.get("idle_seconds", 120),
-        "boot_standby": boot if isinstance(boot, bool) else False,
+        "boot_standby": boot if isinstance(boot, bool) else True,
         "wake_phrases": list(standby.get("wake_phrases") or []),
     }
 
