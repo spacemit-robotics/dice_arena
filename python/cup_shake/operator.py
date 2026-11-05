@@ -31,7 +31,7 @@ def execute(context, args):
         context.script(
             context.data("dice_arena") / "tools/configure_site.py",
             context.prefix,
-            context.local("device.yaml"),
+            context.plan_for("nero"),
             source,
             context.local("green_cup.json"),
             context.local("runtime"),

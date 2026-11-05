@@ -7,7 +7,7 @@ source build/envsetup.sh
 cd application/native/dice_arena
 ```
 
-`SITE` 默认指 `~/.local/share/spacemit-manipulation/site/`，可用 `MANIPULATION_SITE` 指定。
+`SITE` 默认指 `~/.local/share/spacemit-manipulation/site/`。
 
 ## 1. 服务管理
 

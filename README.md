@@ -47,15 +47,16 @@ mm --with-deps
 
 ## 配置设备
 
-下文 `SITE` 表示现场目录，默认 `~/.local/share/spacemit-manipulation/site/`，可用 `MANIPULATION_SITE` 指定。
+下文 `SITE` 表示现场目录，默认 `~/.local/share/spacemit-manipulation/site/`。
 为随附的机械臂与灵巧手组合生成设备配置：
 
 ```bash
 manipulation configure nero --variant revo2_right
 ```
 
-配置保存到 `SITE/device.yaml`，包含驱动、连接参数、关节限位和末端通道；已有文件不覆盖。
-型号只在此处选择，后续应用命令共用该配置。
+配置保存到 `SITE/nero/device.yaml`，包含驱动、连接参数、关节限位和末端通道；已有文件不覆盖。
+`configure` 同时把 Nero 设为当前设备。这台主机还配置过其他设备时，标定和生成抓杯配置前先执行
+`manipulation use nero`；`dice-arena configure` 记录 Nero 的配置路径，之后的抓杯和游戏不受切换影响。
 
 退出厂商 Web、遥操及其他控制程序，按实际接口名启用 CAN。随附配置使用 `can0`、1 Mbps：
 
@@ -128,7 +129,7 @@ dice-arena serve
 
 | 文件 | 内容 |
 | --- | --- |
-| `SITE/device.yaml` | 设备驱动、连接、关节限位与末端通道 |
+| `SITE/nero/device.yaml` | 设备驱动、连接、关节限位与末端通道 |
 | `SITE/green_cup.json` | 相机、外参、桌面、HOME、TCP、杯体与动作配方 |
 | `SITE/cup_application.json` | 设备配置引用、规划器、手型与持物确认方式 |
 | `SITE/dice_arena/config.json` | 游戏、语音与视频设置，首次启动游戏时生成 |

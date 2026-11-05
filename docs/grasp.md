@@ -7,8 +7,8 @@ source build/envsetup.sh
 cd application/native/dice_arena
 ```
 
-`SITE` 默认指 `~/.local/share/spacemit-manipulation/site/`，可用 `MANIPULATION_SITE` 指定。
-设备使用 `SITE/device.yaml`。退出其他设备控制程序，不同时运行网页与命令行标定。
+`SITE` 默认指 `~/.local/share/spacemit-manipulation/site/`。
+标定使用当前设备，须为 Nero；不是时先执行 `manipulation use nero`。退出其他设备控制程序，不同时运行网页与命令行标定。
 
 ## 1. 命令行标定
 

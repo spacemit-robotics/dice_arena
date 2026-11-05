@@ -9,8 +9,8 @@ pyAgxArm is blocked in this process, so no code path can open CAN beside the fra
 
 Environment (set by calibrate.sh / calibrate_web.sh):
   MANIPULATION_PREFIX  installed framework (required)
-  MANIPULATION_SITE    site directory with device.yaml (default ~/.local/share/spacemit-manipulation/site)
-  MANIPULATION_DEVICE  explicit device configuration instead of SITE/device.yaml
+  MANIPULATION_SITE    site directory (default ~/.local/share/spacemit-manipulation/site)
+  MANIPULATION_DEVICE  explicit device configuration instead of the current device, SITE/device.yaml
 """
 
 import importlib.abc
@@ -62,12 +62,17 @@ def _context():
     return Context(SimpleNamespace(prefix=prefix, site=os.environ.get("MANIPULATION_SITE") or default_site()))
 
 
+def _plan(context):
+    """Routes, HOME and the TCP are the Nero's: refuse any other current device before touching it."""
+    return context.plan_for("nero", os.environ.get("MANIPULATION_DEVICE"))
+
+
 def robot_model(context=None):
     """The site robot's kinematic description (device.model in device.yaml); opens no device."""
     context = context or _context()
     from spacemit_manipulation.urdf_fk import UrdfKinematics
 
-    model_file = context.model(context.plan(os.environ.get("MANIPULATION_DEVICE")))
+    model_file = context.model(_plan(context))
     model = json.loads(model_file.read_text())
     return UrdfKinematics(model_file.parent / model["urdf"], model["base"], model["tip"], model["joints"])
 
@@ -79,7 +84,7 @@ class Device:
         context = _context()  # Also makes the framework's Python modules importable.
         from spacemit_manipulation.client import DeviceClient
 
-        plan = context.plan(os.environ.get("MANIPULATION_DEVICE"))
+        plan = _plan(context)
         self.kinematics = robot_model(context)
         self.motion, self.users, self.pinned = motion, 0, False
         try:
