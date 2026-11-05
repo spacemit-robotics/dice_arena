@@ -35,14 +35,16 @@ cd application/native/dice_arena
 
 ## 运行资源
 
-下载模型、设备网格、音频和视频服务程序，然后构建安装应用：
+下载模型、设备网格、音频、默认标定示教数据和视频服务程序，然后构建安装应用：
 
 ```bash
 python3 tools/download_assets.py
 mm --with-deps
 ```
 
-资源源站为 `https://archive.spacemit.com/ros2/manipulation/`，清单为 `runtime_assets.json`。
+资源源站为 `https://archive.spacemit.com/ros2/manipulation/`，本应用的资源位于其中的 `dice_arena/` 目录。
+清单 `runtime_assets.json` 记录每个文件的源站路径、本地路径、大小和 SHA-256，下载时逐个校验。
+使用内网镜像时追加 `--base-url <镜像地址>`；已下载的资源可用 `python3 tools/check_assets.py --verify` 复核。
 `mm` 提示安装声明的系统依赖。骰子识别程序在 K3 上编译；随附 MediaMTX 适用于 Linux RISC-V 64 位。
 
 ## 配置设备
