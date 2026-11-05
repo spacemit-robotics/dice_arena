@@ -15,8 +15,6 @@
   },
   "asr_enabled": false,
   "vision_always_on": false,
-  "robot_home_patrol": false,
-  "robot_home_patrol_seconds": 30,
   "standby": {
     "enabled": true,
     "idle_seconds": 120,

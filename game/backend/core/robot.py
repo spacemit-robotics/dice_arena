@@ -124,21 +124,6 @@ class RobotProvider(Component):
         """
         return {"status": "completed", "noop": True}
 
-    def query_pose(
-        self,
-        *,
-        on_event: RobotEventFn,
-        is_cancelled: RobotCancelledFn,
-        timeout_seconds: float | None = None,
-    ) -> dict[str, Any]:
-        """Read-only "is the arm at home" probe for the idle patrol loop.
-
-        Floor implementation: providers without pose feedback report
-        ``skipped`` (cannot judge), which the patrol treats as "do nothing"
-        — never a reason to move or restart the arm.
-        """
-        return {"status": "skipped", "reason": "provider has no pose feedback"}
-
     def ensure_home(
         self,
         *,

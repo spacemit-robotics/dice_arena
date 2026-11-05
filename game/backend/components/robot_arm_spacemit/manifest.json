@@ -10,6 +10,7 @@
         "shake_dice",
         "settle_dice",
         "feedback",
-        "query_pose"
+        "reset_home",
+        "ensure_home"
     ]
 }

@@ -26,7 +26,7 @@ def main():
 
     config = json.loads((game / "backend/config.json").read_text())
     assert config["providers"]["robot_arm"] == "robot_arm_spacemit"
-    assert config["robot_home_patrol"] is False and "asr" not in config["providers"]
+    assert "robot_home_patrol" not in config and "asr" not in config["providers"]
     assert (
         not (game / "backend/components/robot_arm_nero").exists()
         and not (game / "backend/games/rps").exists()

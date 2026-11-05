@@ -23,8 +23,8 @@ dice-arena serve
 Ctrl+C 停止游戏和视频服务，语音服务保留供下次复用。
 
 首次启动生成 `SITE/dice_arena/config.json`；配置修改后自动重载，重新安装不覆盖。
-机械臂获胜做 V 手势，失败做点赞，平局做开合手势；正常结束后回 HOME 并张手。
-故障后不自动归位或恢复，由现场操作者处理持物和设备。
+机械臂获胜做 V 手势，失败做竖拇指手势，平局做开合手势；正常结束后回 HOME 并张手。
+故障后不自动归位或恢复，由现场操作者处理持物和设备，再执行 `dice-arena reset` 并重新启动游戏。
 
 | 服务 | 默认端口 |
 | --- | --- |
@@ -44,7 +44,7 @@ dice-arena status
 
 显示机械臂、语音和识别服务的状态。
 开启 `grip_confirmation: operator` 时，用 `dice-arena events ROUND_ID` 读取当前局事件。
-`ROUND_ID` 为本局标识。收到 `phase=await_grip_confirmation` 后，现场确认实际持杯，再执行
+`ROUND_ID` 为本局标识，取自 `dice-arena status` 输出中的 `active_round.id`。收到 `phase=await_grip_confirmation` 后，现场确认实际持杯，再执行
 `dice-arena ack-grip TOKEN OUTPUT`；两个参数分别取本次事件的 `token` 和 `acknowledgement`。
 
 ## 3. 离线检查
@@ -70,6 +70,6 @@ python3 tools/check_assets.py --verify
 | 缺少 `pyrealsense2` | 安装与主机架构、Python 版本匹配的 RealSense Python 绑定 |
 | 缺少模型或视频程序 | 执行 `python3 tools/download_assets.py`，再执行 `mm --with-deps` |
 | 桌面记录缺失或外参不匹配 | 退出游戏，在应用目录执行 `bash calibrate.sh table` 重新采集并登记 |
-| 任务故障或取消 | 停止游戏，由现场操作者处理持物和姿态；不自动重试、张手或归位 |
+| 任务故障或取消 | 停止游戏，由现场操作者处理持物和姿态，再执行 `dice-arena reset`；不自动重试、张手或归位 |
 
 视频服务日志位于 `SITE/dice_arena/mediamtx.log`。

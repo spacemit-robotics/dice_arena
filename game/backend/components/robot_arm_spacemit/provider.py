@@ -1,7 +1,6 @@
 # Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 # SPDX-License-Identifier: Apache-2.0
-"""Dice Arena RobotProvider on the cup application. No vendor imports or auto-restart; homes as the
-original provider."""
+"""Dice Arena RobotProvider on the cup application. No vendor imports or auto-restart."""
 
 import os
 from pathlib import Path
@@ -10,6 +9,13 @@ import time
 from core.robot import RobotProvider
 from cup_shake import CupApplication
 from spacemit_manipulation.operator_support import default_site
+
+
+def _runs_to_completion():
+    """The cancellation check of short actions that leave the arm safe (result gestures and homing):
+    when the round ends meanwhile (the player leaves the result page or starts a new round) they
+    finish, because stopping them halfway leaves the arm off HOME and latches the task."""
+    return False
 
 
 class SpacemitRobotProvider(RobotProvider):
@@ -41,7 +47,7 @@ class SpacemitRobotProvider(RobotProvider):
 
     def ensure_started(self):
         """Connect in the background on game entry, so the rules speech covers the device, camera,
-        model and geometry startup (the original resident prewarm). Never blocks the caller; never
+        model and geometry startup. Never blocks the caller; never
         enables, homes or moves. A failure is logged and the first command connects again."""
         if self._lock.acquire(blocking=False):  # A command in flight has connected already.
 
@@ -49,7 +55,7 @@ class SpacemitRobotProvider(RobotProvider):
                 try:
                     if not self._closed:
                         self.app.connect()
-                except Exception as error:  # noqa: BLE001 - best effort, as the original prewarm
+                except Exception as error:  # noqa: BLE001 - best effort
                     print(f"[robot_arm_spacemit] prewarm failed: {error}", flush=True)
                 finally:
                     self._lock.release()
@@ -88,9 +94,9 @@ class SpacemitRobotProvider(RobotProvider):
         return self._command("settle_dice", on_event, is_cancelled, timeout_seconds)
 
     def feedback(self, kind, *, on_event, is_cancelled, timeout_seconds=None):
-        # win/lose/draw: the original arm-and-hand gesture; the arm holds it until the post-round
-        # home.
-        return self._command("gesture:" + kind, on_event, is_cancelled, timeout_seconds)
+        # win/lose/draw: an arm-and-hand gesture; the arm holds it until the post-round home.
+        del is_cancelled
+        return self._command("gesture:" + kind, on_event, _runs_to_completion, timeout_seconds)
 
     def prepare_throw(self, *, on_event, is_cancelled, timeout_seconds=None):
         return dict(status="failed", reason="RPS choreography is not part of the cup application")
@@ -101,18 +107,17 @@ class SpacemitRobotProvider(RobotProvider):
         del gesture, prepared
         return dict(status="failed", reason="RPS choreography is not part of the cup application")
 
-    def query_pose(self, *, on_event, is_cancelled, timeout_seconds=None):
-        return self._command("query_pose", on_event, is_cancelled, timeout_seconds)
-
     def reset_home(self, *, on_event, is_cancelled, timeout_seconds=None):
-        # The original home action: the arm to HOME with the hand opening. Refused while the cup may
-        # be held or after a fault: those need the operator, never an automatic recovery.
-        return self._command("reset_home", on_event, is_cancelled, timeout_seconds)
+        # The arm to HOME with the hand opening. Refused while the cup may be held or after a fault:
+        # those need the operator, never an automatic recovery.
+        del is_cancelled
+        return self._command("reset_home", on_event, _runs_to_completion, timeout_seconds)
 
     def ensure_home(self, *, on_event, is_cancelled, timeout_seconds=None):
         # The post-round home: no motion when already at HOME with the hand open, else the home
         # action.
-        return self._command("ensure_home", on_event, is_cancelled, timeout_seconds)
+        del is_cancelled
+        return self._command("ensure_home", on_event, _runs_to_completion, timeout_seconds)
 
     def shutdown(self):
         with self._lock:
