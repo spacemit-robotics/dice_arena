@@ -19,6 +19,17 @@
 随附的视觉规划、自动标定与手型参数适用于上述设备组合。
 更换机械臂或末端执行器时，须同时适配驱动、规划、标定和手型，不能只替换设备配置。
 
+## 系统架构
+
+![Dice Arena 系统架构](docs/assets/architecture.svg)
+
+- **游戏**：`dice-arena serve` 启动视频转发、本地语音和游戏后端。浏览器经 HTTP 访问游戏网页；后端运行游戏状态机（规则讲解、抓杯、摇杯、放杯、视觉判定、结果手势、返回 HOME），按槽位调用各组件。
+- **机械臂**：`robot_arm_spacemit` 调用抓杯应用 `CupApplication`。抓杯规划用 RealSense 图像识别杯体、求逆解并检查路径，动作经 manipulation 的 `DeviceClient` 和 `manipulation-device` 下发到 Nero 机械臂与 Revo2 灵巧手。
+- **视觉与视频**：`vision_yolov8_objdetect` 启动识别程序 `yolov8_camera`，在 SpacemiT EP 上推理，组件根据稳定观测裁决胜负；识别画面以 RTSP 推送到 MediaMTX，浏览器经 WebRTC 播放。
+- **语音**：`tts_moss_nano` 调用本机 MOSS-TTS 服务合成台词，由后端经板端 PipeWire 播放。
+- **标定与配置**：手眼标定经 manipulation 驱动机械臂，用 RealSense 采样并求解外参，结果写入现场目录 `SITE`；`apply` 生成 `SITE/green_cup.json`，`dice-arena configure` 再生成 `SITE/cup_application.json`。
+- **任务状态**：任务策略库 `libcup_task.so`（C ABI）检查阶段顺序，动作发出后失败即锁定；需要人工处理的任务状态记录在 `SITE/runtime/task_state.json`，程序重启后仍拒绝运动，直到现场操作人员处理并执行 `dice-arena reset`。
+
 ## 安装
 
 需要 Linux、C++17 编译器、CMake 3.16+、Python 3.10+，以及网络和系统依赖安装权限。

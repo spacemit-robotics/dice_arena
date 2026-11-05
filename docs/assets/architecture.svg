@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="684" viewBox="0 0 960 684" role="img" aria-labelledby="title desc">
+  <title id="title">Dice Arena 系统架构</title>
+  <desc id="desc">浏览器经 HTTP 访问 dice-arena serve 启动的游戏后端；后端运行游戏状态机，按槽位调用机械臂、语音和骰子识别组件。机械臂组件调用抓杯应用 CupApplication，后者由抓杯规划生成动作、由任务策略库检查阶段顺序并锁定失败，经 manipulation 的 DeviceClient、manipulation-device 和 agx_nero_revo2 驱动控制 Nero 机械臂与 Revo2 灵巧手。语音组件调用本机 MOSS-TTS 服务；骰子识别组件启动 yolov8_camera，视频经 MediaMTX 以 WebRTC 送到浏览器。手眼标定把结果写入现场目录，生成 green_cup.json；抓杯应用读取现场配置，并把待人工处理的任务状态记录到 runtime/task_state.json。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="960" height="684" fill="#ffffff"/>
+  <g font-family="'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+    <text x="480" y="30" font-size="19" font-weight="700" fill="#1f2937" text-anchor="middle">Dice Arena 系统架构</text>
+
+    <!-- 浏览器与视频转发 -->
+    <rect class="box" x="264" y="48" width="416" height="56" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.4"/>
+    <text x="472" y="71.5" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">浏览器</text>
+    <text x="472" y="89.8" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">游戏网页 :8080 · 实时视频 :8889</text>
+    <rect class="box" x="736" y="48" width="170" height="56" rx="8" fill="#ffffff" stroke="#3b6fb6" stroke-width="1.4"/>
+    <text x="821" y="71.5" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">MediaMTX</text>
+    <text x="821" y="89.8" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">RTSP 转 WebRTC</text>
+
+    <!-- 游戏后端 -->
+    <rect class="box" x="224" y="132" width="682" height="72" rx="8" fill="#ffffff" stroke="#3b6fb6" stroke-width="1.4"/>
+    <text x="565" y="155.3" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">游戏后端 game/backend</text>
+    <text x="565" y="173.6" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">dice-arena serve 启动 · 网页与 HTTP 接口 · 按槽位调用组件</text>
+    <text x="565" y="190.1" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">游戏状态机：规则讲解 → 抓杯 → 摇杯 → 放杯 → 视觉判定 → 结果手势 → 返回 HOME</text>
+
+    <!-- 组件 -->
+    <rect class="box" x="224" y="232" width="340" height="56" rx="8" fill="#ffffff" stroke="#3b6fb6" stroke-width="1.4"/>
+    <text x="394" y="255.5" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">机械臂组件 robot_arm_spacemit</text>
+    <text x="394" y="273.8" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">抓杯 · 摇杯 · 放杯 · 结果手势 · 返回 HOME</text>
+    <rect class="box" x="580" y="232" width="140" height="56" rx="8" fill="#ffffff" stroke="#3b6fb6" stroke-width="1.4"/>
+    <text x="650" y="255.5" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">语音组件</text>
+    <text x="650" y="273.8" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">tts_moss_nano</text>
+    <rect class="box" x="736" y="232" width="170" height="56" rx="8" fill="#ffffff" stroke="#3b6fb6" stroke-width="1.4"/>
+    <text x="821" y="255.5" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">骰子识别组件</text>
+    <text x="821" y="273.6" font-size="11.5" font-weight="400" fill="#4b5563" text-anchor="middle">vision_yolov8_objdetect</text>
+
+    <!-- 抓杯应用 -->
+    <rect class="box" x="224" y="316" width="340" height="148" rx="10" fill="#f3f7fc" stroke="#3b6fb6" stroke-width="1.4"/>
+    <text x="394" y="337" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">抓杯应用 CupApplication</text>
+    <text x="394" y="355" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">python/cup_shake · 按阶段下发动作</text>
+    <rect class="box" x="232" y="368" width="157" height="88" rx="8" fill="#ffffff" stroke="#3b6fb6" stroke-width="1.4"/>
+    <text x="310.5" y="399.4" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle">抓杯规划 green_cup</text>
+    <text x="310.5" y="417.1" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">拍照 · 杯体识别</text>
+    <text x="310.5" y="433.6" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">逆解 · 路径检查 · 轨迹</text>
+    <rect class="box" x="399" y="368" width="157" height="88" rx="8" fill="#ffffff" stroke="#3b6fb6" stroke-width="1.4"/>
+    <text x="477.5" y="399.4" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle">任务策略 cup_task</text>
+    <text x="477.5" y="417.1" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">libcup_task.so · C ABI</text>
+    <text x="477.5" y="433.6" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">阶段顺序 · 失败锁定</text>
+
+    <!-- 语音服务与骰子识别程序 -->
+    <rect class="box" x="580" y="316" width="140" height="72" rx="8" fill="#ffffff" stroke="#3b6fb6" stroke-width="1.4"/>
+    <text x="650" y="339.3" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">MOSS-TTS 服务</text>
+    <text x="650" y="357.6" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">本机 HTTP :18082</text>
+    <text x="650" y="374.1" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">本地语音合成</text>
+    <rect class="box" x="736" y="316" width="170" height="80" rx="8" fill="#ffffff" stroke="#3b6fb6" stroke-width="1.4"/>
+    <text x="821" y="343.3" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">yolov8_camera</text>
+    <text x="821" y="361.6" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">SpacemiT EP 推理</text>
+    <text x="821" y="378.1" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">稳定观测 · RTSP 推流</text>
+
+    <!-- manipulation 组件 -->
+    <rect class="box" x="400" y="492" width="164" height="88" rx="8" fill="#fdf7ec" stroke="#b7791f" stroke-width="1.4"/>
+    <text x="482" y="515" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">manipulation</text>
+    <text x="482" y="533.3" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">DeviceClient</text>
+    <text x="482" y="549.8" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">→ manipulation-device</text>
+    <text x="482" y="566.3" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">→ agx_nero_revo2 驱动</text>
+
+    <!-- 硬件 -->
+    <rect class="box" x="224" y="608" width="164" height="56" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.4"/>
+    <text x="306" y="631.5" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">RealSense D435i</text>
+    <text x="306" y="649.8" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">抓杯定位 · 手眼标定</text>
+    <rect class="box" x="400" y="608" width="164" height="56" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.4"/>
+    <text x="482" y="631.5" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">Nero 机械臂</text>
+    <text x="482" y="649.8" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">Revo2 右手 · USB-CAN</text>
+    <rect class="box" x="580" y="608" width="140" height="56" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.4"/>
+    <text x="650" y="631.5" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">音箱</text>
+    <text x="650" y="649.8" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">后端经 PipeWire 播放</text>
+    <rect class="box" x="736" y="608" width="170" height="56" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.4"/>
+    <text x="821" y="631.5" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">骰子相机</text>
+    <text x="821" y="649.8" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">USB MJPEG 相机</text>
+
+    <!-- 手眼标定与现场目录 -->
+    <rect class="box" x="16" y="48" width="180" height="128" rx="8" fill="#ffffff" stroke="#3f8f5f" stroke-width="1.4"/>
+    <text x="106" y="74.5" font-size="14" font-weight="600" fill="#1f2937" text-anchor="middle">手眼标定</text>
+    <text x="106" y="92.8" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">标定网页 :8091</text>
+    <text x="106" y="109.3" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">或 calibrate.sh 命令行</text>
+    <text x="106" y="125.8" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">经 manipulation 驱动机械臂</text>
+    <text x="106" y="142.3" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">RealSense 采样 · 求解外参</text>
+    <text x="106" y="158.8" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle">登记参考板与桌面</text>
+    <rect class="box" x="16" y="228" width="180" height="268" rx="10" fill="#f2f8f4" stroke="#3f8f5f" stroke-width="1.4"/>
+    <text x="28" y="250" font-size="13.5" font-weight="700" fill="#2f7a4f" text-anchor="start">现场目录 SITE/</text>
+    <rect class="box" x="24" y="262" width="164" height="40" rx="6" fill="#ffffff" stroke="#3f8f5f" stroke-width="1.4"/>
+    <text x="33" y="277.8" font-size="12" font-weight="600" fill="#1f2937" text-anchor="start">nero/device.yaml</text>
+    <text x="33" y="294.6" font-size="11.5" font-weight="400" fill="#4b5563" text-anchor="start">设备配置</text>
+    <rect class="box" x="24" y="308" width="164" height="40" rx="6" fill="#ffffff" stroke="#3f8f5f" stroke-width="1.4"/>
+    <text x="33" y="323.8" font-size="12" font-weight="600" fill="#1f2937" text-anchor="start">green_cup.json</text>
+    <text x="33" y="340.6" font-size="11.5" font-weight="400" fill="#4b5563" text-anchor="start">外参 · 桌面 · 手型与动作</text>
+    <rect class="box" x="24" y="354" width="164" height="40" rx="6" fill="#ffffff" stroke="#3f8f5f" stroke-width="1.4"/>
+    <text x="33" y="369.8" font-size="12" font-weight="600" fill="#1f2937" text-anchor="start">cup_application.json</text>
+    <text x="33" y="386.6" font-size="11.5" font-weight="400" fill="#4b5563" text-anchor="start">由 configure 生成</text>
+    <rect class="box" x="24" y="400" width="164" height="40" rx="6" fill="#ffffff" stroke="#3f8f5f" stroke-width="1.4"/>
+    <text x="33" y="415.8" font-size="12" font-weight="600" fill="#1f2937" text-anchor="start">runtime/task_state.json</text>
+    <text x="33" y="432.6" font-size="11.5" font-weight="400" fill="#4b5563" text-anchor="start">待人工处理的任务状态</text>
+    <rect class="box" x="24" y="446" width="164" height="40" rx="6" fill="#ffffff" stroke="#3f8f5f" stroke-width="1.4"/>
+    <text x="33" y="461.8" font-size="12" font-weight="600" fill="#1f2937" text-anchor="start">dice_arena/config.json</text>
+    <text x="33" y="478.6" font-size="11.5" font-weight="400" fill="#4b5563" text-anchor="start">游戏 · 语音 · 视频设置</text>
+
+    <!-- 调用 -->
+    <path d="M472 104 L472 132" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <text x="480" y="122" font-size="11.5" font-weight="400" fill="#374151" text-anchor="start" class="label">HTTP</text>
+    <path d="M394 204 L394 232" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <path d="M650 204 L650 232" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <path d="M821 204 L821 232" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <path d="M394 288 L394 316" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <path d="M650 288 L650 316" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <text x="658" y="306" font-size="11.5" font-weight="400" fill="#374151" text-anchor="start" class="label">HTTP</text>
+    <path d="M821 288 L821 316" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <text x="829" y="306" font-size="11.5" font-weight="400" fill="#374151" text-anchor="start" class="label">JSONL 管道</text>
+    <path d="M482 464 L482 492" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <path d="M482 580 L482 608" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <text x="490" y="598" font-size="11.5" font-weight="400" fill="#374151" text-anchor="start" class="label">CAN 1 Mbps</text>
+
+    <!-- 数据 -->
+    <path d="M306 608 L306 456" fill="none" stroke="#475569" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+    <text x="314" y="540" font-size="11.5" font-weight="400" fill="#374151" text-anchor="start" class="label">RGB-D 图像</text>
+    <path d="M650 388 L650 608" fill="none" stroke="#475569" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+    <text x="658" y="502" font-size="11.5" font-weight="400" fill="#374151" text-anchor="start" class="label">合成语音</text>
+    <path d="M821 608 L821 396" fill="none" stroke="#475569" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+    <text x="829" y="506" font-size="11.5" font-weight="400" fill="#374151" text-anchor="start" class="label">图像</text>
+    <path d="M906 356 L925 356 L925 76 L906 76" fill="none" stroke="#475569" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+    <text x="940" y="216" font-size="11.5" font-weight="400" fill="#374151" text-anchor="middle" class="label" transform="rotate(-90 940 216.0)">RTSP</text>
+    <path d="M736 76 L680 76" fill="none" stroke="#475569" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+    <text x="708" y="70" font-size="11" font-weight="400" fill="#374151" text-anchor="middle" class="label">WebRTC</text>
+    <path d="M106 176 L106 228" fill="none" stroke="#475569" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+    <text x="114" y="206" font-size="11.5" font-weight="400" fill="#374151" text-anchor="start" class="label">apply</text>
+    <path d="M188 328 L224 328" fill="none" stroke="#475569" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+    <path d="M188 374 L224 374" fill="none" stroke="#475569" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+    <path d="M224 420 L188 420" fill="none" stroke="#475569" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+
+    <!-- 图例 -->
+    <path d="M24 624 L60 624" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <text x="68" y="628" font-size="11.5" font-weight="400" fill="#6b7280" text-anchor="start">调用</text>
+    <path d="M24 648 L60 648" fill="none" stroke="#475569" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+    <text x="68" y="652" font-size="11.5" font-weight="400" fill="#6b7280" text-anchor="start">数据 / 文件</text>
+  </g>
+</svg>
