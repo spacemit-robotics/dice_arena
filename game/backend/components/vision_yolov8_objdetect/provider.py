@@ -537,6 +537,10 @@ class VisionYolov8Objdetect(VisionAdjudicatorProvider):
         log = on_log or (lambda _line: None)
         if not isinstance(profile, Mapping):
             return False
+        if not self._resident_mode(profile):
+            # A per_request runtime is never cached, so one started here would outlive the game
+            # holding the camera; adjudication starts it and stops it afterwards.
+            return False
         started = False
         for view in self._resolve_views(profile):
             vid = str(view.get("id", "default"))

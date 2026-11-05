@@ -26,7 +26,6 @@
     "request_timeout_seconds": 120
   },
   "execution_provider": {
-    "name": "spacemit",
     "intra_thread_num": 4,
     "inter_thread_num": 1,
     "intra_thread_affinity": "8;9;10;11",

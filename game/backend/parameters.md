@@ -39,7 +39,7 @@ dice-arena serve
 | `speed` | `1.0` | 默认语速；`tts_moss_nano` 仅支持 `1.0` |
 | `video.webrtc_base_url` | `http://127.0.0.1:8889` | 浏览器播放实时画面的 WebRTC 地址（主机与 MediaMTX 端口），格式为 `http(s)://主机:端口`，不含路径和查询参数。从其他设备访问网页时，改为 K3 的局域网地址。下一次进入游戏时生效，不重建识别进程 |
 | `asr_enabled` | `false` | 语音输入总开关。为 `true` 且配置 `providers.asr` 时，服务启动前预热语音识别组件，预热失败则拒绝启动 |
-| `vision_always_on` | `false` | 识别视频流的生命周期。进入游戏时总是启动摄像头与推流（不推理）；`false` 时在回合结束（退出、取消或出错）后停止，`true` 时保持到服务退出。每个回合开始时读取 |
+| `vision_always_on` | `false` | 识别视频流的生命周期。识别组件为常驻模式（默认）时，进入游戏即启动摄像头与推流（不推理）；`false` 时在回合结束（退出、取消或出错）后停止，`true` 时保持到服务退出。每个回合开始时读取 |
 | `standby.enabled` | `true` | 启用待机页 |
 | `standby.idle_seconds` | `120` | 游戏列表页空闲多少秒进入待机，范围 5～3600。共享会话中，停在 `rules`、`ready`、`result`、`analysis_failed`、`arm_failed` 且无播报的回合空闲同样时长后结束，返回游戏列表 |
 | `standby.boot_standby` | `true` | 打开网页时先显示待机页；`false` 时显示游戏列表 |

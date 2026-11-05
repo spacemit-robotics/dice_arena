@@ -124,6 +124,8 @@ class YoloRuntimeProcess:
         self._runtime_exit_emitted = False
         self._protocol_checked = False
         self._lifecycle_lock = threading.Lock()
+        # How long stop() waits after SIGTERM before killing the runtime (runtime config).
+        self.terminate_grace_seconds = 2.0
 
     def start(
         self,
@@ -200,6 +202,17 @@ class YoloRuntimeProcess:
             except Exception:
                 component_config = {}
                 runtime_config = {}
+
+        grace = runtime.get("terminate_grace_seconds") if isinstance(runtime, Mapping) else None
+        if grace is None:
+            try:
+                defaults = load_component_config(Path(__file__).parent).get("runtime", {})
+            except Exception:
+                defaults = {}
+            if isinstance(defaults, Mapping):
+                grace = defaults.get("terminate_grace_seconds")
+        if type(grace) in (int, float) and 0 < grace <= 30:
+            self.terminate_grace_seconds = float(grace)
 
         # Game profiles own the semantics this provider itself consumes
         # (grouping, expected-count validation).  Model / confidence /
@@ -396,7 +409,7 @@ class YoloRuntimeProcess:
                 try:
                     if process.poll() is None:
                         process.terminate()
-                    process.wait(timeout=2)
+                    process.wait(timeout=self.terminate_grace_seconds)
                 except (OSError, subprocess.TimeoutExpired):
                     try:
                         process.kill()

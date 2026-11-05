@@ -47,7 +47,6 @@
 
 | 字段 | 当前值 | 说明 |
 | --- | --- | --- |
-| `name` | `spacemit` | 标识字段，代码不读取 |
 | `intra_thread_num` | `4` | EP intra 线程数 |
 | `inter_thread_num` | `1` | EP inter 线程数 |
 | `intra_thread_affinity` | `8;9;10;11` | intra 线程绑定的核，分号分隔 |
