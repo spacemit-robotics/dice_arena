@@ -1,6 +1,6 @@
 # 组件包
 
-`game/backend/components/` 下每个目录是一个组件包。服务启动时扫描并注册组件，游戏通过槽位选择组件，不直接引用具体实现。
+`game/backend/components/` 下每个目录是一个组件包。服务启动时扫描并注册组件；游戏通过槽位选择组件，不直接引用具体实现。
 
 ## 当前组件
 
@@ -51,29 +51,31 @@ game/backend/components/<组件 id>/
 | `vision` / `adjudicator` | `core.vision.VisionAdjudicatorProvider` | `adjudicate(request, *, on_log, on_event, is_cancelled, timeout_seconds)`；可选 `start_streaming`、`stop_streaming` |
 | `vision` / `localizer` | `core.vision.VisionLocalizerProvider` | `locate(request, *, on_log, on_event, is_cancelled, timeout_seconds)` |
 | `tts` | `core.tts.TtsProvider` | `synthesize(payload)`，返回 WAV 与响应头；可选 `stream(payload, write_frame)` 分段输出 |
-| `robot` | `core.robot.RobotProvider` | `grasp_cup`、`shake_dice`、`settle_dice`、`feedback(kind)`；`reset_home`、`ensure_home` 有空操作的缺省实现，接入真机时须实现 |
+| `robot` | `core.robot.RobotProvider` | `grasp_cup`、`shake_dice`、`settle_dice`、`feedback(kind)`；`reset_home`、`ensure_home` 的缺省实现不执行任何动作，接入真机时须实现 |
 | `asr` | `core.asr.AsrProvider` | 麦克风监听会话与识别结果回调；SDK 未包含该类型组件 |
 
-- 裁决组件返回源画面的物理结果 `LEFT`、`RIGHT` 或 `TIE`，玩家与机械臂的对应由游戏完成。失败时返回含 `"diagnosed": true` 的诊断结果。进度和结果通过 `on_event` 上报，`on_log` 仅输出诊断文本。
-- 语音组件单次文本最多 4000 字符。
-- 机械臂命令返回 `{"status": "completed"}` 或 `{"status": "failed", "reason": "..."}`，不向外抛出异常；收到 `is_cancelled()` 为真时尽快中止并返回失败；进度通过 `on_event({"event": "robot", ...})` 上报。
+- **裁决组件**：返回源画面中的物理结果 `LEFT`、`RIGHT` 或 `TIE`，玩家与机械臂的对应关系由游戏处理。失败时返回含 `"diagnosed": true` 的诊断结果。进度和结果通过 `on_event` 上报，`on_log` 仅输出诊断文本。
+- **语音组件**：单次文本最多 4000 字符。
+- **机械臂组件**：
+  - 命令返回 `{"status": "completed"}` 或 `{"status": "failed", "reason": "..."}`，不向外抛出异常；
+  - `is_cancelled()` 为真时尽快中止并返回失败；
+  - `robot_arm_spacemit` 的结果手势、`reset_home` 和 `ensure_home` 不因取消而中途停止，以免机械臂停在 HOME 之外；
+  - 进度通过 `on_event({"event": "robot", ...})` 上报。
 
 ## 生命周期与组件命令
 
-`dice-arena serve` 启动游戏前，对配置引用的语音组件执行 `lifecycle.start`。组件命令行工具位于安装目录：
+`dice-arena serve` 启动游戏前，对配置引用的语音组件执行 `lifecycle.start`。
+`dice-arena component` 使用与 `dice-arena serve` 相同的现场配置和运行目录管理组件：
 
 ```bash
-export DICE_ARENA_CONFIG="$HOME/.local/share/spacemit-manipulation/site/dice_arena/config.json"
-export DICE_RUNTIME_DIR="$HOME/.local/share/spacemit-manipulation/site/dice_arena"
-cd "$PREFIX/share/dice_arena/game"
-python3 -B backend/componentctl.py list
-python3 -B backend/componentctl.py health tts_moss_nano
-python3 -B backend/componentctl.py selected vision_adjudicator --game dice
-python3 -B backend/componentctl.py referenced tts
+dice-arena component list
+dice-arena component health tts_moss_nano
+dice-arena component selected vision_adjudicator --game dice
+dice-arena component referenced tts
 ```
 
-- `$PREFIX` 为安装目录，从 SDK 根目录执行 `source build/envsetup.sh` 后为 `output/staging`。
-- `DICE_ARENA_CONFIG` 指向现场配置；不设置时读取安装默认值。`DICE_RUNTIME_DIR` 指定语音服务的 pid 与日志目录。
+- 现场配置为 `SITE/dice_arena/config.json`，尚未生成时读取安装默认值。
+- 语音服务的进程号和日志保存在 `SITE/dice_arena/`。
 
 | 命令 | 作用 |
 | --- | --- |

@@ -17,7 +17,7 @@
 | 游戏道具 | 绿色杯子与骰子 | 杯体尺寸与抓杯配置一致，放置于相机可见的桌面工作区 |
 
 随附的视觉规划、自动标定与手型参数适用于上述设备组合。
-更换机械臂或末端需要适配驱动、规划、标定和手型，不能只替换设备配置。
+更换机械臂或末端执行器时，须同时适配驱动、规划、标定和手型，不能只替换设备配置。
 
 ## 安装
 
@@ -31,7 +31,7 @@ bash components/thirdparty/pyagxarm/tools/setup_sdk.sh
 cd application/native/dice_arena
 ```
 
-后续命令均在应用目录执行。新终端须先在 SDK 根目录执行 `source build/envsetup.sh`。
+后续命令均在应用目录执行；新终端须先在 SDK 根目录执行 `source build/envsetup.sh`。
 
 ## 运行资源
 
@@ -42,10 +42,10 @@ python3 tools/download_assets.py
 mm --with-deps
 ```
 
-资源源站为 `https://archive.spacemit.com/ros2/manipulation/`，本应用的资源位于其中的 `dice_arena/` 目录。
-清单 `runtime_assets.json` 记录每个文件的源站路径、本地路径、大小和 SHA-256，下载时逐个校验。
-使用内网镜像时追加 `--base-url <镜像地址>`，镜像地址对应源站根目录 `https://archive.spacemit.com/ros2/manipulation/`，其下保持相同的 `dice_arena/` 目录结构；已下载的资源可用 `python3 tools/check_assets.py --verify` 复核。
-`mm` 提示安装声明的系统依赖。骰子识别程序在 K3 上编译；随附 MediaMTX 适用于 Linux RISC-V 64 位。
+- **资源源站**：`https://archive.spacemit.com/ros2/manipulation/`，本应用的资源位于其中的 `dice_arena/` 目录。
+- **校验**：清单 `runtime_assets.json` 记录每个文件的源站路径、本地路径、大小和 SHA-256，下载时逐个校验；已下载的资源可用 `python3 tools/check_assets.py --verify` 复核。
+- **内网镜像**：追加 `--base-url <镜像地址>`。镜像地址对应源站根目录，其下保持相同的 `dice_arena/` 目录结构。
+- **构建**：`mm` 提示安装声明的系统依赖；骰子识别程序在 K3 上编译，随附的 MediaMTX 适用于 Linux RISC-V 64 位。
 
 ## 配置设备
 
@@ -56,9 +56,9 @@ mm --with-deps
 manipulation configure nero --variant revo2_right
 ```
 
-配置保存到 `SITE/nero/device.yaml`，包含驱动、连接参数、关节限位和末端通道；已有文件不覆盖。
-`configure` 同时把 Nero 设为当前设备。这台主机还配置过其他设备时，标定和生成抓杯配置前先执行
-`manipulation use nero`；`dice-arena configure` 记录 Nero 的配置路径，之后的抓杯和游戏不受切换影响。
+- 配置保存到 `SITE/nero/device.yaml`，包含驱动、连接参数、关节限位和末端通道；已有文件不覆盖。
+- `configure` 同时把 Nero 设为当前设备。主机上还配置了其他设备时，标定和生成抓杯配置前先执行 `manipulation use nero`。
+- `dice-arena configure` 记录 Nero 的配置路径，之后的抓杯和游戏不受当前设备切换的影响。
 
 退出厂商 Web、遥操及其他控制程序，按实际接口名启用 CAN。随附配置使用 `can0`、1 Mbps：
 
@@ -67,15 +67,19 @@ sudo ip link set can0 up type can bitrate 1000000
 ```
 
 机械臂按设备规程使能并进入位置控制模式；应用不自动使能或清错。
-现场须有人看护、急停可达，工作区无人且无障碍。Nero 断电会坍塌，不用断电或失能代替软件停止。
+现场须有人看护，急停按钮伸手可及，工作区内无人、无障碍物。Nero 断电后会坍塌，不能用断电或失能代替软件停止。
 
 ## 手眼标定
 
-固定相机、机械臂基座和两块标定板。在 `calibration/config/calibration_workflow.json` 中填写
-相机序列号、标定板尺寸、空手起始位（HOME）和采集参数；工具中心点（TCP）须匹配实际安装。
+固定相机、机械臂基座和两块标定板，然后在 `calibration/config/calibration_workflow.json` 中填写：
+
+- 相机序列号、标定板尺寸和采集参数；
+- 未持物时的起始位姿（HOME）；
+- 工具中心点（TCP），须与实际安装一致。
+
 标定与抓杯使用相同的分辨率、裁剪区域和相机内参，不复用其他安装的外参。
 
-自动采样会驱动机械臂，须预留整条路线的运动空间。退出其他设备控制程序，设置工程师 PIN 并启动标定网页：
+自动采样会驱动机械臂，须预留整条路线的运动空间。退出其他设备控制程序，设置工程师 PIN 后启动标定网页：
 
 ```bash
 bash calibrate_web.sh --set-pin
@@ -88,8 +92,9 @@ bash calibrate_web.sh --host 0.0.0.0
 2. 生成路线，自动采样并求解外参。
 3. 登记固定参考板，应用结果并采集、登记桌面。
 
-结果保存在 `SITE/calibration/`，应用结果时生成 `SITE/green_cup.json`。
-更换相机、基座或外参后须重新登记桌面。完成后按 Ctrl+C 退出标定网页。
+- 结果保存在 `SITE/calibration/`，应用结果时生成 `SITE/green_cup.json`。
+- 更换相机、基座或外参后，须重新登记桌面。
+- 完成后按 Ctrl+C 退出标定网页。
 
 ## 抓杯与游戏
 
@@ -101,32 +106,32 @@ bash calibrate_web.sh --host 0.0.0.0
 dice-arena configure
 ```
 
-配置保存到 `SITE/cup_application.json`，已有文件不覆盖。
-HOME、TCP、杯体尺寸和手型须匹配当前安装。抓取和张开手型、手指动作时长取自 `SITE/green_cup.json`
-（`grip_targets_0_100`、`open_targets_0_100`、`fast_finger_duration_s`，灵巧手刻度 `0` 张开、`100` 闭合）。
+- 配置保存到 `SITE/cup_application.json`，已有文件不覆盖。
+- HOME、TCP、杯体尺寸和手型须与当前安装一致。
+- 抓取手型、张开手型和手指动作时长取自 `SITE/green_cup.json` 的 `grip_targets_0_100`、`open_targets_0_100`、`fast_finger_duration_s`，使用灵巧手刻度（`0` 为张开，`100` 为闭合）。
 
 ### 单次抓杯、摇杯和放杯
 
-以下命令会驱动真机。机械臂须空手位于 HOME，杯子位于视觉工作区，操作者能观察完整动作：
+以下命令会驱动真机。机械臂须未持物并位于 HOME，杯子位于视觉工作区，操作人员能观察完整动作：
 
 ```bash
 dice-arena cycle
 ```
 
-`cycle` 执行一次抓杯、摇杯和放杯。默认闭手后直接抬杯，不检测是否抓稳。
-需要回 HOME 时，先排除持物和路径障碍，再执行 `dice-arena home`；该命令同时张手。
-故障或持杯取消后不自动归位、张手或恢复。任务状态记录在 `SITE/runtime/task_state.json`，重启后仍拒绝运动；
-现场操作者检查机械臂、灵巧手和杯子并处理后，执行 `dice-arena reset` 清除记录。
+- `cycle` 执行一次抓杯、摇杯和放杯。默认手部闭合后直接抬杯，不检测是否抓稳。
+- 需要返回 HOME 时，先确认未持物、路径无障碍，再执行 `dice-arena home`；该命令同时张开手部。
+- 故障或持杯时取消，应用不会自动归位、张开手部或恢复。任务状态记录在 `SITE/runtime/task_state.json`，程序重启后仍拒绝运动。
+  现场操作人员检查并处理机械臂、灵巧手和杯子后，执行 `dice-arena reset` 清除记录。
 
 ### 启动游戏
 
-将装好骰子的杯子放在视觉工作区，机械臂位于 HOME 且手张开，启动游戏：
+将装好骰子的杯子放在视觉工作区，机械臂位于 HOME 且手部张开，然后启动游戏：
 
 ```bash
 dice-arena serve
 ```
 
-浏览器打开 `http://<主机地址>:8080/`。Ctrl+C 停止游戏和视频服务，语音服务保留供下次复用。
+浏览器打开 `http://<主机地址>:8080/`。按 Ctrl+C 停止游戏和视频服务，语音服务保留，供下次启动复用。
 
 ## 现场文件
 
@@ -135,7 +140,7 @@ dice-arena serve
 | `SITE/nero/device.yaml` | 设备驱动、连接、关节限位与末端通道 |
 | `SITE/green_cup.json` | 相机、外参、桌面、HOME、TCP、杯体与动作配方 |
 | `SITE/cup_application.json` | 设备配置引用、规划器与持物确认方式 |
-| `SITE/runtime/` | 需要人工处理的任务状态 `task_state.json`、抓杯采集数据（只保留最近 3 次启动、每次最近 20 次抓杯） |
+| `SITE/runtime/` | 需要人工处理的任务状态 `task_state.json`；抓杯采集数据，只保留最近 3 次启动、每次启动最近 20 次抓杯 |
 | `SITE/dice_arena/config.json` | 游戏、语音与视频设置，首次启动游戏时生成 |
 
 重新安装不覆盖现场配置和标定结果。
@@ -156,7 +161,7 @@ config/、tools/、tests/       配置、部署工具与无硬件测试
 ## 参考文档
 
 - [标定与抓杯操作](docs/grasp.md)：命令行标定、桌面更新与人工持物确认。
-- [游戏服务与排障](docs/real_robot.md)：服务端口、状态查询与离线测试。
+- [游戏服务与排障](docs/real_robot.md)：服务端口、状态查询、组件管理与离线检查。
 - [配置与接口](docs/configuration.md)：配置字段、动作参数与业务接口。
 
 ## License

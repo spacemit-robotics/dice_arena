@@ -1,7 +1,7 @@
 # tts_moss_nano 语音组件
 
-本组件为 Dice Arena 提供本地语音合成，运行 `game/tts/moss-tts-nano/` 中的 MOSS-TTS-Nano runtime（SpaceMIT EP）。
-后端经本机 HTTP 服务（默认 `127.0.0.1:18082`）合成台词，按文本分块流式返回 WAV 帧。
+本组件为 Dice Arena 提供本地语音合成，在 SpacemiT EP 上运行 `game/tts/moss-tts-nano/` 中的 MOSS-TTS-Nano runtime。
+后端经本机 HTTP 服务（默认 `127.0.0.1:18082`）合成台词，按文本分块以流式方式返回 WAV 帧。
 参数见 [tts_moss_nano 参数](parameters.md)，runtime 说明见 [MOSS-TTS-Nano runtime](../../../tts/moss-tts-nano/README.md)。
 
 ## 文件
@@ -21,7 +21,7 @@
 - 全局配置 `providers.tts_local` 为 `tts_moss_nano` 时使用本组件（默认）。
 - `dice-arena serve` 启动游戏前执行 `scripts/start_tts.sh`：启动语音服务，等待模型加载与预热完成，最长 `startup.start_timeout_seconds`。启动失败时输出 `warning: TTS provider tts_moss_nano is unavailable`，游戏照常运行但无法播报合成台词。
 - 语音服务独立于游戏进程。Ctrl+C 停止游戏后语音服务保留，下次 `dice-arena serve` 直接复用；端口 18082 被其他安装的语音服务占用时，`dice-arena serve` 拒绝启动。
-- 运行文件位于 `SITE/dice_arena/`（`SITE` 默认 `~/.local/share/spacemit-manipulation/site/`），由 `dice-arena serve` 通过 `DICE_RUNTIME_DIR` 指定：
+- 运行文件位于 `SITE/dice_arena/`（`SITE` 默认为 `~/.local/share/spacemit-manipulation/site/`）：
 
 | 文件 | 内容 |
 | --- | --- |
@@ -48,22 +48,19 @@ mm
 在运行 `dice-arena serve` 的终端按 Ctrl+C 停止游戏，然后停止语音服务并重新启动游戏：
 
 ```bash
-DICE_RUNTIME_DIR="$HOME/.local/share/spacemit-manipulation/site/dice_arena" \
-  "$PREFIX/share/dice_arena/game/backend/components/tts_moss_nano/scripts/stop_tts.sh"
+dice-arena component stop tts_moss_nano
 dice-arena serve
 ```
 
-- `$PREFIX` 为安装目录，`source build/envsetup.sh` 后为 SDK 的 `output/staging`。
-- 须使用安装目录中的 `stop_tts.sh`，脚本按安装目录识别语音服务进程。
-- 停止成功输出 `MOSS-TTS bridge stopped: pid=...`；服务未运行时输出 `MOSS-TTS bridge is not running`。
+- 停止成功时输出 `MOSS-TTS bridge stopped: pid=...`；服务未运行时输出 `MOSS-TTS bridge is not running`。
 - `dice-arena serve` 按新配置启动语音服务，启动进度输出到终端，详细日志见 `moss-tts-18082.log`。
 
 ## 状态检查
 
 ```bash
 curl -s http://127.0.0.1:18082/health
-dice-arena status
-tail -f "$HOME/.local/share/spacemit-manipulation/site/dice_arena/moss-tts-18082.log"
+dice-arena component health tts_moss_nano
+tail -f ~/.local/share/spacemit-manipulation/site/dice_arena/moss-tts-18082.log
 ```
 
 `/health` 返回 `"ready": true` 表示服务已就绪；启动中返回当前阶段 `startup_phase`，失败时返回 `error`。
