@@ -1,5 +1,7 @@
 # Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 # SPDX-License-Identifier: Apache-2.0
+"""Validation of the table plane settings in the green cup configuration."""
+
 import copy
 import unittest
 from unittest.mock import patch

@@ -18,7 +18,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from calibration.web.common import CONFIG, ROOT, SITE, pin_record, write
-from calibration.web.service import Conflict, Service
+from calibration.web.service import ConflictError, Service
 from calibration.web import gallery
 
 STATIC = Path(__file__).parent / "static"
@@ -158,7 +158,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send(200, result, cookie=token)
         except PermissionError as exc:
             self.send(403, {"error": str(exc)})
-        except Conflict as exc:
+        except ConflictError as exc:
             self.send(409, {"error": str(exc)})
         except (ValueError, KeyError, TypeError, OSError) as exc:
             self.send(400, {"error": str(exc)})

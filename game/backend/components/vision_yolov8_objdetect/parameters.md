@@ -7,7 +7,7 @@
 
 LLM 复核凭证（endpoint/model/api_key）**已迁移到独立的 LLM 组件** `backend/components/llm_openai_compat/`（2026-09-04 大模型模块化），由全局配置 `providers.llm` 槽位指派，见该组件的参数说明。
 
-游戏级参数（模型、类别、规则、prompt、超时、稳定帧）**不在这两类文件里**，在游戏 manifest 的 `vision_profile`（见 `backend/games/dice/参数说明.md` 第 5 节）。
+游戏级参数（模型、类别、规则、prompt、超时、稳定帧）**不在这两类文件里**，在游戏 manifest 的 `vision_profile`（见 `backend/games/dice/parameters.md` 第 5 节）。
 
 **优先级规则**：实际每局裁决时，游戏 profile 的 `vision.model` / `vision.stable_frames` / `vision.confidence`（缺省取 `conf`）/ `multi_view.views[].camera` 会以命令行参数下发给 runtime，**覆盖**硬件配置里的同名默认值；硬件文件里没写的键回落 C++ 编译期默认值。
 

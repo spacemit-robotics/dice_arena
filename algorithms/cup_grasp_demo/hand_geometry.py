@@ -211,9 +211,9 @@ class RightRevo2Model:
         return angles
 
     def link_transforms_from_flange(
-        self, T_base_flange, *, joint_positions_rad: dict[str, float] | None = None
+        self, t_base_flange, *, joint_positions_rad: dict[str, float] | None = None
     ) -> dict[str, np.ndarray]:
-        flange = matrix(T_base_flange)
+        flange = matrix(t_base_flange)
         angles = self._angles(joint_positions_rad)
         links = {"right_base_link": matrix(flange @ self.T_flange_hand_base)}
         remaining = dict(self.joints)
@@ -233,15 +233,15 @@ class RightRevo2Model:
         return links
 
     def tip_transforms_from_flange(
-        self, T_base_flange, *, joint_positions_rad: dict[str, float] | None = None
+        self, t_base_flange, *, joint_positions_rad: dict[str, float] | None = None
     ) -> dict[str, np.ndarray]:
-        links = self.link_transforms_from_flange(T_base_flange, joint_positions_rad=joint_positions_rad)
+        links = self.link_transforms_from_flange(t_base_flange, joint_positions_rad=joint_positions_rad)
         return {finger: links[f"right_{finger}_tip_link"] for finger in FINGERS}
 
     def tip_transforms_from_palm(
-        self, T_base_palm, T_flange_palm, *, joint_positions_rad: dict[str, float] | None = None
+        self, t_base_palm, t_flange_palm, *, joint_positions_rad: dict[str, float] | None = None
     ) -> dict[str, np.ndarray]:
-        flange = matrix(matrix(T_base_palm) @ inverse(T_flange_palm))
+        flange = matrix(matrix(t_base_palm) @ inverse(t_flange_palm))
         return self.tip_transforms_from_flange(flange, joint_positions_rad=joint_positions_rad)
 
 
@@ -268,7 +268,7 @@ def _cup_point_clearance(point, support, axis, radius, height):
 
 
 def check_hand_pose(
-    T_base_flange,
+    t_base_flange,
     *,
     support_center_m,
     axis,
@@ -294,7 +294,7 @@ def check_hand_pose(
     if support.shape != (3,) or not np.isfinite(support).all():
         raise ValueError("support_center_m must be three finite metres")
     cup_axis = _unit(axis, "cup/table axis")
-    links = model.link_transforms_from_flange(T_base_flange, joint_positions_rad=joint_positions_rad)
+    links = model.link_transforms_from_flange(t_base_flange, joint_positions_rad=joint_positions_rad)
     tips = {}
     blockers = []
     for finger in FINGERS:

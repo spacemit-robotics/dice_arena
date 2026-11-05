@@ -1,5 +1,7 @@
 # Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 # SPDX-License-Identifier: Apache-2.0
+"""Hand command routing between the web and CAN paths, and refusal to close after a failure."""
+
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch

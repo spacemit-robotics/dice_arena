@@ -1,5 +1,7 @@
 # Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 # SPDX-License-Identifier: Apache-2.0
+"""Image crop profiles keep projections consistent between color and aligned depth."""
+
 import unittest
 import numpy as np
 from image_profile import profile_options, crop_intrinsics, crop_image

@@ -1,5 +1,7 @@
 # Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 # SPDX-License-Identifier: Apache-2.0
+"""Hand-eye solving quality gates, TCP composition and ChArUco detection on synthetic images."""
+
 import json
 from pathlib import Path
 import signal
@@ -173,12 +175,12 @@ class CalibrationTests(unittest.TestCase):
         single = cv2.cvtColor(single, cv2.COLOR_GRAY2BGR)
         two = cv2.cvtColor(two, cv2.COLOR_GRAY2BGR)
         before = two.copy()
-        K = np.array([[600.0, 0.0, 320.0], [0.0, 600.0, 240.0], [0.0, 0.0, 1.0]])
-        expected, _, _ = full.detect(single, K, np.zeros(5))
+        camera_matrix = np.array([[600.0, 0.0, 320.0], [0.0, 600.0, 240.0], [0.0, 0.0, 1.0]])
+        expected, _, _ = full.detect(single, camera_matrix, np.zeros(5))
         with self.assertRaisesRegex(ValueError, "Duplicate marker IDs"):
-            full.detect(two, K, np.zeros(5))
+            full.detect(two, camera_matrix, np.zeros(5))
         roi = CharucoDetector({**cfg, "image_roi_xyxy": [20, 40, 320, 440]})
-        actual, quality, _ = roi.detect(two, K, np.zeros(5))
+        actual, quality, _ = roi.detect(two, camera_matrix, np.zeros(5))
         np.testing.assert_allclose(actual, expected, atol=1e-9)
         np.testing.assert_array_equal(two, before)
         self.assertEqual(quality["corners"], 12)
@@ -186,7 +188,7 @@ class CalibrationTests(unittest.TestCase):
         # Removing the hand target must not select the table target outside the ROI.
         two[:, :320] = 255
         with self.assertRaisesRegex(ValueError, "No ChArUco markers"):
-            roi.detect(two, K, np.zeros(5))
+            roi.detect(two, camera_matrix, np.zeros(5))
 
     def test_reference_roi_covers_right_edge_and_rejects_clipped_board(self):
         cfg = json.loads((ROOT / "config/board_reference_redcloth.json").read_text())
@@ -195,15 +197,15 @@ class CalibrationTests(unittest.TestCase):
         pattern = board.generateImage((120, 150)) if hasattr(board, "generateImage") else board.draw((120, 150))
         image = np.full((720, 960, 3), 255, np.uint8)
         image[465:615, 640:760] = cv2.cvtColor(pattern, cv2.COLOR_GRAY2BGR)
-        K = np.array([[900.0, 0.0, 480.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]])
-        _, quality, _ = detector.detect(image, K, np.zeros(5))
+        camera_matrix = np.array([[900.0, 0.0, 480.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]])
+        _, quality, _ = detector.detect(image, camera_matrix, np.zeros(5))
         self.assertEqual(quality["corners"], 12)
         clipped = CharucoDetector({**cfg, "image_roi_xyxy": [520, 440, 740, 700]})
         with self.assertRaisesRegex(ValueError, r"Too few ChArUco corners:.*8/12.*520, 440, 740, 700"):
-            clipped.detect(image, K, np.zeros(5))
+            clipped.detect(image, camera_matrix, np.zeros(5))
         # A second copy outside the fixed-board ROI cannot contaminate registration.
         image[100:250, 200:320] = cv2.cvtColor(pattern, cv2.COLOR_GRAY2BGR)
-        self.assertEqual(detector.detect(image, K, np.zeros(5))[1]["corners"], 12)
+        self.assertEqual(detector.detect(image, camera_matrix, np.zeros(5))[1]["corners"], 12)
 
     def test_exclusion_keeps_full_frame_coordinates_and_rejects_fixed_board_alone(self):
         cfg = json.loads((ROOT / "config/board_4x5_21p5mm.json").read_text())
@@ -212,27 +214,27 @@ class CalibrationTests(unittest.TestCase):
         pattern = board.generateImage((200, 250)) if hasattr(board, "generateImage") else board.draw((200, 250))
         image = np.full((720, 960, 3), 255, np.uint8)
         image[450:700, 50:250] = cv2.cvtColor(pattern, cv2.COLOR_GRAY2BGR)
-        K = np.array([[900.0, 0.0, 480.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]])
-        expected, _, _ = full.detect(image, K, np.zeros(5))
+        camera_matrix = np.array([[900.0, 0.0, 480.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]])
+        expected, _, _ = full.detect(image, camera_matrix, np.zeros(5))
         image[450:700, 600:800] = cv2.cvtColor(pattern, cv2.COLOR_GRAY2BGR)
         before = image.copy()
         with self.assertRaisesRegex(ValueError, "Duplicate"):
-            full.detect(image, K, np.zeros(5))
+            full.detect(image, camera_matrix, np.zeros(5))
         detector = CharucoDetector(dict(cfg, image_exclude_rois_xyxy=[[580, 430, 820, 720]]))
-        actual, q, _ = detector.detect(image, K, np.zeros(5))
+        actual, q, _ = detector.detect(image, camera_matrix, np.zeros(5))
         np.testing.assert_allclose(actual, expected, atol=1e-9)
         np.testing.assert_array_equal(image, before)
         self.assertEqual(q["corners"], 12)
         from tools.reprocess_dimensions import measured_observation
 
-        measured, _, _, _ = measured_observation(image, detector, K, np.zeros(5), 0.0865, 0.108)
+        measured, _, _, _ = measured_observation(image, detector, camera_matrix, np.zeros(5), 0.0865, 0.108)
         single = image.copy()
         single[:, 580:] = 255
-        reference, _, _, _ = measured_observation(single, full, K, np.zeros(5), 0.0865, 0.108)
+        reference, _, _, _ = measured_observation(single, full, camera_matrix, np.zeros(5), 0.0865, 0.108)
         np.testing.assert_allclose(measured, reference, atol=1e-9)
         image[:, :300] = 255
         with self.assertRaisesRegex(ValueError, "No ChArUco markers"):
-            detector.detect(image, K, np.zeros(5))
+            detector.detect(image, camera_matrix, np.zeros(5))
 
     def test_roi_rejects_invalid_and_out_of_bounds_regions(self):
         cfg = json.loads((ROOT / "config/board_4x5_21p5mm.json").read_text())
@@ -251,14 +253,14 @@ class CalibrationTests(unittest.TestCase):
         generated = board.generateImage((400, 500)) if hasattr(board, "generateImage") else board.draw((400, 500))
         img = np.full((700, 600), 255, np.uint8)
         img[100:600, 100:500] = generated
-        K = np.array([[1000.0, 0, 300], [0, 1000.0, 350], [0, 0, 1]])
-        T, quality, _ = detector.detect(cv2.cvtColor(img, cv2.COLOR_GRAY2BGR), K, np.zeros(5))
+        camera_matrix = np.array([[1000.0, 0, 300], [0, 1000.0, 350], [0, 0, 1]])
+        board_transform, quality, _ = detector.detect(cv2.cvtColor(img, cv2.COLOR_GRAY2BGR), camera_matrix, np.zeros(5))
         self.assertGreaterEqual(quality["corners"], 6)
         square_pixels = 400 / cfg["squares_x"]
-        expected_depth = K[0, 0] * cfg["square_length_m"] / square_pixels
-        self.assertAlmostEqual(T[2, 3], expected_depth, delta=0.002)
+        expected_depth = camera_matrix[0, 0] * cfg["square_length_m"] / square_pixels
+        self.assertAlmostEqual(board_transform[2, 3], expected_depth, delta=0.002)
         with self.assertRaises(ValueError):
-            detector.detect(np.full((700, 600, 3), 255, np.uint8), K, np.zeros(5))
+            detector.detect(np.full((700, 600, 3), 255, np.uint8), camera_matrix, np.zeros(5))
 
     def test_distortion_compatibility(self):
         np.testing.assert_array_equal(opencv_distortion("distortion.inverse_brown_conrady", [0] * 5), [0] * 5)
@@ -286,7 +288,7 @@ class CalibrationTests(unittest.TestCase):
         arm, camera, detector = Mock(), Mock(), Mock()
         arm.read.return_value = np.eye(4)
         arm.read_joints.return_value = dict(joints_rad=[0.0] * 7, joints_deg=[0.0] * 7)
-        camera.K, camera.D = np.eye(3), np.zeros(5)
+        camera.camera_matrix, camera.dist_coeffs = np.eye(3), np.zeros(5)
         camera.capture.return_value = np.zeros((10, 10, 3), np.uint8)
         detector.detect.return_value = (
             pose_matrix([0, 0, 0.5, 0, 0, 0]),

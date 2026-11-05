@@ -358,7 +358,7 @@ def live_board(camera, detector, manifest, calibration, box, margin_px, image=No
     if image is None:
         image = camera.capture()
     if pose is None:
-        pose, quality, _ = detector.detect(image, camera.K, camera.D)
+        pose, quality, _ = detector.detect(image, camera.camera_matrix, camera.dist_coeffs)
     else:
         quality = None
     points = outline(pose, manifest["camera"], board_corners(manifest["board"], calibration))

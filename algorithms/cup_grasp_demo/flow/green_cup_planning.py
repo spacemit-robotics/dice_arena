@@ -139,8 +139,8 @@ def solve(target, seed, wrist_deg, *, fast_fk=False, method="trf"):
     return min(solutions, key=lambda item: item[0])[1]
 
 
-def held_cup_clearance(qs, T_flange_cup, radius, height, scene):
-    poses = Kinematics().forward_batch(qs) @ T_flange_cup
+def held_cup_clearance(qs, t_flange_cup, radius, height, scene):
+    poses = Kinematics().forward_batch(qs) @ t_flange_cup
     n = np.asarray(scene["cup_normal_base"])
     p = np.asarray(scene["cup_support_base_m"])
     alignment = poses[:, :3, 2] @ n
@@ -180,7 +180,7 @@ def arm_plan(start, targets, scene, cfg, *, held=None, cup_margin_mm=0):
         blockers=review["blockers"],
         table_screen=review,
         replan_context=dict(
-            held=None if held is None else dict(held, T_flange_cup=np.asarray(held["T_flange_cup"]).tolist()),
+            held=None if held is None else dict(held, t_flange_cup=np.asarray(held["T_flange_cup"]).tolist()),
             cup_margin_mm=cup_margin_mm,
         ),
     )

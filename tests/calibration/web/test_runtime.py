@@ -54,7 +54,7 @@ def test_repeated_or_moving_feedback_never_confirms(monkeypatch):
 def test_preview_records_each_frame_and_rejects_missing_board(tmp_path):
     (tmp_path / "commands").mkdir()
     write(tmp_path / "commands" / "001.json", {"command": "sample"})
-    camera = SimpleNamespace(K=np.eye(3), D=np.zeros(5), capture=lambda: np.zeros((20, 30, 3), np.uint8))
+    camera = SimpleNamespace(camera_matrix=np.eye(3), dist_coeffs=np.zeros(5), capture=lambda: np.zeros((20, 30, 3), np.uint8))
     detector = Mock()
     detector.detect.side_effect = ValueError("No markers")
     records = []
@@ -73,7 +73,7 @@ def test_preview_records_each_frame_and_rejects_missing_board(tmp_path):
 
 def test_camera_publishes_without_motion_loop(tmp_path):
     class Camera:
-        K, D, info = np.eye(3), np.zeros(5), {"serial": "fake"}
+        camera_matrix, dist_coeffs, info = np.eye(3), np.zeros(5), {"serial": "fake"}
 
         def capture(self):
             time.sleep(0.01)
@@ -108,8 +108,8 @@ sys.path.insert(0, str(Path.cwd()/'calibration'))
 import sensors
 class Camera:
     def __init__(self, *args, **kwargs):
-        self.K=np.array([[100.,0,32],[0,100.,24],[0,0,1.]])
-        self.D=np.zeros(5)
+        self.camera_matrix=np.array([[100.,0,32],[0,100.,24],[0,0,1.]])
+        self.dist_coeffs=np.zeros(5)
         self.info={'serial':'fake','width':64,'height':48}
     def capture(self):
         time.sleep(.03)

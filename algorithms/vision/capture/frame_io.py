@@ -200,7 +200,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--calibration", type=Path, required=True)
     parser.add_argument("--orientation-reference", type=Path, required=True)
-    parser.add_argument("--grasp-config", type=Path, default=Path(__file__).with_name("CURRENT_GRASP.json"))
+    parser.add_argument("--grasp-config", type=Path, default=Path(__file__).with_name("current_grasp.json"))
     parser.add_argument("--allow-provisional", action="store_true")
     parser.add_argument("--plane-tolerance-mm", type=float, default=3.0)
     parser.add_argument("--finger-photo-fraction", type=float, required=True)

@@ -55,7 +55,7 @@ class LiveCamera:
 
     def __init__(self, base, job):
         self.base, self.job = base, job
-        self.K, self.D, self.info = base.K, base.D, base.info
+        self.camera_matrix, self.dist_coeffs, self.info = base.camera_matrix, base.dist_coeffs, base.info
         self.condition = threading.Condition()
         self.frame = None
         self.counter = 0
@@ -138,7 +138,7 @@ class BrowserPreview:
         while True:
             image = camera.capture()
             try:
-                board, quality, vis = detector.detect(image, camera.K, camera.D)
+                board, quality, vis = detector.detect(image, camera.camera_matrix, camera.dist_coeffs)
                 detection = {"detected": True, "quality": quality}
             except ValueError as exc:
                 board = quality = None

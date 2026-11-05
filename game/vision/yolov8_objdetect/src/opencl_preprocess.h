@@ -1,7 +1,7 @@
 // Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 // SPDX-License-Identifier: Apache-2.0
-#ifndef OPENCL_PREPROCESS_H
-#define OPENCL_PREPROCESS_H
+#ifndef YOLOV8_OBJDETECT_SRC_OPENCL_PREPROCESS_H_
+#define YOLOV8_OBJDETECT_SRC_OPENCL_PREPROCESS_H_
 
 #include <memory>
 #include <opencv2/core/mat.hpp>
@@ -33,4 +33,4 @@ class OpenClPreprocessor {
     std::string device_name_;
 };
 
-#endif  // OPENCL_PREPROCESS_H
+#endif  // YOLOV8_OBJDETECT_SRC_OPENCL_PREPROCESS_H_

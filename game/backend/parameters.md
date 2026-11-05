@@ -1,6 +1,6 @@
 # 全局配置 backend/config.json 参数说明
 
-`backend/config.json` 是**项目级部署配置**（JSON 无注释，本文档就是它的注释）：描述"这台演示台跑什么引擎"，对所有游戏生效。游戏自身的玩法配置在 `backend/games/<游戏>/manifest.json`（见各游戏的 `参数说明.md`），引擎内部参数在 `backend/components/<组件>/config.json`。
+`backend/config.json` 是**项目级部署配置**（JSON 无注释，本文档就是它的注释）：描述"这台演示台跑什么引擎"，对所有游戏生效。游戏自身的玩法配置在 `backend/games/<游戏>/manifest.json`（见各游戏的 `parameters.md`），引擎内部参数在 `backend/components/<组件>/config.json`。
 
 ```json
 {

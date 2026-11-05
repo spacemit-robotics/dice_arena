@@ -336,7 +336,7 @@ def inspect_devices(job, config, base_arm, camera_factory):
             joints = arm.read_joints()
             image = camera.capture()
             try:
-                _, quality, _ = detector.detect(image, camera.K, camera.D)
+                _, quality, _ = detector.detect(image, camera.camera_matrix, camera.dist_coeffs)
                 event(job / "detection.json", detected=True, quality=quality)
             except ValueError as exc:
                 event(job / "detection.json", detected=False, reason=str(exc))

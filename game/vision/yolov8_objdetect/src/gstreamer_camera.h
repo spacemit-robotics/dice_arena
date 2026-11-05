@@ -1,7 +1,7 @@
 // Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 // SPDX-License-Identifier: Apache-2.0
-#ifndef GSTREAMER_CAMERA_H
-#define GSTREAMER_CAMERA_H
+#ifndef YOLOV8_OBJDETECT_SRC_GSTREAMER_CAMERA_H_
+#define YOLOV8_OBJDETECT_SRC_GSTREAMER_CAMERA_H_
 
 #include <gst/app/gstappsink.h>
 #include <gst/gst.h>
@@ -66,4 +66,4 @@ class GstreamerMjpegCamera {
     bool copy_reported_ = false;
 };
 
-#endif  // GSTREAMER_CAMERA_H
+#endif  // YOLOV8_OBJDETECT_SRC_GSTREAMER_CAMERA_H_

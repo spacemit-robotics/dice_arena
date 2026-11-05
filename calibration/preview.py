@@ -59,7 +59,7 @@ class CollectionPreview:
         if np.any((rotation @ corners.T + translation[:, None])[2] <= 0):
             return False, None
         rvec = cv2.Rodrigues(rotation)[0]
-        points = cv2.projectPoints(corners, rvec, translation, camera.K, camera.D)[0].reshape(-1, 2)
+        points = cv2.projectPoints(corners, rvec, translation, camera.camera_matrix, camera.dist_coeffs)[0].reshape(-1, 2)
         x0, y0, x1, y1 = self.board_window
         inside = bool(
             np.isfinite(points).all()
@@ -109,7 +109,7 @@ class CollectionPreview:
             started = time.monotonic()
             image = camera.capture()
             try:
-                board, quality, vis = detector.detect(image, camera.K, camera.D)
+                board, quality, vis = detector.detect(image, camera.camera_matrix, camera.dist_coeffs)
                 xyz = board[:3, 3] * 1000
                 lines = [
                     self.quality_text(quality),

@@ -1,8 +1,8 @@
 // Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 // SPDX-License-Identifier: Apache-2.0
 // Serialized C ABI for the C++ business state machine. No hardware access.
-#ifndef CUP_TASK_H
-#define CUP_TASK_H
+#ifndef CUP_SHAKE_CUP_TASK_H_
+#define CUP_SHAKE_CUP_TASK_H_
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -17,4 +17,4 @@ const char* cup_task_error(void* task);
 #ifdef __cplusplus
 }
 #endif
-#endif  // CUP_TASK_H
+#endif  // CUP_SHAKE_CUP_TASK_H_

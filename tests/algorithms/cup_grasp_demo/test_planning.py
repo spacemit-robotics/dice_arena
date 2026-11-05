@@ -107,7 +107,7 @@ class PlanningTests(unittest.TestCase):
             calibration,
             camera_serial=SERIAL,
             palm_position_base_m=[0.4, 0.2, 0.3],
-            current_T_base_palm=current,
+            current_t_base_palm=current,
         )
         np.testing.assert_allclose(np.asarray(preserved["T_base_palm_target"])[:3, :3], palm_orientation, atol=1e-12)
 

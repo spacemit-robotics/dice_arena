@@ -1,7 +1,7 @@
 // Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 // SPDX-License-Identifier: Apache-2.0
-#ifndef YOLOV8_DETECTOR_H
-#define YOLOV8_DETECTOR_H
+#ifndef YOLOV8_OBJDETECT_SRC_YOLOV8_DETECTOR_H_
+#define YOLOV8_OBJDETECT_SRC_YOLOV8_DETECTOR_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -44,4 +44,4 @@ class Yolov8Detector {
     std::vector<int64_t> output_shape_;
 };
 
-#endif  // YOLOV8_DETECTOR_H
+#endif  // YOLOV8_OBJDETECT_SRC_YOLOV8_DETECTOR_H_

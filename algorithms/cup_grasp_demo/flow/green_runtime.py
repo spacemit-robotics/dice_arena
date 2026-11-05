@@ -25,7 +25,7 @@ def read_json(path):
     return json.loads(Path(path).read_text())
 
 
-class _ReceiptFailure(RuntimeError):
+class _ReceiptError(RuntimeError):
     """The worker reported a motion failure while alive and idle."""
 
 
@@ -200,9 +200,9 @@ class SDKClient:
                 # Receipt-level failure: the worker is alive and idle (it just
                 # reported the failure).  Raise OUTSIDE the terminate guard so
                 # a normal motion failure never kills a healthy connection.
-                raise _ReceiptFailure(f"{report.get('error')}; 日志：{output.with_suffix('.log')}")
+                raise _ReceiptError(f"{report.get('error')}; 日志：{output.with_suffix('.log')}")
             return report
-        except _ReceiptFailure:
+        except _ReceiptError:
             raise
         except BaseException:
             # 收线只留给真需要的情况：worker 死亡（EOF/写失败）、超时

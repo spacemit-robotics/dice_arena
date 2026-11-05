@@ -1,7 +1,7 @@
 // Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 // SPDX-License-Identifier: Apache-2.0
-#ifndef RTSP_STREAMER_H
-#define RTSP_STREAMER_H
+#ifndef YOLOV8_OBJDETECT_SRC_RTSP_STREAMER_H_
+#define YOLOV8_OBJDETECT_SRC_RTSP_STREAMER_H_
 
 #include <atomic>
 #include <chrono>
@@ -60,4 +60,4 @@ class RtspStreamer {
     std::chrono::steady_clock::time_point start_time_{};
 };
 
-#endif  // RTSP_STREAMER_H
+#endif  // YOLOV8_OBJDETECT_SRC_RTSP_STREAMER_H_

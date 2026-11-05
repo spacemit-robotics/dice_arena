@@ -1,7 +1,7 @@
 // Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 // SPDX-License-Identifier: Apache-2.0
-#ifndef CONTROL_PROTOCOL_H
-#define CONTROL_PROTOCOL_H
+#ifndef YOLOV8_OBJDETECT_SRC_CONTROL_PROTOCOL_H_
+#define YOLOV8_OBJDETECT_SRC_CONTROL_PROTOCOL_H_
 
 #include <poll.h>
 #include <unistd.h>
@@ -65,4 +65,4 @@ class CommandReader {
 
 }  // namespace vision_control
 
-#endif  // CONTROL_PROTOCOL_H
+#endif  // YOLOV8_OBJDETECT_SRC_CONTROL_PROTOCOL_H_

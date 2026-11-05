@@ -122,11 +122,11 @@ def height_options(opts):
     return mode, height / 1000
 
 
-def table_from_base_scene(scene, T_base_camera):
+def table_from_base_scene(scene, t_base_camera):
     """Express the calibration-stage table plane in this camera's coordinates."""
     point = np.asarray(scene["cup_support_base_m"], dtype=float)
     normal = np.asarray(scene["cup_normal_base"], dtype=float)
-    transform = np.asarray(T_base_camera, dtype=float)
+    transform = np.asarray(t_base_camera, dtype=float)
     if (
         point.shape != (3,)
         or normal.shape != (3,)

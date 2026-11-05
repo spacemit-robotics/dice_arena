@@ -1,5 +1,7 @@
 # Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 # SPDX-License-Identifier: Apache-2.0
+"""Camera capture freshness: both streams must advance and stale frames time out."""
+
 import unittest
 from unittest.mock import Mock, patch
 from vision.capture.realsense_session import argument_parser, next_frames

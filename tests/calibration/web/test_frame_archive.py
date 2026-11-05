@@ -17,7 +17,7 @@ def devices():
     arm = Mock()
     arm.read.return_value = np.eye(4)
     arm.read_joints.return_value = {"joints_rad": [0.0] * 7, "joints_deg": [0.0] * 7, "sdk_timestamp": 123.0}
-    camera = Mock(K=np.eye(3), D=np.zeros(5), info={"serial": "offline-camera"})
+    camera = Mock(camera_matrix=np.eye(3), dist_coeffs=np.zeros(5), info={"serial": "offline-camera"})
     camera.capture.return_value = np.zeros((60, 80, 3), np.uint8)
     detector = Mock(cfg={"type": "charuco", "min_corners": 12})
     detector.detect.side_effect = [

@@ -1,5 +1,7 @@
 # Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 # SPDX-License-Identifier: Apache-2.0
+"""Pose teaching records only new joint feedback and resumes with the same detection window."""
+
 import json
 import tempfile
 import unittest

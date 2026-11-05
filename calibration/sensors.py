@@ -115,19 +115,19 @@ class RealSenseCamera:
             self.started = True
             stream = profile.get_stream(rs.stream.color).as_video_stream_profile()
             intr = stream.get_intrinsics()
-            self.K = np.array([[intr.fx, 0, intr.ppx], [0, intr.fy, intr.ppy], [0, 0, 1.0]])
+            self.camera_matrix = np.array([[intr.fx, 0, intr.ppx], [0, intr.fy, intr.ppy], [0, 0, 1.0]])
             if self.crop is not None:
-                self.K[0, 2] -= self.crop[0]
-                self.K[1, 2] -= self.crop[1]
-            self.D = opencv_distortion(str(intr.model), intr.coeffs)
+                self.camera_matrix[0, 2] -= self.crop[0]
+                self.camera_matrix[1, 2] -= self.crop[1]
+            self.dist_coeffs = opencv_distortion(str(intr.model), intr.coeffs)
             self.info = {
                 "backend": "realsense",
                 "serial": profile.get_device().get_info(rs.camera_info.serial_number),
                 "frame": "color_optical",
                 "width": intr.width,
                 "height": intr.height,
-                "camera_matrix": self.K.tolist(),
-                "dist_coeffs": self.D.tolist(),
+                "camera_matrix": self.camera_matrix.tolist(),
+                "dist_coeffs": self.dist_coeffs.tolist(),
                 "distortion_model": str(intr.model),
             }
             if self.crop is not None:
@@ -222,7 +222,7 @@ class CharucoDetector:
             ):
                 raise ValueError("Invalid excluded detection rectangle")
 
-    def detect(self, image, K, D):
+    def detect(self, image, camera_matrix, dist_coeffs):
         cv = self.cv
         detection_image = image
         if self.roi is not None:
@@ -244,7 +244,7 @@ class CharucoDetector:
         if len(np.unique(ids)) != len(ids):
             raise ValueError("Duplicate marker IDs; isolate one board with image_roi_xyxy")
         _, cc, ci = cv.aruco.interpolateCornersCharuco(
-            corners, ids, detection_image, self.board, cameraMatrix=K, distCoeffs=D
+            corners, ids, detection_image, self.board, cameraMatrix=camera_matrix, distCoeffs=dist_coeffs
         )
         if ci is None or len(ci) < self.cfg.get("min_corners", 6):
             count = 0 if ci is None else len(ci)
@@ -258,21 +258,21 @@ class CharucoDetector:
         img = np.asarray(cc, dtype=np.float64).reshape(-1, 2)
         if np.linalg.matrix_rank(obj - obj.mean(axis=0), tol=1e-7) < 2:
             raise ValueError("Detected corners are collinear")
-        ok, rv, tv = cv.solvePnP(obj, img, K, D, flags=cv.SOLVEPNP_ITERATIVE)
+        ok, rv, tv = cv.solvePnP(obj, img, camera_matrix, dist_coeffs, flags=cv.SOLVEPNP_ITERATIVE)
         if not ok or not np.isfinite(tv).all():
             raise ValueError("Board pose solve failed")
-        R = cv.Rodrigues(rv)[0]
-        if np.min((R @ obj.T + tv)[2]) <= 0:
+        rotation = cv.Rodrigues(rv)[0]
+        if np.min((rotation @ obj.T + tv)[2]) <= 0:
             raise ValueError("Board behind camera")
-        projected = cv.projectPoints(obj, rv, tv, K, D)[0].reshape(-1, 2)
+        projected = cv.projectPoints(obj, rv, tv, camera_matrix, dist_coeffs)[0].reshape(-1, 2)
         rms = float(np.sqrt(np.mean(np.sum((projected - img) ** 2, axis=1))))
         if not np.isfinite(rms) or rms > self.cfg.get("max_reprojection_px", 1.0):
             raise ValueError(f"Reprojection RMS too large: {rms:.3f} px")
         t = np.eye(4)
-        t[:3, :3], t[:3, 3] = R, tv.ravel()
+        t[:3, :3], t[:3, 3] = rotation, tv.ravel()
         vis = image.copy()
         cv.aruco.drawDetectedCornersCharuco(vis, cc, ci)
-        cv.drawFrameAxes(vis, K, D, rv, tv, self.cfg["square_length_m"] * 2)
+        cv.drawFrameAxes(vis, camera_matrix, dist_coeffs, rv, tv, self.cfg["square_length_m"] * 2)
         quality = {"corners": len(ci), "reprojection_rms_px": rms}
         if self.excluded:
             quality["image_exclude_rois_xyxy"] = self.excluded

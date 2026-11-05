@@ -125,17 +125,17 @@ def plan_palm_target(
     *,
     camera_serial,
     palm_position_base_m,
-    current_T_base_palm=None,
+    current_t_base_palm=None,
     palm_orientation_base=None,
     allow_provisional=False,
 ):
     """Form a palm target and corresponding flange target; send no command.
 
-    Exactly one orientation source is required. `current_T_base_palm` preserves
+    Exactly one orientation source is required. `current_t_base_palm` preserves
     the current palm orientation while replacing only the proposed position.
     `palm_orientation_base` is an explicit 3x3 base-frame desired orientation.
     """
-    if (current_T_base_palm is None) == (palm_orientation_base is None):
+    if (current_t_base_palm is None) == (palm_orientation_base is None):
         raise ValueError("Specify exactly one palm orientation source")
     if calibration.get("tcp") != "palm":
         raise ValueError("Palm planner requires a palm TCP calibration")
@@ -144,8 +144,8 @@ def plan_palm_target(
     )
     palm_target = np.eye(4)
     palm_target[:3, 3] = _point(palm_position_base_m, "palm target position")
-    if current_T_base_palm is not None:
-        palm_target[:3, :3] = matrix(current_T_base_palm)[:3, :3]
+    if current_t_base_palm is not None:
+        palm_target[:3, :3] = matrix(current_t_base_palm)[:3, :3]
         orientation_source = "current_palm_orientation"
     else:
         palm_target[:3, :3] = _rotation(palm_orientation_base, "palm orientation")

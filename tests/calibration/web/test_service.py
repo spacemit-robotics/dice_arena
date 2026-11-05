@@ -10,7 +10,7 @@ import pytest
 
 from calibration.web import service as module
 from calibration.web.common import CONFIG, check_pin, digest, pin_record, read, write
-from calibration.web.service import Conflict, Service
+from calibration.web.service import ConflictError, Service
 
 
 @pytest.fixture
@@ -67,14 +67,14 @@ def test_pin_hash_no_cleartext_and_validation():
 
 def test_readonly_blocks_all_jobs(service, process):
     service.readonly = True
-    with pytest.raises(Conflict, match="只读"):
+    with pytest.raises(ConflictError, match="只读"):
         service.start("first", body(), "owner", {})
     process[1].assert_not_called()
 
 
 def test_busy_is_checked_before_device_open(service, process, monkeypatch):
     monkeypatch.setattr(module, "occupied", lambda **kw: [{"pid": 24}])
-    with pytest.raises(Conflict, match="24"):
+    with pytest.raises(ConflictError, match="24"):
         service.start("first", body(), "owner", {})
     process[1].assert_not_called()
 
@@ -83,7 +83,7 @@ def test_preparation_and_recovery(service, process):
     with pytest.raises(ValueError, match="准备"):
         service.start("first", {}, "owner", {})
     service.set_recovery(True)
-    with pytest.raises(Conflict, match="检查"):
+    with pytest.raises(ConflictError, match="检查"):
         service.start("first", body(), "owner", {})
     process[1].assert_not_called()
 
@@ -91,16 +91,16 @@ def test_preparation_and_recovery(service, process):
 def test_one_owner_cannot_heartbeat_or_command_another_job(service, process):
     service.start("first", body(), "one:tab1", {})
     write(service.active["job"] / "stage.json", {"script": "calibration/calibrate.py"})
-    with pytest.raises(Conflict):
+    with pytest.raises(ConflictError):
         service.heartbeat("one:tab2")
-    with pytest.raises(Conflict):
+    with pytest.raises(ConflictError):
         service.cancel("one:tab2")
-    with pytest.raises(Conflict):
+    with pytest.raises(ConflictError):
         service.command("one:tab2", "sample")
-    with pytest.raises(Conflict):
+    with pytest.raises(ConflictError):
         service.start("inspect", body(), "two:tab1", {})
     service.command("one:tab1", "sample")
-    with pytest.raises(Conflict):
+    with pytest.raises(ConflictError):
         service.command("one:tab1", "sample")
     service.heartbeat("one:tab1")
 
@@ -115,7 +115,7 @@ def test_cancellation_keeps_locks_until_exit_and_does_not_resume(service, proces
     service.heartbeat("owner")
     assert active["record"]["status"] == "stopping"
     assert not active["device"].closed
-    with pytest.raises(Conflict):
+    with pytest.raises(ConflictError):
         service.command("owner", "sample")
     process[0].poll.return_value = 130
     service._tick()
@@ -304,7 +304,7 @@ def test_live_connection_requires_fresh_camera_and_joint_feedback(service, proce
 def test_home_starts_without_motion_opt_in_and_pending_home_blocks_registration(service, process):
     write(service.state_path, {"home_required": True})
     for action in ("register", "apply", "table"):
-        with pytest.raises(Conflict, match="HOME"):
+        with pytest.raises(ConflictError, match="HOME"):
             service.start(action, body(), "owner", {})
     process[1].assert_not_called()
     service.start("home", body(), "owner", {})

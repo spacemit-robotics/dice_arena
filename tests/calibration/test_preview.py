@@ -25,8 +25,8 @@ class PreviewTests(unittest.TestCase):
         ui = CollectionPreview.__new__(CollectionPreview)
         ui.board_window = [0, 0, 640, 480]
         camera = Mock()
-        camera.K = np.array([[1000.0, 0.0, 320.0], [0.0, 1000.0, 240.0], [0.0, 0.0, 1.0]])
-        camera.D = np.zeros(5)
+        camera.camera_matrix = np.array([[1000.0, 0.0, 320.0], [0.0, 1000.0, 240.0], [0.0, 0.0, 1.0]])
+        camera.dist_coeffs = np.zeros(5)
         detector = Mock()
         detector.cfg = {"squares_x": 4, "squares_y": 5, "square_length_m": 0.02}
         pose = pose_matrix([0, 0, 0.5, 0, 0, 0])

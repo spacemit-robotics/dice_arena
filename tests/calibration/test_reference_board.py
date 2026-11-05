@@ -1,5 +1,7 @@
 # Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 # SPDX-License-Identifier: Apache-2.0
+"""Fixed reference board registration and camera recovery after the camera moves."""
+
 import copy
 import json
 import tempfile
@@ -143,7 +145,7 @@ class ReferenceTests(unittest.TestCase):
         calls = []
 
         class Camera:
-            K, D, info = np.eye(3), np.zeros(5), {"serial": "test"}
+            camera_matrix, dist_coeffs, info = np.eye(3), np.zeros(5), {"serial": "test"}
 
             def __init__(self, *args, **kwargs):
                 pass
@@ -158,7 +160,7 @@ class ReferenceTests(unittest.TestCase):
             def __init__(self, cfg):
                 pass
 
-            def detect(self, image, K, D):
+            def detect(self, image, camera_matrix, dist_coeffs):
                 calls.append(len(calls))
                 if calls[-1] in misses:
                     raise ValueError("Too few ChArUco corners: 角点不足（10/12）")

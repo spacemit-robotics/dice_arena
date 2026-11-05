@@ -36,7 +36,7 @@ from calibration.web.quality import evaluate, approval_key
 QUALITY_CHECKPOINTS = {"auto", "restore", "apply", "table"}
 
 
-class Conflict(ValueError):
+class ConflictError(ValueError):
     pass
 
 
@@ -116,7 +116,7 @@ class Service:
 
     def source(self, action):
         if action in ("register", "apply", "table") and read(self.state_path, {}).get("home_required"):
-            raise Conflict("请先回 HOME 并确认到位，再进行固定板或桌面登记")
+            raise ConflictError("请先回 HOME 并确认到位，再进行固定板或桌面登记")
         if action == "plan":
             path = self.selected("teaching_calibration")
         elif action == "auto":
@@ -154,22 +154,22 @@ class Service:
     def idle(self):
         processes = occupied()
         if processes:
-            raise Conflict(
+            raise ConflictError(
                 "设备被其他程序占用，请正常退出原程序后重新检测：" + "、".join(str(p["pid"]) for p in processes)
             )
 
     def start(self, action, body, owner, session):
         with self.mutex:
             if self.readonly:
-                raise Conflict("当前为只读预览模式，不连接硬件或执行作业")
+                raise ConflictError("当前为只读预览模式，不连接硬件或执行作业")
             if self.closing or self.active:
-                raise Conflict("已有作业正在运行或释放设备，请等待结束")
+                raise ConflictError("已有作业正在运行或释放设备，请等待结束")
             if action not in ACTIONS:
                 raise ValueError("未知操作")
             if action in HARDWARE and body.get("prepared") is not True:
                 raise ValueError("请先确认页面上的现场准备事项")
             if self.recovery_required and action in HARDWARE and action != "inspect":
-                raise Conflict("上次设备状态未确认，请先运行设备检查")
+                raise ConflictError("上次设备状态未确认，请先运行设备检查")
             source = self.source(action)
             approval = None
             new_approval = None
@@ -270,7 +270,7 @@ class Service:
 
     def require_owner(self, owner):
         if not self.active or self.active["owner"] != owner:
-            raise Conflict("此页面不持有当前作业控制权；请回到启动作业的页面")
+            raise ConflictError("此页面不持有当前作业控制权；请回到启动作业的页面")
         return self.active
 
     def heartbeat(self, owner):
@@ -296,7 +296,7 @@ class Service:
         with self.mutex:
             active = self.require_owner(owner)
             if active["cancel_at"] is not None:
-                raise Conflict("正在停止，不能继续采样")
+                raise ConflictError("正在停止，不能继续采样")
             action = active["record"]["action"]
             if command not in ("sample", "finish") or action not in ("first", "inspect"):
                 raise ValueError("此作业不接受采样操作")
@@ -304,18 +304,18 @@ class Service:
                 raise ValueError("设备检查不能保存标定样本")
             stage = read(active["job"] / "stage.json", {}).get("script")
             if action == "first" and stage != "calibration/calibrate.py":
-                raise Conflict("采样尚未开始或已进入求解阶段")
+                raise ConflictError("采样尚未开始或已进入求解阶段")
             if command == "sample" and read(active["job"] / "progress.json", {}).get("phase") == "capturing":
-                raise Conflict("正在采样，请保持静止，等待当前采样结束")
+                raise ConflictError("正在采样，请保持静止，等待当前采样结束")
             pending = list((active["job"] / "commands").glob("*.json"))
             if pending:
-                raise Conflict("上一条操作尚未完成")
+                raise ConflictError("上一条操作尚未完成")
             write(active["job"] / "commands" / f"{time.time_ns()}.json", {"command": command})
 
     def window(self, box):
         with self.mutex:
             if self.readonly or self.active:
-                raise Conflict("请在作业结束后保存可见范围")
+                raise ConflictError("请在作业结束后保存可见范围")
             dataset = self.selected("teaching_dataset")
             # Never rewrite the bundled historical trajectory used by the CLI.
             if not dataset.is_relative_to(self.data / "datasets"):

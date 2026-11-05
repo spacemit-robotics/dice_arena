@@ -122,7 +122,7 @@ def capture_sample(arm, camera, detector, frame_check=None, frame_observer=None)
                 camera=camera.info, board=detector.cfg, transform_units="metres", joint_units="radians_and_degrees"
             )
         try:
-            board, quality, vis = detector.detect(image, camera.K, camera.D)
+            board, quality, vis = detector.detect(image, camera.camera_matrix, camera.dist_coeffs)
             if frame_check is not None:
                 frame_check(image, board)
             poses.append(arm.read())
@@ -294,7 +294,7 @@ def main(argv=None):
             if not cv2.imwrite(str(args.dataset / "color.png"), image):
                 raise RuntimeError("Image write failed")
             try:
-                board, quality, vis = detector.detect(image, camera.K, camera.D)
+                board, quality, vis = detector.detect(image, camera.camera_matrix, camera.dist_coeffs)
                 cv2.imwrite(str(args.dataset / "detected.png"), vis)
                 write_new(args.dataset / "detection.json", {"T_camera_board": board.tolist(), "quality": quality})
                 print(json.dumps({"camera": camera.info, "detection": quality}))

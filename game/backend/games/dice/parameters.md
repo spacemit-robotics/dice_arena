@@ -18,7 +18,7 @@
 
 ## 2. providers（组件槽位）—— 可选，不写即继承全局
 
-引擎选择已上收到**全局配置** `backend/config.json`（字段说明见 `backend/参数说明.md`），骰子 manifest **不再声明槽位**。需要例外时（某游戏想用不同引擎）在本 manifest 覆盖对应槽位，优先级：台词级钉死 > 本 manifest > 全局。
+引擎选择已上收到**全局配置** `backend/config.json`（字段说明见 `backend/parameters.md`），骰子 manifest **不再声明槽位**。需要例外时（某游戏想用不同引擎）在本 manifest 覆盖对应槽位，优先级：台词级钉死 > 本 manifest > 全局。
 
 | 槽位 | 当前全局值 | 用途 |
 |---|---|---|
@@ -31,7 +31,7 @@
 
 ## 3. asr（语音输入）
 
-**开关不在本 manifest**：是否启用语音由全局配置 `backend/config.json` 的 `asr_enabled` 唯一决定（详见 `backend/参数说明.md`）；本 manifest 只声明这个游戏的触发词表。
+**开关不在本 manifest**：是否启用语音由全局配置 `backend/config.json` 的 `asr_enabled` 唯一决定（详见 `backend/parameters.md`）；本 manifest 只声明这个游戏的触发词表。
 
 | 字段 | 说明 |
 |---|---|
@@ -137,7 +137,7 @@
 
 `{"action":"robot","command":...}` 把机械臂动作挂进 `on_enter`。**禁 `await`**（物理动作
 天生后台执行，加载期校验拒绝）；执行器由全局 `providers.robot_arm` 槽位解析（见
-`backend/参数说明.md`），缺槽/坏件 = 命令失败 → `arm_failed` 兜底，不炸回合。
+`backend/parameters.md`），缺槽/坏件 = 命令失败 → `arm_failed` 兜底，不炸回合。
 
 | 字段 | 说明 |
 |---|---|

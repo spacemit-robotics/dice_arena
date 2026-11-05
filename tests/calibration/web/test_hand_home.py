@@ -1,5 +1,7 @@
 # Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 # SPDX-License-Identifier: Apache-2.0
+"""Web HOME actions command the hand through the framework only when the arm is still."""
+
 from unittest.mock import Mock
 
 import pytest

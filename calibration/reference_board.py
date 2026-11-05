@@ -173,7 +173,7 @@ def observe(board_path, serial, reference_id, output, frame_count):
             image = camera.capture()
             write_image_new(output / f"frame_{i:03d}.png", image)
             try:
-                t, quality, vis = detector.detect(image, camera.K, camera.D)
+                t, quality, vis = detector.detect(image, camera.camera_matrix, camera.dist_coeffs)
             except ValueError as exc:
                 rejected.append({"frame_index": i, "reason": str(exc), "time_unix_s": time.time()})
             else:
