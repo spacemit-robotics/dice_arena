@@ -1,0 +1,11 @@
+# Python formatting and naming checks for docs/coding_standards.md.
+line-length = 100
+# Third-party MOSS-TTS-Nano runtime, kept as distributed.
+extend-exclude = ["game/tts/moss-tts-nano"]
+
+[lint]
+select = ["E501", "W", "N", "F"]
+
+[lint.per-file-ignores]
+# ReplanStart signals a new planning round; it is not an error.
+"algorithms/cup_grasp_demo/flow/green_pipeline.py" = ["N818"]

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Dice Arena adapter for the board-local MOSS-TTS-Nano runtime."""
 
 from __future__ import annotations
@@ -97,7 +99,8 @@ class TtsMossNano(TtsProvider):
         text, voice, speed = self.validate(payload)
         if abs(speed - 1.0) > 1e-6:
             raise TtsValidationError(
-                "tts_moss_nano currently supports only speed=1.0; the MOSS SpaceMIT runtime has no speed parameter"
+                "tts_moss_nano currently supports only speed=1.0; the MOSS SpaceMIT runtime has no "
+                "speed parameter"
             )
         requested_voice = MOSS_VOICE if voice == "default" else voice
         if requested_voice != MOSS_VOICE:
@@ -132,7 +135,11 @@ class TtsMossNano(TtsProvider):
             with urllib.request.urlopen(request, timeout=MOSS_TIMEOUT_SECONDS) as response:
                 audio = response.read()
                 content_type = response.headers.get("Content-Type", "audio/wav")
-                headers = {name: value for name, value in response.headers.items() if name.lower().startswith("x-tts-")}
+                headers = {
+                    name: value
+                    for name, value in response.headers.items()
+                    if name.lower().startswith("x-tts-")
+                }
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")[:500]
             raise TtsServiceError(f"provider={self.id} HTTP {exc.code}: {detail}") from exc
@@ -164,4 +171,6 @@ class TtsMossNano(TtsProvider):
             detail = exc.read().decode("utf-8", errors="replace")[:500]
             raise TtsServiceError(f"provider={self.id} HTTP {exc.code}: {detail}") from exc
         except (OSError, urllib.error.URLError, TimeoutError) as exc:
-            raise TtsServiceError(f"provider={self.id} stream unavailable at {MOSS_URL}: {exc}") from exc
+            raise TtsServiceError(
+                f"provider={self.id} stream unavailable at {MOSS_URL}: {exc}"
+            ) from exc

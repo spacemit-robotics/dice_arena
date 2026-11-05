@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Rigid TCP transforms and eye-to-hand solve. No hardware imports."""
 
 import json
@@ -24,7 +26,14 @@ def pose_matrix(pose):
     if p.shape != (6,) or not np.isfinite(p).all():
         raise ValueError("pose must contain six finite values (m, rad)")
     r, t, y = p[3:]
-    cr, sr, ct, st, cy, sy = math.cos(r), math.sin(r), math.cos(t), math.sin(t), math.cos(y), math.sin(y)
+    cr, sr, ct, st, cy, sy = (
+        math.cos(r),
+        math.sin(r),
+        math.cos(t),
+        math.sin(t),
+        math.cos(y),
+        math.sin(y),
+    )
     out = np.eye(4)
     out[:3, :3] = [
         [cy * ct, cy * st * sr - sy * cr, cy * st * cr + sy * sr],
@@ -60,7 +69,9 @@ def distance(a, b):
     return float(np.linalg.norm(a[:3, 3] - b[:3, 3])), math.degrees(angle)
 
 
-HAND_BASE = pose_matrix([0.031, 0, -0.0235, -1.5708, 0, -1.5708]) @ pose_matrix([0, 0, 0.012, 0, 0, 3.1415926])
+HAND_BASE = pose_matrix([0.031, 0, -0.0235, -1.5708, 0, -1.5708]) @ pose_matrix(
+    [0, 0, 0.012, 0, 0, 3.1415926]
+)
 # Model-derived reference point; not a factory-defined or calibrated palm center.
 HAND_PALM = pose_matrix([0.007931305737821843, 0, 0.041068125, 0, 0, 0])
 HAND_PALM[:3, :3] = [[0, 0, 1], [0, -1, 0], [1, 0, 0]]

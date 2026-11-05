@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """The application protocol advances phases without reopening hardware."""
 
 from contextlib import nullcontext
@@ -76,7 +78,9 @@ class ControlSessionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             green = dict(home_table_scene="table.json", open_targets_0_100=[0] * 6)
             flow = SimpleNamespace(
-                cfg=dict(green_cup=green, home="home.json", calibration="cal.json"), root=tmp, _sdk=Mock()
+                cfg=dict(green_cup=green, home="home.json", calibration="cal.json"),
+                root=tmp,
+                _sdk=Mock(),
             )
             recipe = dict(
                 gesture="home",
@@ -95,7 +99,10 @@ class ControlSessionTest(unittest.TestCase):
                 patch("scripts.action_registry.load_registry", return_value=registry),
                 patch(
                     "cup_grasp_demo.flow.core.read_json",
-                    side_effect=[dict(calibration_sha256="hash", scene={}), dict(joints_deg=[0] * 7)],
+                    side_effect=[
+                        dict(calibration_sha256="hash", scene={}),
+                        dict(joints_deg=[0] * 7),
+                    ],
                 ),
                 patch("cup_grasp_demo.flow.core.digest", return_value="hash"),
                 patch("scripts.result_feedback.execute_recipe") as execute,
@@ -110,14 +117,19 @@ class ControlSessionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             green = dict(home_table_scene="table.json")
             flow = SimpleNamespace(
-                cfg=dict(green_cup=green, home="home.json", calibration="cal.json"), root=tmp, _sdk=Mock()
+                cfg=dict(green_cup=green, home="home.json", calibration="cal.json"),
+                root=tmp,
+                _sdk=Mock(),
             )
             registry = Mock(errors=[])
             registry.names.return_value = ["yeah"]
             diagnostic = io.StringIO()
             with (
                 patch("scripts.action_registry.load_registry", return_value=registry),
-                patch("cup_grasp_demo.flow.core.read_json", side_effect=[dict(calibration_sha256="hash", scene={})]),
+                patch(
+                    "cup_grasp_demo.flow.core.read_json",
+                    side_effect=[dict(calibration_sha256="hash", scene={})],
+                ),
                 patch("cup_grasp_demo.flow.core.digest", return_value="hash"),
             ):
                 names, _ = control.build_action_runtime(flow, diagnostic)
@@ -130,7 +142,9 @@ class ControlSessionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             green = dict(home_table_scene="table.json")
             flow = SimpleNamespace(
-                cfg=dict(green_cup=green, home="home.json", calibration="cal.json"), root=tmp, _sdk=Mock()
+                cfg=dict(green_cup=green, home="home.json", calibration="cal.json"),
+                root=tmp,
+                _sdk=Mock(),
             )
             recipe = dict(gesture="home", joints_deg=[1] * 7)
             registry = Mock(errors=[])
@@ -141,7 +155,10 @@ class ControlSessionTest(unittest.TestCase):
                 patch("scripts.action_registry.load_registry", return_value=registry),
                 patch(
                     "cup_grasp_demo.flow.core.read_json",
-                    side_effect=[dict(calibration_sha256="hash", scene={}), dict(joints_deg=[0] * 7)],
+                    side_effect=[
+                        dict(calibration_sha256="hash", scene={}),
+                        dict(joints_deg=[0] * 7),
+                    ],
                 ),
                 patch("cup_grasp_demo.flow.core.digest", return_value="hash"),
             ):
@@ -165,14 +182,19 @@ class ControlSessionTest(unittest.TestCase):
                 '{"id":"step","command":"advance"}\n'
                 '{"id":"step","command":"advance"}\nquit\n'
             )
-            server = control.ControlSession(flow, Path(directory) / "state.json", incoming, output, io.StringIO())
+            server = control.ControlSession(
+                flow, Path(directory) / "state.json", incoming, output, io.StringIO()
+            )
             self.assertEqual(server.serve(), 0)
             self.assertEqual(
-                [call.args[0] for call in flow.perform.call_args_list], list(control.PHASES) * 2 + ["HOME"]
+                [call.args[0] for call in flow.perform.call_args_list],
+                list(control.PHASES) * 2 + ["HOME"],
             )
             reports = events(output)
             self.assertEqual(sum(e["event"] == "run_completed" for e in reports), 2)
-            self.assertEqual([e["code"] for e in reports if e["event"] == "rejected"], ["duplicate_id"])
+            self.assertEqual(
+                [e["code"] for e in reports if e["event"] == "rejected"], ["duplicate_id"]
+            )
             self.assertEqual(reports[-1]["event"], "closed")
 
     def test_terminal_errors_help_and_blank_lines_never_move(self):
@@ -180,16 +202,21 @@ class ControlSessionTest(unittest.TestCase):
             flow = self.fake_flow()
             output = io.StringIO()
             incoming = io.StringIO(
-                '\n \nhelp\n?\nstatus\nactions\nrun extra\nuntil\naction\nuntil typo\n{"command":\nnull\n[]\n23\nquit\n'
+                "\n \nhelp\n?\nstatus\nactions\nrun extra\nuntil\naction\nuntil "
+                'typo\n{"command":\nnull\n[]\n23\nquit\n'
             )
-            server = control.ControlSession(flow, Path(directory) / "state.json", incoming, output, io.StringIO())
+            server = control.ControlSession(
+                flow, Path(directory) / "state.json", incoming, output, io.StringIO()
+            )
             self.assertEqual(server.serve(), 0)
             flow.perform.assert_not_called()
             reports = events(output)
             self.assertEqual(sum(e["event"] == "help" for e in reports), 2)
             self.assertCountEqual(
                 [e["code"] for e in reports if e["event"] == "rejected"],
-                ["invalid_command"] * 3 + ["invalid_phase", "invalid_json"] + ["invalid_request"] * 3,
+                ["invalid_command"] * 3
+                + ["invalid_phase", "invalid_json"]
+                + ["invalid_request"] * 3,
             )
 
     def test_terminal_action_keeps_flow_guard_and_json_id(self):
@@ -216,7 +243,9 @@ class ControlSessionTest(unittest.TestCase):
                 [e["code"] for e in reports if e["event"] == "rejected"],
                 ["flow_in_progress", "flow_in_progress", "already_completed"],
             )
-            self.assertTrue(any(e["event"] == "command_completed" and e["id"] == "finish" for e in reports))
+            self.assertTrue(
+                any(e["event"] == "command_completed" and e["id"] == "finish" for e in reports)
+            )
 
     def test_waits_after_target_and_advances_only_on_next_command(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -226,31 +255,45 @@ class ControlSessionTest(unittest.TestCase):
                 send(dict(id="one", command="advance", until="GRIP"))
                 self.assertTrue(
                     wait_for(
-                        lambda evs: any(e.get("event") == "command_completed" and e.get("id") == "one" for e in evs)
+                        lambda evs: any(
+                            e.get("event") == "command_completed" and e.get("id") == "one"
+                            for e in evs
+                        )
                     )
                 )
                 send(dict(id="check", command="status"))
                 self.assertTrue(
-                    wait_for(lambda evs: any(e.get("event") == "status" and e.get("id") == "check" for e in evs))
+                    wait_for(
+                        lambda evs: any(
+                            e.get("event") == "status" and e.get("id") == "check" for e in evs
+                        )
+                    )
                 )
                 send(dict(id="two", command="advance"))
                 self.assertTrue(
                     wait_for(
-                        lambda evs: any(e.get("event") == "command_completed" and e.get("id") == "two" for e in evs)
+                        lambda evs: any(
+                            e.get("event") == "command_completed" and e.get("id") == "two"
+                            for e in evs
+                        )
                     )
                 )
                 send(dict(id="end", command="close"))
 
             server, outgoing, _, _ = threaded_session(flow, directory, script)
             self.assertEqual(server.serve(), 0)
-            self.assertEqual([call.args[0] for call in flow.perform.call_args_list], list(control.PHASES[:6]))
+            self.assertEqual(
+                [call.args[0] for call in flow.perform.call_args_list], list(control.PHASES[:6])
+            )
             reports = events(outgoing)
             self.assertEqual(reports[0]["event"], "ready")
             check = next(item for item in reports if item.get("id") == "check")
             self.assertEqual(check["next_phase"], "LIFT")
             self.assertEqual(check["status"], "WAITING")
             self.assertEqual(reports[-1]["event"], "closed")
-            self.assertEqual(json.loads((Path(directory) / "state.json").read_text())["status"], "PAUSED")
+            self.assertEqual(
+                json.loads((Path(directory) / "state.json").read_text())["status"], "PAUSED"
+            )
 
     def test_no_skip_replay_or_unexpected_new_cycle(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -295,7 +338,9 @@ class ControlSessionTest(unittest.TestCase):
                     io.StringIO(),
                 )
                 with (
-                    patch("cup_grasp_demo.flow.core.read_json", return_value=dict(joints_deg=home_deg)),
+                    patch(
+                        "cup_grasp_demo.flow.core.read_json", return_value=dict(joints_deg=home_deg)
+                    ),
                     patch("cup_grasp_demo.flow.debug.new_run", return_value=Path(tmp) / "pose_run"),
                 ):
                     self.assertEqual(server.serve(), 0)
@@ -351,7 +396,11 @@ class ControlSessionTest(unittest.TestCase):
             completed = [x for x in reports if x["event"] == "run_completed"]
             self.assertEqual(len(completed), 1)
             self.assertEqual(completed[0]["runs"], 1)
-            after = [x for x in reports if x["event"] == "command_completed" and x.get("through") == "RETURN_HOME"]
+            after = [
+                x
+                for x in reports
+                if x["event"] == "command_completed" and x.get("through") == "RETURN_HOME"
+            ]
             self.assertEqual(after[0]["next_phase"], "HOME")
 
     def test_action_dispatches_in_idle_and_records_history(self):
@@ -407,7 +456,9 @@ class ControlSessionTest(unittest.TestCase):
                 flow,
                 Path(directory) / "state.json",
                 commands(
-                    dict(command="advance", until="GRIP"), dict(command="action", name="home"), dict(command="close")
+                    dict(command="advance", until="GRIP"),
+                    dict(command="action", name="home"),
+                    dict(command="close"),
                 ),
                 outgoing,
                 io.StringIO(),
@@ -445,13 +496,20 @@ class ControlSessionTest(unittest.TestCase):
 
             def script(send, wait_for):
                 send(dict(command="reload"))
-                self.assertTrue(wait_for(lambda evs: any(e.get("event") == "actions_reloaded" for e in evs)))
+                self.assertTrue(
+                    wait_for(lambda evs: any(e.get("event") == "actions_reloaded" for e in evs))
+                )
                 send(dict(command="actions"))
                 self.assertTrue(wait_for(lambda evs: any(e.get("event") == "actions" for e in evs)))
                 send(dict(command="close"))
 
             server, outgoing, _, _ = threaded_session(
-                flow, directory, script, actions=["home", "yeah"], run_action=Mock(), reload_actions=fresh_actions
+                flow,
+                directory,
+                script,
+                actions=["home", "yeah"],
+                run_action=Mock(),
+                reload_actions=fresh_actions,
             )
             self.assertEqual(server.serve(), 0)
             reports = events(outgoing)
@@ -467,7 +525,11 @@ class ControlSessionTest(unittest.TestCase):
             server = control.ControlSession(
                 flow,
                 Path(directory) / "state.json",
-                commands(dict(command="advance", until="GRIP"), dict(command="reload"), dict(command="close")),
+                commands(
+                    dict(command="advance", until="GRIP"),
+                    dict(command="reload"),
+                    dict(command="close"),
+                ),
                 outgoing,
                 io.StringIO(),
                 reload_actions=lambda: (["home"], Mock()),
@@ -509,7 +571,9 @@ class ControlSessionTest(unittest.TestCase):
                 flow,
                 Path(directory) / "state.json",
                 commands(
-                    dict(command="advance", until="RETURN_HOME", rounds=3), dict(command="stop"), dict(command="close")
+                    dict(command="advance", until="RETURN_HOME", rounds=3),
+                    dict(command="stop"),
+                    dict(command="close"),
                 ),
                 outgoing,
                 io.StringIO(),
@@ -534,7 +598,9 @@ class ControlSessionTest(unittest.TestCase):
             self.assertEqual(server.serve(), 2)
             self.assertEqual(flow.perform.call_count, 2)
             self.assertEqual(events(outgoing)[-1]["event"], "failed")
-            self.assertEqual(json.loads((Path(directory) / "state.json").read_text())["status"], "FAILED")
+            self.assertEqual(
+                json.loads((Path(directory) / "state.json").read_text())["status"], "FAILED"
+            )
 
     def test_phase_logs_do_not_pollute_json_events(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -612,7 +678,9 @@ class ImmediateProbeTests(unittest.TestCase):
                 # 从执行体内发探测：应答必须先于动作完成到达。
                 handles["send"](dict(id="probe", command="status"))
                 if not handles["wait_for"](
-                    lambda evs: any(e.get("event") == "status" and e.get("id") == "probe" for e in evs)
+                    lambda evs: any(
+                        e.get("event") == "status" and e.get("id") == "probe" for e in evs
+                    )
                 ):
                     raise RuntimeError("status 探测在动作执行中未被即时应答")
                 return dict(name=name, receipt="receipt.json", elapsed_s=0.01)
@@ -632,7 +700,8 @@ class ImmediateProbeTests(unittest.TestCase):
             self.assertEqual(probe["event"], "status")
             self.assertEqual(probe["status"], "RUNNING")
             self.assertLess(
-                [x.get("id") for x in reports].index("probe"), [x["event"] for x in reports].index("action_completed")
+                [x.get("id") for x in reports].index("probe"),
+                [x["event"] for x in reports].index("action_completed"),
             )
 
     def test_query_pose_answers_busy_immediately_while_action_runs(self):
@@ -685,7 +754,9 @@ class ImmediateProbeTests(unittest.TestCase):
             self.assertEqual(server.serve(), 0)
             reports = events(outgoing)
             ids = [x.get("id") for x in reports]
-            self.assertLess([x["event"] for x in reports].index("action_completed"), ids.index("second"))
+            self.assertLess(
+                [x["event"] for x in reports].index("action_completed"), ids.index("second")
+            )
             self.assertEqual(reports[-1]["event"], "closed")
 
     def test_status_and_query_pose_during_phase_execution(self):
@@ -719,7 +790,8 @@ class ImmediateProbeTests(unittest.TestCase):
             self.assertEqual(status["event"], "status")
             self.assertEqual(status["status"], "RUNNING")
             self.assertLess(
-                [x.get("id") for x in reports].index("s"), [x["event"] for x in reports].index("command_completed")
+                [x.get("id") for x in reports].index("s"),
+                [x["event"] for x in reports].index("command_completed"),
             )
             busy = next(x for x in reports if x.get("id") == "p")
             self.assertEqual(busy["event"], "rejected")
@@ -775,7 +847,9 @@ class RecoveryTests(unittest.TestCase):
             seq = [x["event"] for x in reports]
             self.assertLess(seq.index("failed"), seq.index("recovery_started"))
             self.assertLess(seq.index("recovery_started"), seq.index("recovered"))
-            _after = next(x for x in reports if x.get("id") == "after" and x["event"] == "action_completed")
+            _after = next(
+                x for x in reports if x.get("id") == "after" and x["event"] == "action_completed"
+            )
             state = json.loads((Path(directory) / "state.json").read_text())
             self.assertEqual(state["status"], "PAUSED")
             self.assertIn("boom", state["last_failure"])
@@ -897,7 +971,9 @@ class RecoveryTests(unittest.TestCase):
             def run_action(name):
                 calls.append(name)
                 if name == "yeah":
-                    raise RuntimeError("SDK worker exited (write failed): ValueError: I/O operation on closed file")
+                    raise RuntimeError(
+                        "SDK worker exited (write failed): ValueError: I/O operation on closed file"
+                    )
                 return dict(name=name, receipt="receipt.json", elapsed_s=0.1)
 
             outgoing = io.StringIO()
@@ -929,7 +1005,9 @@ class RecoveryTests(unittest.TestCase):
             def run_action(name):
                 calls.append(name)
                 if name == "yeah":
-                    raise RuntimeError("TimeoutError: Missing live controller limits (after one retry)")
+                    raise RuntimeError(
+                        "TimeoutError: Missing live controller limits (after one retry)"
+                    )
                 return dict(name=name, receipt="receipt.json", elapsed_s=0.1)
 
             outgoing = io.StringIO()

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Contact geometry regressions independent of cameras, CAN, and learned models."""
 
 import unittest
@@ -16,14 +18,21 @@ class IndexPreviewTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             run = Path(temp)
             (run / "rgbd").mkdir()
-            meta = dict(serial="test", intrinsics={}, depth_scale_m=0.001, depth_registered_to="color_optical")
+            meta = dict(
+                serial="test",
+                intrinsics={},
+                depth_scale_m=0.001,
+                depth_registered_to="color_optical",
+            )
             for i, depth in enumerate(
                 ([[0, 65535], [700, 700]], [[65535, 0], [65535, 702]], [[65535, 65535], [0, 704]])
             ):
                 path = run / "rgbd" / f"frame_{i:03d}"
                 path.with_suffix(".json").write_text(json.dumps(meta))
                 np.savez(
-                    path.with_suffix(".npz"), depth=np.array(depth, np.uint16), color=np.zeros((2, 2, 3), np.uint8)
+                    path.with_suffix(".npz"),
+                    depth=np.array(depth, np.uint16),
+                    color=np.zeros((2, 2, 3), np.uint8),
                 )
             _, depth, _, _ = load_batch(run)
             np.testing.assert_array_equal(depth, [[0, 0], [700, 702]])
@@ -47,9 +56,13 @@ class IndexPreviewTests(unittest.TestCase):
         old = section(points, origin, normal, 0.6, Config())
         center = np.array(current["center_camera_m"])
         self.assertAlmostEqual(float((center - origin) @ normal), current["height_m"] * 9 / 11)
-        self.assertLess(np.linalg.norm(center - origin - current["contact_height_m"] * normal), 1e-6)
+        self.assertLess(
+            np.linalg.norm(center - origin - current["contact_height_m"] * normal), 1e-6
+        )
         self.assertGreater(current["radius_m"] - old["radius_m"], 0.002)
-        self.assertAlmostEqual(current["radius_m"], 0.025 + 0.1 * current["contact_height_m"], delta=0.0002)
+        self.assertAlmostEqual(
+            current["radius_m"], 0.025 + 0.1 * current["contact_height_m"], delta=0.0002
+        )
 
     def test_surface_ray_chooses_outer_skin_and_rejects_missing_mesh(self):
         tri = np.array([[[x, -1.0, -1.0], [x, 1.0, -1.0], [x, 0.0, 1.0]] for x in [-0.006, 0.005]])

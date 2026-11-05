@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Fault-injection tests for fresh feedback and separate camera publication."""
 
 import os
@@ -27,8 +29,15 @@ class FakeClock:
 
 def arm_with(q, stamps):
     arm = Mock()
-    arm.read_joints.side_effect = [{"joints_rad": q(i), "sdk_timestamp": s} for i, s in enumerate(stamps)]
-    arm.state.return_value = {"moving": False, "fault": False, "enabled": True, "position_mode": True}
+    arm.read_joints.side_effect = [
+        {"joints_rad": q(i), "sdk_timestamp": s} for i, s in enumerate(stamps)
+    ]
+    arm.state.return_value = {
+        "moving": False,
+        "fault": False,
+        "enabled": True,
+        "position_mode": True,
+    }
     return arm
 
 
@@ -52,7 +61,11 @@ def test_repeated_or_moving_feedback_never_confirms(monkeypatch):
 def test_preview_records_each_frame_and_rejects_missing_board(tmp_path):
     (tmp_path / "commands").mkdir()
     write(tmp_path / "commands" / "001.json", {"command": "sample"})
-    camera = SimpleNamespace(K=np.eye(3), D=np.zeros(5), capture=lambda: np.zeros((20, 30, 3), np.uint8))
+    camera = SimpleNamespace(
+        camera_matrix=np.eye(3),
+        dist_coeffs=np.zeros(5),
+        capture=lambda: np.zeros((20, 30, 3), np.uint8),
+    )
     detector = Mock()
     detector.detect.side_effect = ValueError("No markers")
     records = []
@@ -71,7 +84,7 @@ def test_preview_records_each_frame_and_rejects_missing_board(tmp_path):
 
 def test_camera_publishes_without_motion_loop(tmp_path):
     class Camera:
-        K, D, info = np.eye(3), np.zeros(5), {"serial": "fake"}
+        camera_matrix, dist_coeffs, info = np.eye(3), np.zeros(5), {"serial": "fake"}
 
         def capture(self):
             time.sleep(0.01)
@@ -106,8 +119,8 @@ sys.path.insert(0, str(Path.cwd()/'calibration'))
 import sensors
 class Camera:
     def __init__(self, *args, **kwargs):
-        self.K=np.array([[100.,0,32],[0,100.,24],[0,0,1.]])
-        self.D=np.zeros(5)
+        self.camera_matrix=np.array([[100.,0,32],[0,100.,24],[0,0,1.]])
+        self.dist_coeffs=np.zeros(5)
         self.info={'serial':'fake','width':64,'height':48}
     def capture(self):
         time.sleep(.03)
@@ -126,7 +139,7 @@ import framework
 framework.pin = lambda motion: None
 framework.close = lambda: None
 sensors.RealSenseCamera=Camera
-sensors.NeroFeedback=Arm
+sensors.ArmFeedback=Arm
 from calibration.web.worker import main
 main()
 """
@@ -143,7 +156,10 @@ def make_job(tmp_path, action):
         hand_board="calibration/config/board_4x5_21p5mm.json",
     )
     write(job / "config.json", config)
-    write(job / "request.json", {"action": action, "heartbeat_timeout": 1 if action == "inspect" else 10})
+    write(
+        job / "request.json",
+        {"action": action, "heartbeat_timeout": 1 if action == "inspect" else 10},
+    )
     write(job / "heartbeat.json", {"monotonic": time.monotonic()})
     return job, config
 
@@ -231,20 +247,26 @@ def test_board_validation_at_capture_not_startup(tmp_path, monkeypatch, action, 
     write(plan, {"calibration": str(calibration), "board": {}})
     capture = Mock()
     if observation in ("missing", "partial"):
-        capture.side_effect = ValueError("No board" if observation == "missing" else "Incomplete board")
+        capture.side_effect = ValueError(
+            "No board" if observation == "missing" else "Incomplete board"
+        )
     else:
         observed = np.eye(4)
         if observation == "fixed_table":
             observed[0, 3] = 0.3
         capture.return_value = (
-            {"T_base_flange": ident, "T_camera_board": observed.tolist(), "quality": {"corners": 12}},
+            {
+                "T_base_flange": ident,
+                "T_camera_board": observed.tolist(),
+                "quality": {"corners": 12},
+            },
             None,
             None,
         )
     ready, detector = Mock(), Mock()
     for obj, name, value in [
         (sensors, "RealSenseCamera", sensors.RealSenseCamera),
-        (sensors, "NeroFeedback", sensors.NeroFeedback),
+        (sensors, "ArmFeedback", sensors.ArmFeedback),
         (sensors, "CharucoDetector", detector),
         (calibrate, "capture_sample", capture),
         (preview, "CollectionPreview", preview.CollectionPreview),
@@ -271,16 +293,26 @@ def test_board_validation_at_capture_not_startup(tmp_path, monkeypatch, action, 
     capture.assert_not_called()
     frame_check = Mock()
     for attempt in range(2):
-        if observation in ("missing", "partial") or (action == "auto" and observation == "fixed_table"):
+        if observation in ("missing", "partial") or (
+            action == "auto" and observation == "fixed_table"
+        ):
             with pytest.raises(ValueError):
                 auto_collect.capture_sample(arm, camera, detector, frame_check=frame_check)
-            assert read(job / "capture_frames" / f"attempt_{attempt:04d}" / "capture.json")["status"] == "rejected"
+            assert (
+                read(job / "capture_frames" / f"attempt_{attempt:04d}" / "capture.json")["status"]
+                == "rejected"
+            )
         else:
-            assert auto_collect.capture_sample(arm, camera, detector, frame_check=frame_check) == capture.return_value
+            assert (
+                auto_collect.capture_sample(arm, camera, detector, frame_check=frame_check)
+                == capture.return_value
+            )
             saved = read(job / "capture_frames" / f"attempt_{attempt:04d}" / "capture.json")
             assert saved["status"] == "capture_validated"
             assert saved["sample"]["frame_archive"].endswith(f"attempt_{attempt:04d}")
-        capture.assert_called_with(arm, camera, detector, frame_check=frame_check, frame_observer=ANY)
+        capture.assert_called_with(
+            arm, camera, detector, frame_check=frame_check, frame_observer=ANY
+        )
     # Return HOME likewise performs readiness without a board visibility gate.
     auto_collect.ensure_can_control(arm)
     assert ready.call_count == 2
@@ -301,7 +333,9 @@ def test_web_auto_returns_home_only_after_successful_solve(tmp_path, monkeypatch
         self.save(result="saved-result.json")
 
     monkeypatch.setattr(Workflow, "run", run)
-    monkeypatch.setattr(BrowserWorkflow, "return_to_home", lambda self: order.append(("home", self.state["result"])))
+    monkeypatch.setattr(
+        BrowserWorkflow, "return_to_home", lambda self: order.append(("home", self.state["result"]))
+    )
     flow.run("auto")
     assert order == [("collect_and_solve", "auto"), ("home", "saved-result.json")]
     assert "home_required" not in read(config["state_file"])  # no motion readiness in this stub
@@ -318,7 +352,9 @@ def test_web_auto_returns_home_only_after_successful_solve(tmp_path, monkeypatch
 
 
 @pytest.mark.parametrize("feedback", ["home", "elsewhere", "stale"])
-def test_home_completion_requires_arrival_and_fresh_stationary_feedback(tmp_path, monkeypatch, feedback):
+def test_home_completion_requires_arrival_and_fresh_stationary_feedback(
+    tmp_path, monkeypatch, feedback
+):
     import home_start
     import sensors
     from calibration.web import worker
@@ -329,7 +365,7 @@ def test_home_completion_requires_arrival_and_fresh_stationary_feedback(tmp_path
     move = Mock(return_value=target)
     monkeypatch.setattr(home_start, "return_home", move)
     arm = Mock()
-    monkeypatch.setattr(sensors, "NeroFeedback", Mock(return_value=arm))
+    monkeypatch.setattr(sensors, "ArmFeedback", Mock(return_value=arm))
     proof = {
         "confirmed": True,
         "joints_rad": target if feedback == "home" else [v + 0.1 for v in target],

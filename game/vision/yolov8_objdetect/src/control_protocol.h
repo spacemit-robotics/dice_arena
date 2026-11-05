@@ -1,5 +1,7 @@
-#ifndef CONTROL_PROTOCOL_H
-#define CONTROL_PROTOCOL_H
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
+#ifndef YOLOV8_OBJDETECT_SRC_CONTROL_PROTOCOL_H_
+#define YOLOV8_OBJDETECT_SRC_CONTROL_PROTOCOL_H_
 
 #include <poll.h>
 #include <unistd.h>
@@ -15,13 +17,16 @@ namespace vision_control {
 // coalesce adjacent JSONL writes, so callers must drain every complete line
 // before polling the kernel fd again.
 class CommandReader {
-    public:
+public:
     std::vector<std::string> read_ready(int fd, int timeout_ms) {
         std::vector<std::string> commands;
         drain_complete_lines(commands);
         if (!commands.empty() || fd < 0 || closed_) return commands;
 
-        struct pollfd pfd{fd, POLLIN | POLLHUP | POLLERR, 0};
+        struct pollfd pfd {
+            fd, POLLIN | POLLHUP | POLLERR, 0
+        };
+
         int ready = 0;
         do {
             ready = ::poll(&pfd, 1, timeout_ms);
@@ -48,7 +53,7 @@ class CommandReader {
 
     bool closed() const { return closed_; }
 
-    private:
+private:
     void drain_complete_lines(std::vector<std::string>& commands) {
         std::size_t newline = std::string::npos;
         while ((newline = buffer_.find('\n')) != std::string::npos) {
@@ -63,4 +68,4 @@ class CommandReader {
 
 }  // namespace vision_control
 
-#endif  // CONTROL_PROTOCOL_H
+#endif  // YOLOV8_OBJDETECT_SRC_CONTROL_PROTOCOL_H_

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Focused read-only checks for the official right-Revo2 fingertip screen."""
 
 import copy
@@ -35,7 +37,9 @@ class HandGeometryTest(unittest.TestCase):
         for name in from_flange:
             np.testing.assert_allclose(from_flange[name], from_palm[name], atol=1e-10)
             self.assertTrue(np.isfinite(from_flange[name]).all())
-        self.assertEqual(model.provenance["model_sources"][2]["path"].split("/")[-1], "revo2_right_hand.urdf")
+        self.assertEqual(
+            model.provenance["model_sources"][2]["path"].split("/")[-1], "revo2_right_hand.urdf"
+        )
 
     def test_urdf_mimic_and_limit_validation(self):
         model = self.model
@@ -44,7 +48,9 @@ class HandGeometryTest(unittest.TestCase):
         actual = model._angles(angles)["right_index_distal_joint"]
         self.assertAlmostEqual(actual, expected)
         open_tip = model.tip_transforms_from_flange(np.eye(4))["index"]
-        flexed_tip = model.tip_transforms_from_flange(np.eye(4), joint_positions_rad=angles)["index"]
+        flexed_tip = model.tip_transforms_from_flange(np.eye(4), joint_positions_rad=angles)[
+            "index"
+        ]
         self.assertGreater(np.linalg.norm(open_tip[:3, 3] - flexed_tip[:3, 3]), 0.01)
         for bad in (
             {"right_index_proximal_joint": 99.0},
@@ -103,8 +109,12 @@ class HandGeometryTest(unittest.TestCase):
         self.assertFalse(report["contact_table_margin_passed"])
         self.assertFalse(report["contact_geometry_passed"])
         self.assertFalse(report["actual_hand_posture_verified"])
-        self.assertEqual(report["joint_linear_paths"]["clearance"]["first_possible_collision_sample"], None)
-        self.assertIsNotNone(report["joint_linear_paths"]["contact"]["first_possible_collision_sample"])
+        self.assertEqual(
+            report["joint_linear_paths"]["clearance"]["first_possible_collision_sample"], None
+        )
+        self.assertIsNotNone(
+            report["joint_linear_paths"]["contact"]["first_possible_collision_sample"]
+        )
         self.assertFalse(report["motion_sent"])
         self.assertEqual(
             report["stages"]["contact"]["flange_target_pose"]["hand_posture_source"],
@@ -124,7 +134,12 @@ class HandGeometryTest(unittest.TestCase):
             check_plan_geometry(plan, ik_review=forged)
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "report.json"
-            self.assertEqual(main(["--plan", str(plan_path), "--ik-review", str(ik_path), "--output", str(output)]), 0)
+            self.assertEqual(
+                main(
+                    ["--plan", str(plan_path), "--ik-review", str(ik_path), "--output", str(output)]
+                ),
+                0,
+            )
             self.assertFalse(json.loads(output.read_text())["contact_geometry_passed"])
             self.assertEqual(main(["--plan", str(plan_path), "--output", str(output)]), 2)
 

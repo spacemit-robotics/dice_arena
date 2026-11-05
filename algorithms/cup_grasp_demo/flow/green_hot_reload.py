@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Transactional parameter refresh at CONTROL's serialized idle boundary.
 
 No watcher thread touches hardware or an in-flight plan. Configuration errors
@@ -15,14 +17,22 @@ def tuning_paths(config, green):
     paths = {Path(config).resolve(), (ROOT / green["joint_test_config"]).resolve()}
     strategy = green.get("strategy_file")
     if strategy is not None:
-        path = ROOT / strategy if str(strategy).endswith(".json") else ROOT / "vision/strategy" / f"{strategy}.json"
+        path = (
+            ROOT / strategy
+            if str(strategy).endswith(".json")
+            else ROOT / "vision/strategy" / f"{strategy}.json"
+        )
         paths.add(path.resolve())
     return paths
 
 
 def vision_key(cfg):
     green = cfg["green_cup"]
-    return (green["perception"], green.get("rtsp", {}), green.get("fast_uncompressed_capture", False))
+    return (
+        green["perception"],
+        green.get("rtsp", {}),
+        green.get("fast_uncompressed_capture", False),
+    )
 
 
 class ParameterReloader:
@@ -62,12 +72,18 @@ class ParameterReloader:
             for key in ("persistent_runtime", "hot_reload"):
                 if candidate.g.get(key, True) != flow.g.get(key, True):
                     raise ValueError(f"{key} 变化需要重启应用")
-            candidate._hot_reload_paths = {str(p) for p in tuning_paths(candidate.args.config, candidate.g)}
+            candidate._hot_reload_paths = {
+                str(p) for p in tuning_paths(candidate.args.config, candidate.g)
+            }
             old_fixed = {p: h for p, h in flow.hashes.items() if p not in flow._hot_reload_paths}
-            new_fixed = {p: h for p, h in candidate.hashes.items() if p not in candidate._hot_reload_paths}
+            new_fixed = {
+                p: h for p, h in candidate.hashes.items() if p not in candidate._hot_reload_paths
+            }
             if old_fixed != new_fixed:
                 raise ValueError("标定、HOME、桌面、参考姿态、模型或程序变化需要重启应用")
-            actions, run_action = build_action_runtime(candidate, self.diagnostic, strict=True, runtime_flow=flow)
+            actions, run_action = build_action_runtime(
+                candidate, self.diagnostic, strict=True, runtime_flow=flow
+            )
             if before != self.manifest():
                 raise ValueError("参数保存尚未完成，请保存完毕后重试")
             # The full parser/registry read must correspond to the manifest.
@@ -82,7 +98,9 @@ class ParameterReloader:
             raise
 
         changed = sorted(
-            p for p in set(before) | set(self.accepted or {}) if before.get(p) != (self.accepted or {}).get(p)
+            p
+            for p in set(before) | set(self.accepted or {})
+            if before.get(p) != (self.accepted or {}).get(p)
         )
         # Drain old preplanning/capture tasks before sharing resources with a new
         # snapshot. No SDK/CAN reconnection for ordinary speed/offset/hand edits.

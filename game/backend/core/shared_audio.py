@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Single-production speech fanout and cancellable default-sink board playback.
 
 The engine's notification path only enqueues events. Synthesis, disk IO and
@@ -136,7 +138,11 @@ class SpeechClip:
 
 class SharedAudio:
     def __init__(
-        self, *, produce: Callable, player_factory: Callable = PipeWirePlayer, clock: Callable = time.monotonic
+        self,
+        *,
+        produce: Callable,
+        player_factory: Callable = PipeWirePlayer,
+        clock: Callable = time.monotonic,
     ):
         self._produce, self._player_factory, self._clock = produce, player_factory, clock
         self._lock = threading.RLock()
@@ -167,7 +173,10 @@ class SharedAudio:
             if clip is not None:
                 return clip
             clip = SpeechClip(round_, dict(directive))
-            if directive.get("state_version") != current_version or round_.snapshot()["status"] != "running":
+            if (
+                directive.get("state_version") != current_version
+                or round_.snapshot()["status"] != "running"
+            ):
                 # An old browser must never replace current speech with history.
                 clip.cancelled.set()
                 clip.done = clip.finished = True
@@ -177,8 +186,12 @@ class SharedAudio:
             if previous:
                 previous.cancelled.set()
             self._active[round_.id] = clip
-            threading.Thread(target=self._generate, args=(clip,), name="shared-audio-producer", daemon=True).start()
-            threading.Thread(target=self._play, args=(clip,), name="board-audio-player", daemon=True).start()
+            threading.Thread(
+                target=self._generate, args=(clip,), name="shared-audio-producer", daemon=True
+            ).start()
+            threading.Thread(
+                target=self._play, args=(clip,), name="board-audio-player", daemon=True
+            ).start()
             return clip
 
     def _generate(self, clip):
@@ -233,7 +246,9 @@ class SharedAudio:
             }
         )
         if clip.directive.get("notify_start"):
-            clip.round.submit_intent("speech_started", {"directive_id": clip.directive["directive_id"]})
+            clip.round.submit_intent(
+                "speech_started", {"directive_id": clip.directive["directive_id"]}
+            )
 
     def _wait_until(self, deadline, clip):
         while self._valid(clip) and self._clock() < deadline:
@@ -247,7 +262,8 @@ class SharedAudio:
             while self._valid(clip):
                 with clip.condition:
                     clip.condition.wait_for(
-                        lambda: len(clip.frames) > index or clip.done or clip.cancelled.is_set(), 0.1
+                        lambda: len(clip.frames) > index or clip.done or clip.cancelled.is_set(),
+                        0.1,
                     )
                     frame = clip.frames[index] if index < len(clip.frames) else None
                     done = clip.done
@@ -280,10 +296,14 @@ class SharedAudio:
                         self._start(clip)
                 index += 1
             if self._valid(clip) and clip.started is not None:
-                deadline = clip.started + max(clip.duration, float(clip.directive.get("playback_seconds") or 0))
+                deadline = clip.started + max(
+                    clip.duration, float(clip.directive.get("playback_seconds") or 0)
+                )
                 if player:
                     try:
-                        player.finish(lambda: not self._valid(clip), max(deadline, self._clock()) + 10)
+                        player.finish(
+                            lambda: not self._valid(clip), max(deadline, self._clock()) + 10
+                        )
                     except InterruptedError:
                         pass
                     except Exception as exc:
@@ -299,14 +319,18 @@ class SharedAudio:
             # failure and cancellation; duplicate done is engine-idempotent.
             try:
                 if clip.round.snapshot()["status"] == "running":
-                    clip.round.submit_intent("speech_done", {"directive_id": clip.directive["directive_id"]})
+                    clip.round.submit_intent(
+                        "speech_done", {"directive_id": clip.directive["directive_id"]}
+                    )
             except Exception:
                 pass
             clip.finished = True
             clip.expires_at = self._clock() + 45
             with clip.condition:
                 clip.condition.notify_all()
-            clip.round.emit_observation({"event": "audio_finished", "directive_id": clip.directive["directive_id"]})
+            clip.round.emit_observation(
+                {"event": "audio_finished", "directive_id": clip.directive["directive_id"]}
+            )
 
     def current(self, round_):
         with self._lock:
@@ -315,7 +339,9 @@ class SharedAudio:
             return None
         return {
             **clip.directive,
-            "position_seconds": max(0, self._clock() - clip.started) if clip.started is not None else 0,
+            "position_seconds": max(0, self._clock() - clip.started)
+            if clip.started is not None
+            else 0,
             "board_error": clip.board_error,
         }
 
@@ -325,7 +351,9 @@ class SharedAudio:
         index = 0
         while not self._stop.is_set():
             with clip.condition:
-                clip.condition.wait_for(lambda: index < len(clip.frames) or clip.done or clip.cancelled.is_set(), 0.2)
+                clip.condition.wait_for(
+                    lambda: index < len(clip.frames) or clip.done or clip.cancelled.is_set(), 0.2
+                )
                 available = list(clip.frames[index:])
                 index += len(available)
                 done, error = clip.done, clip.error
@@ -347,7 +375,11 @@ class SharedAudio:
                 "worker_running": self._worker.is_alive(),
                 "cached_directives": len(self._clips),
                 "active": [
-                    {"round_id": c.round.id, "directive_id": c.directive["directive_id"], "board_error": c.board_error}
+                    {
+                        "round_id": c.round.id,
+                        "directive_id": c.directive["directive_id"],
+                        "board_error": c.board_error,
+                    }
                     for c in self._active.values()
                     if not c.finished
                 ],

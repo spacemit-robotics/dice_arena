@@ -1,3 +1,7 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
+"""Validation of the table plane settings in the green cup configuration."""
+
 import copy
 import unittest
 from unittest.mock import patch
@@ -17,5 +21,8 @@ class PlaneConfigTests(unittest.TestCase):
 
     def test_green_rejects_invalid(self):
         for value in [0, 6.01, float("inf"), float("nan")]:
-            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "plane_tolerance_mm"):
+            with (
+                self.subTest(value=value),
+                self.assertRaisesRegex(ValueError, "plane_tolerance_mm"),
+            ):
                 self.config(True, value)

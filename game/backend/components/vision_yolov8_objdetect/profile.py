@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Loading and validation for game visual-adjudication profiles."""
 
 from __future__ import annotations
@@ -115,7 +117,8 @@ def load_runtime_config(path: Path) -> dict[str, Any]:
         if marker not in _unknown_key_warnings:
             _unknown_key_warnings.add(marker)
             print(
-                f"[vision] runtime config {path}: unknown keys are ignored by the C++ runtime: {', '.join(unknown)}",
+                f"[vision] runtime config {path}: unknown keys are ignored by the C++ runtime: "
+                f"{', '.join(unknown)}",
                 flush=True,
             )
     if payload.get("divider_colors", "red_blue") not in ("red_blue", "green_gray"):
@@ -139,7 +142,13 @@ def _required_string(value: Any, field: str) -> str:
 def _validate_video_path(path: Any) -> str:
     path = _required_string(path, "video.path")
     parsed = urlsplit(path)
-    if not path.startswith("/") or parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+    if (
+        not path.startswith("/")
+        or parsed.scheme
+        or parsed.netloc
+        or parsed.query
+        or parsed.fragment
+    ):
         raise ProfileError("video.path must be a URL path")
     if ".." in Path(path).parts or any(ord(ch) < 32 for ch in path):
         raise ProfileError("video.path contains unsafe characters")
@@ -157,7 +166,12 @@ def _validate_camera(value: Any, field: str) -> str:
 def _validate_base_url(value: Any, field: str = "video.webrtc_base_url") -> str:
     value = _required_string(value, field)
     parsed = urlsplit(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.username
+        or parsed.password
+    ):
         raise ProfileError(f"{field} must be an absolute HTTP(S) URL")
     if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
         raise ProfileError(f"{field} must not contain a path or query")
@@ -182,7 +196,9 @@ def validate_profile(profile: dict[str, Any]) -> dict[str, Any]:
     # camera and RTSP setup.
     declared = profile.get("runtime_config")
     if not isinstance(declared, str) or not declared.strip():
-        raise ProfileError("runtime_config is required and must be a non-empty repository-relative path")
+        raise ProfileError(
+            "runtime_config is required and must be a non-empty repository-relative path"
+        )
     resolve_project_path(declared.strip())
     vision = profile.get("vision")
     if not isinstance(vision, dict):
@@ -257,7 +273,12 @@ def validate_profile(profile: dict[str, Any]) -> dict[str, Any]:
     normalized_timeouts = {"adjudication_seconds": float(adjudication_timeout)}
     for field, default in (("yolo_detection_seconds", adjudication_timeout),):
         value = timeouts.get(field, default)
-        if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value <= 0:
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(value)
+            or value <= 0
+        ):
             raise ProfileError(f"timeouts.{field} must be a positive number")
         normalized_timeouts[field] = float(value)
     profile["timeouts"] = normalized_timeouts
@@ -282,7 +303,9 @@ def validate_profile(profile: dict[str, Any]) -> dict[str, Any]:
         or pre_wait < 0
         or pre_wait > 300
     ):
-        raise ProfileError("lifecycle.pre_adjudication_wait_seconds must be between 0 and 300 seconds")
+        raise ProfileError(
+            "lifecycle.pre_adjudication_wait_seconds must be between 0 and 300 seconds"
+        )
 
     multi = profile.get("multi_view", {"enabled": False, "min_views": 1})
     if not isinstance(multi, dict) or not isinstance(multi.get("enabled", False), bool):
@@ -330,7 +353,10 @@ def load_component_config(package_dir: Path) -> dict[str, Any]:
     if payload.get("schema_version") != 1:
         raise ProfileError("component config schema_version must be 1")
     runtime = payload.get("runtime")
-    if not isinstance(runtime, dict) or runtime.get("mode", "per_request") not in {"per_request", "resident"}:
+    if not isinstance(runtime, dict) or runtime.get("mode", "per_request") not in {
+        "per_request",
+        "resident",
+    }:
         raise ProfileError("runtime.mode must be per_request or resident")
     if "binary" in runtime:
         resolve_project_path(runtime["binary"])
@@ -338,7 +364,8 @@ def load_component_config(package_dir: Path) -> dict[str, Any]:
         resolve_project_path(runtime["working_dir"])
     if "config" in runtime:
         raise ProfileError(
-            "runtime.config was removed; each game declares its own hardware file through vision_profile.runtime_config"
+            "runtime.config was removed; each game declares its own hardware file through "
+            "vision_profile.runtime_config"
         )
     video = payload.get("video", {})
     if not isinstance(video, dict):

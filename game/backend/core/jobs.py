@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Generic async job lifecycle with structured provider events.
 
 A job exposes two deliberately separate channels:
@@ -92,7 +94,9 @@ class ComponentJob:
         phase = event.get("phase")
         if isinstance(phase, str) and phase and not self._terminal:
             self.phase = phase
-        if (event.get("event") == "complete" or event.get("phase") == "complete") and not self._terminal:
+        if (
+            event.get("event") == "complete" or event.get("phase") == "complete"
+        ) and not self._terminal:
             self._complete_requested = True
         self.revision += 1
 
@@ -137,7 +141,11 @@ class ComponentJob:
                     # structured job protocol so clients never need to parse
                     # stdout logs.
                     self._append_event_locked({"event": "result", **result})
-            if isinstance(result, dict) and result.get("diagnosed") and result.get("retry_required"):
+            if (
+                isinstance(result, dict)
+                and result.get("diagnosed")
+                and result.get("retry_required")
+            ):
                 diagnosis = result.get("diagnosis")
                 message = diagnosis.get("message") if isinstance(diagnosis, dict) else None
                 self.result = result

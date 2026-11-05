@@ -1,3 +1,7 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
+"""Image crop profiles keep projections consistent between color and aligned depth."""
+
 import unittest
 import numpy as np
 from image_profile import profile_options, crop_intrinsics, crop_image
@@ -17,10 +21,17 @@ class CropTest(unittest.TestCase):
     def test_rgb_aligned_depth_same_crop(self):
         d = np.arange(1280 * 720).reshape(720, 1280)
         c = np.stack([d] * 3, axis=-1)
-        np.testing.assert_array_equal(crop_image(c, [220, 0, 960, 720])[:, :, 0], crop_image(d, [220, 0, 960, 720]))
+        np.testing.assert_array_equal(
+            crop_image(c, [220, 0, 960, 720])[:, :, 0], crop_image(d, [220, 0, 960, 720])
+        )
 
     def test_legacy_default_and_invalid_crop(self):
         self.assertEqual(profile_options(), ([640, 480], 15, None))
-        for crop in ([220, 0, 1280, 720], [-1, 0, 960, 720], [220, 0, 0, 720], [220.0, 0, 960, 720]):
+        for crop in (
+            [220, 0, 1280, 720],
+            [-1, 0, 960, 720],
+            [220, 0, 0, 720],
+            [220.0, 0, 960, 720],
+        ):
             with self.assertRaises(ValueError):
                 profile_options(dict(color_resolution=[1280, 720], crop_xywh=crop))

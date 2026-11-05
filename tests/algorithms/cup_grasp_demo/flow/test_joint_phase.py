@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Phase-delayed shake stays within the original per-axis kinematic budgets."""
 
 import math
@@ -18,10 +20,18 @@ class PhaseTest(unittest.TestCase):
         if phases is not None:
             cfg["phase_delay_deg"] = phases
         limits = [
-            dict(joint=j, min_angle_rad=-3, max_angle_rad=3, max_velocity_rad_s=4, max_acceleration_rad_s2=5)
+            dict(
+                joint=j,
+                min_angle_rad=-3,
+                max_angle_rad=3,
+                max_velocity_rad_s=4,
+                max_acceleration_rad_s2=5,
+            )
             for j in range(1, 8)
         ]
-        return p.make_plan(dict(success=True, q_after_rad=[0] * 7, limits=limits), cfg, [(-3, 3)] * 7)
+        return p.make_plan(
+            dict(success=True, q_after_rad=[0] * 7, limits=limits), cfg, [(-3, 3)] * 7
+        )
 
     def test_omitted_or_zero_phase_preserves_old_trajectory(self):
         a, b = self.plan(), self.plan([0] * 4)
@@ -47,7 +57,9 @@ class PhaseTest(unittest.TestCase):
             self.assertTrue(all(abs(e) < 1e-10 for e in p.reference_errors({"q_rad": q}, plan, t)))
         self.assertEqual(plan["samples"][0]["q_rad"], [0] * 7)
         self.assertEqual(plan["samples"][-1]["q_rad"], [0] * 7)
-        self.assertEqual(plan["joint_peak_acceleration_rad_s2"], base["joint_peak_acceleration_rad_s2"])
+        self.assertEqual(
+            plan["joint_peak_acceleration_rad_s2"], base["joint_peak_acceleration_rad_s2"]
+        )
         self.assertEqual(plan["joint_peak_velocity_rad_s"], base["joint_peak_velocity_rad_s"])
         # Continuous start/stop; shifted velocity and acceleration obey same bounds.
         dt = 1e-4
@@ -55,9 +67,12 @@ class PhaseTest(unittest.TestCase):
             t = k * plan["duration_s"] / 1000
             a, b, c = [p.joint_values(plan, t + x * dt) for x in (-1, 0, 1)]
             for j in range(7):
-                self.assertLessEqual(abs((c[j] - a[j]) / (2 * dt)), plan["joint_peak_velocity_rad_s"][j] + 1e-6)
                 self.assertLessEqual(
-                    abs((c[j] - 2 * b[j] + a[j]) / dt**2), plan["joint_peak_acceleration_rad_s2"][j] + 1e-5
+                    abs((c[j] - a[j]) / (2 * dt)), plan["joint_peak_velocity_rad_s"][j] + 1e-6
+                )
+                self.assertLessEqual(
+                    abs((c[j] - 2 * b[j] + a[j]) / dt**2),
+                    plan["joint_peak_acceleration_rad_s2"][j] + 1e-5,
                 )
 
     def test_invalid_phase_rejected(self):

@@ -1,5 +1,7 @@
-#ifndef GSTREAMER_CAMERA_H
-#define GSTREAMER_CAMERA_H
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
+#ifndef YOLOV8_OBJDETECT_SRC_GSTREAMER_CAMERA_H_
+#define YOLOV8_OBJDETECT_SRC_GSTREAMER_CAMERA_H_
 
 #include <gst/app/gstappsink.h>
 #include <gst/gst.h>
@@ -18,25 +20,29 @@ struct GstreamerFrame {
 };
 
 class GstreamerMjpegCamera {
-    public:
+public:
     GstreamerMjpegCamera() = default;
     ~GstreamerMjpegCamera();
     GstreamerMjpegCamera(const GstreamerMjpegCamera&) = delete;
 
-    bool open(int camera_index, const std::string& device, int width, int height, int fps, int focus = 0,
-        int zoom = 181, int max_frames = 0);
+    bool open(int camera_index, const std::string& device, int width, int height, int fps,
+              int focus = 0, int zoom = 181, int max_frames = 0);
     bool read(GstreamerFrame& frame, int timeout_ms = 1000);
     // Compatibility API: this necessarily makes a detached copy because a
     // bare cv::Mat cannot retain the GstBuffer mapping lifetime.
     bool read(cv::Mat& nv12, int timeout_ms = 1000);
     void close();
     bool isOpen() const;
+
     const std::string& device() const { return device_; }
+
     const std::string& pipeline() const { return pipeline_description_; }
+
     const std::string& decoder() const { return decoder_; }
+
     int negotiated_fps() const { return negotiated_fps_; }
 
-    private:
+private:
     bool configureControls() const;
     bool openPipeline(const std::string& decoder, int candidate_fps, std::string& error);
     bool pullFrame(GstreamerFrame& frame, int timeout_ms, std::string& error);
@@ -64,4 +70,4 @@ class GstreamerMjpegCamera {
     bool copy_reported_ = false;
 };
 
-#endif  // GSTREAMER_CAMERA_H
+#endif  // YOLOV8_OBJDETECT_SRC_GSTREAMER_CAMERA_H_

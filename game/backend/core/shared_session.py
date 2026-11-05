@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """One display session and one input queue for all board/web/ASR clients.
 
 Providers stay outside this module. The injected round factory owns hardware;
@@ -46,7 +48,9 @@ class SharedSession:
         self._id = uuid.uuid4().hex
         self._revision = 0
         self._round = None
-        self._shared = bool(config().get("input_board_enable", False)) and not self._legacy_running()
+        self._shared = (
+            bool(config().get("input_board_enable", False)) and not self._legacy_running()
+        )
         self._phase = (
             "standby"
             if self._standby().get("boot_standby", True) and self._standby().get("enabled", True)
@@ -104,7 +108,9 @@ class SharedSession:
 
     def wait_for_update(self, revision, timeout=15):
         with self._condition:
-            self._condition.wait_for(lambda: self._revision != revision or self._stop.is_set(), timeout)
+            self._condition.wait_for(
+                lambda: self._revision != revision or self._stop.is_set(), timeout
+            )
             return self._snapshot_locked()
 
     def _changed(self):
@@ -142,7 +148,9 @@ class SharedSession:
             with self._condition:
                 key = cmd.get("request_id")
                 if key is not None and (not isinstance(key, str) or not key or len(key) > 200):
-                    raise InvalidRequestError("request_id must be a non-empty string of at most 200 characters")
+                    raise InvalidRequestError(
+                        "request_id must be a non-empty string of at most 200 characters"
+                    )
                 if key and key in self._responses:
                     previous, result = self._responses[key]
                     if previous != cmd:
@@ -191,7 +199,9 @@ class SharedSession:
                 self._changed()
         elif action in {"navigate", "select"}:
             if self._round:
-                raise DiceArenaError("selection is only available in the hall", "SESSION_STALE", 409)
+                raise DiceArenaError(
+                    "selection is only available in the hall", "SESSION_STALE", 409
+                )
             games = self._games()
             if action == "select":
                 game = cmd.get("game")
@@ -202,7 +212,9 @@ class SharedSession:
                 if cmd.get("direction") not in {"up", "down"}:
                     raise InvalidRequestError("direction must be up/down")
                 index = games.index(self._selected) if self._selected in games else 0
-                self._selected = games[(index + (1 if cmd["direction"] == "down" else -1)) % len(games)]
+                self._selected = games[
+                    (index + (1 if cmd["direction"] == "down" else -1)) % len(games)
+                ]
             self._phase = "select"
             self._changed()
         elif action == "enter":
@@ -262,7 +274,9 @@ class SharedSession:
 
             if self._round.status == "error":
                 return (
-                    self._execute({"action": "enter" if key == "confirm" else "exit", "round_id": current})
+                    self._execute(
+                        {"action": "enter" if key == "confirm" else "exit", "round_id": current}
+                    )
                     if key in {"confirm", "back"}
                     else self._snapshot_locked()
                 )
@@ -319,7 +333,9 @@ class SharedSession:
                 self._round.cancel()
                 self._return_hall()
             standby = self._standby()
-            if standby.get("enabled", True) and now - self._last_activity >= float(standby.get("idle_seconds", 120)):
+            if standby.get("enabled", True) and now - self._last_activity >= float(
+                standby.get("idle_seconds", 120)
+            ):
                 if (
                     self._round
                     and (self._round.state in _WAITING_STATES or self._round.status == "error")
@@ -330,7 +346,11 @@ class SharedSession:
                 elif self._phase == "select":
                     self._phase = "standby"
                     self._changed()
-            hall_key = (self._phase, repr(self._config().get("game_select")), self._config().get("asr_enabled"))
+            hall_key = (
+                self._phase,
+                repr(self._config().get("game_select")),
+                self._config().get("asr_enabled"),
+            )
             if self._round is None and self._hall_key != hall_key:
                 self._on_hall(self._phase)
                 self._hall_key = hall_key

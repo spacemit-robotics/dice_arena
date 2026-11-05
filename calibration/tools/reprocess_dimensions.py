@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Offline board-dimension correction from saved RGB images. No hardware access."""
 
 import argparse
@@ -16,11 +18,13 @@ from core import distance, matrix, solve  # noqa: E402
 from sensors import CharucoDetector  # noqa: E402
 
 
-def measured_observation(image, detector, K, D, width_m, height_m):
+def measured_observation(image, detector, camera_matrix, dist_coeffs, width_m, height_m):
     """Retain the recorded detector/ROI; solve PnP with measured X/Y grid spacing."""
     if not (np.isfinite([width_m, height_m]).all() and 0 < width_m < 1 and 0 < height_m < 1):
         raise ValueError("Board width and height must be positive and below one metre")
-    detector.detect(image, K, D)  # Apply the original marker, ROI and quality checks.
+    detector.detect(
+        image, camera_matrix, dist_coeffs
+    )  # Apply the original marker, ROI and quality checks.
     a = image
     if detector.roi is not None:
         x0, y0, x1, y1 = detector.roi
@@ -31,25 +35,32 @@ def measured_observation(image, detector, K, D, width_m, height_m):
         for x0, y0, x1, y1 in detector.cfg["image_exclude_rois_xyxy"]:
             a[y0:y1, x0:x1] = 255
     mc, mi, _ = cv2.aruco.detectMarkers(a, detector.dictionary)
-    _, cc, ci = cv2.aruco.interpolateCornersCharuco(mc, mi, a, detector.board, cameraMatrix=K, distCoeffs=D)
+    _, cc, ci = cv2.aruco.interpolateCornersCharuco(
+        mc, mi, a, detector.board, cameraMatrix=camera_matrix, distCoeffs=dist_coeffs
+    )
     obj = np.asarray(detector.points[ci.ravel()], dtype=np.float64).copy()
     cfg = detector.cfg
     obj[:, 0] *= width_m / (cfg["squares_x"] * cfg["square_length_m"])
     obj[:, 1] *= height_m / (cfg["squares_y"] * cfg["square_length_m"])
     uv = np.asarray(cc, dtype=np.float64).reshape(-1, 2)
-    ok, rv, tv = cv2.solvePnP(obj, uv, K, D, flags=cv2.SOLVEPNP_ITERATIVE)
+    ok, rv, tv = cv2.solvePnP(obj, uv, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
     if not ok:
         raise ValueError("Measured-board pose solve failed")
-    T = np.eye(4)
-    T[:3, :3], T[:3, 3] = cv2.Rodrigues(rv)[0], tv.ravel()
-    matrix(T)
-    if np.min((T[:3, :3] @ obj.T + tv)[2]) <= 0:
+    transform = np.eye(4)
+    transform[:3, :3], transform[:3, 3] = cv2.Rodrigues(rv)[0], tv.ravel()
+    matrix(transform)
+    if np.min((transform[:3, :3] @ obj.T + tv)[2]) <= 0:
         raise ValueError("Measured board behind camera")
-    projected = cv2.projectPoints(obj, rv, tv, K, D)[0].reshape(-1, 2)
+    projected = cv2.projectPoints(obj, rv, tv, camera_matrix, dist_coeffs)[0].reshape(-1, 2)
     rms = float(np.sqrt(np.mean(np.sum((projected - uv) ** 2, axis=1))))
     if not np.isfinite(rms) or rms > cfg.get("max_reprojection_px", 1.0):
         raise ValueError(f"Measured-board reprojection RMS too large: {rms:.3f} px")
-    return T, {"corners": len(ci), "reprojection_rms_px": rms}, ci.ravel().tolist(), uv.tolist()
+    return (
+        transform,
+        {"corners": len(ci), "reprojection_rms_px": rms},
+        ci.ravel().tolist(),
+        uv.tolist(),
+    )
 
 
 def metrics(result):
@@ -68,18 +79,24 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True, help="New output directory")
-    parser.add_argument("--width-mm", type=float, required=True, help="Grid width without white border")
-    parser.add_argument("--height-mm", type=float, required=True, help="Grid height without white border")
+    parser.add_argument(
+        "--width-mm", type=float, required=True, help="Grid width without white border"
+    )
+    parser.add_argument(
+        "--height-mm", type=float, required=True, help="Grid height without white border"
+    )
     parser.add_argument("--max-position-mm", type=float, default=5.0)
     parser.add_argument("--max-angle-deg", type=float, default=2.0)
     args = parser.parse_args(argv)
     meta, samples = read_dataset(args.dataset)
     if meta.get("opencv_version") != cv2.__version__:
-        raise ValueError("Run with the recorded OpenCV version to preserve board corner conventions")
+        raise ValueError(
+            "Run with the recorded OpenCV version to preserve board corner conventions"
+        )
     args.output.mkdir(parents=True, exist_ok=False)
     detector = CharucoDetector(meta["board"])
-    K = np.asarray(meta["camera"]["camera_matrix"])
-    D = np.asarray(meta["camera"]["dist_coeffs"])
+    camera_matrix = np.asarray(meta["camera"]["camera_matrix"])
+    dist_coeffs = np.asarray(meta["camera"]["dist_coeffs"])
     observations, corner_records, hashes = [], [], {}
     for i, sample in enumerate(samples):
         stem = f"sample_{i:04d}"
@@ -87,10 +104,10 @@ def main(argv=None):
         image = cv2.imread(str(image_file))
         if image is None:
             raise ValueError(f"Cannot read {image_file}")
-        T, quality, ids, pixels = measured_observation(
-            image, detector, K, D, args.width_mm / 1000, args.height_mm / 1000
+        transform, quality, ids, pixels = measured_observation(
+            image, detector, camera_matrix, dist_coeffs, args.width_mm / 1000, args.height_mm / 1000
         )
-        observations.append({**sample, "T_camera_board": T.tolist(), "quality": quality})
+        observations.append({**sample, "T_camera_board": transform.tolist(), "quality": quality})
         corner_records.append({"source": stem, "corner_ids": ids, "pixels": pixels})
         for path in [image_file, args.dataset / (stem + ".json")]:
             hashes[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -110,12 +127,20 @@ def main(argv=None):
             "Original flange poses, sample order and holdouts retained; "
             "residual gates recorded in result.thresholds."
         ),
-        "scope": "Offline derived observations; not a resumable capture session or a live board config.",
+        "scope": "Offline derived observations; not a resumable capture session or a live board "
+        "config.",
     }
     baseline = solve(samples, meta["T_flange_tcp"], args.max_position_mm / 1000, args.max_angle_deg)
-    result = solve(observations, meta["T_flange_tcp"], args.max_position_mm / 1000, args.max_angle_deg)
+    result = solve(
+        observations, meta["T_flange_tcp"], args.max_position_mm / 1000, args.max_angle_deg
+    )
     result.update(
-        {"sample_count": len(samples), "camera": meta["camera"], "tcp": meta["tcp"], "board_measurement": measurement}
+        {
+            "sample_count": len(samples),
+            "camera": meta["camera"],
+            "tcp": meta["tcp"],
+            "board_measurement": measurement,
+        }
     )
     delta = distance(np.asarray(baseline["T_base_camera"]), np.asarray(result["T_base_camera"]))
     comparison = {

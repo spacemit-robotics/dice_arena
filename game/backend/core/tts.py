@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Shared TTS provider interface.
 
 Concrete adapters only need to implement :meth:`synthesize`.  The default

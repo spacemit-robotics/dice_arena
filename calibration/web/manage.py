@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Start/stop only this repository's standalone service, with PID-reuse protection."""
 
 import argparse
@@ -34,7 +36,9 @@ def main(argv=None):
     path = data / "service-process.json"
     record = read(path, {})
     running = bool(
-        record and record.get("start_ticks") is not None and process_stamp(record["pid"]) == record["start_ticks"]
+        record
+        and record.get("start_ticks") is not None
+        and process_stamp(record["pid"]) == record["start_ticks"]
     )
     if args.action == "status":
         print(json.dumps({"running": running, **record}, ensure_ascii=False))
@@ -76,13 +80,20 @@ def main(argv=None):
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
-    record = {"pid": process.pid, "start_ticks": process_stamp(process.pid), "port": args.port, "root": str(ROOT)}
+    record = {
+        "pid": process.pid,
+        "start_ticks": process_stamp(process.pid),
+        "port": args.port,
+        "root": str(ROOT),
+    }
     write(path, record)
     for _ in range(60):
         if process.poll() is not None:
             raise RuntimeError(f"服务启动失败，请查看 {log}")
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{args.port}/api/status", timeout=0.5) as response:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{args.port}/api/status", timeout=0.5
+            ) as response:
                 status = json.load(response)
             if status.get("root") != str(ROOT):
                 raise RuntimeError("端口已被其他目录的服务占用")

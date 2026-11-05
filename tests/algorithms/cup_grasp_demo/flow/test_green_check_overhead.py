@@ -1,3 +1,7 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
+"""Configuration change detection: repeated file scans are coalesced, round boundaries force one."""
+
 import unittest
 from unittest.mock import Mock, patch
 from cup_grasp_demo.flow import green_pipeline as flow

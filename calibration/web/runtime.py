@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Adapters installed only inside a dedicated web worker, never in legacy CLI runs."""
 
 import math
@@ -53,7 +55,11 @@ class LiveCamera:
 
     def __init__(self, base, job):
         self.base, self.job = base, job
-        self.K, self.D, self.info = base.K, base.D, base.info
+        self.camera_matrix, self.dist_coeffs, self.info = (
+            base.camera_matrix,
+            base.dist_coeffs,
+            base.info,
+        )
         self.condition = threading.Condition()
         self.frame = None
         self.counter = 0
@@ -78,7 +84,12 @@ class LiveCamera:
                     ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
                     if ok:
                         atomic_bytes(self.job / "preview.jpg", encoded.tobytes())
-                        event(self.job / "frame.json", width=frame.shape[1], height=frame.shape[0], camera=self.info)
+                        event(
+                            self.job / "frame.json",
+                            width=frame.shape[1],
+                            height=frame.shape[0],
+                            camera=self.info,
+                        )
                     last_write = now
         except Exception as exc:
             with self.condition:
@@ -91,7 +102,9 @@ class LiveCamera:
     def capture(self):
         with self.condition:
             previous = self.counter
-            ready = self.condition.wait_for(lambda: self.counter != previous or self.error or self.closed, timeout=4.0)
+            ready = self.condition.wait_for(
+                lambda: self.counter != previous or self.error or self.closed, timeout=4.0
+            )
             if self.error or not ready or self.closed:
                 raise RuntimeError(self.error or "相机没有新画面")
             return self.frame.copy()
@@ -136,7 +149,9 @@ class BrowserPreview:
         while True:
             image = camera.capture()
             try:
-                board, quality, vis = detector.detect(image, camera.K, camera.D)
+                board, quality, vis = detector.detect(
+                    image, camera.camera_matrix, camera.dist_coeffs
+                )
                 detection = {"detected": True, "quality": quality}
             except ValueError as exc:
                 board = quality = None
@@ -173,7 +188,13 @@ class BrowserAutoView:
 
     def update(self, image, state, count=0, quality=None, board_outline=None):
         # Called at rest only. The independent camera reader publishes live motion video.
-        event(self.job / "progress.json", phase=state, accepted=count, total=self.total, quality=quality)
+        event(
+            self.job / "progress.json",
+            phase=state,
+            accepted=count,
+            total=self.total,
+            quality=quality,
+        )
         if quality:
             import cv2
 

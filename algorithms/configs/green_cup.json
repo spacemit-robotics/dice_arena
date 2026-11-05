@@ -7,7 +7,7 @@
   "calibration": "configs/calibration/handeye_result.json",
   "orientation_reference": "cup_grasp_demo/flow/green_open_cup/grasp_reference.json",
   "tcp_candidate": "cup_grasp_demo/flow/green_open_cup/tcp_candidate.json",
-  "grasp_config": "cup_grasp_demo/flow/green_open_cup/CURRENT_GRASP.json",
+  "grasp_config": "cup_grasp_demo/flow/green_open_cup/current_grasp.json",
   "allow_provisional_calibration": true,
   "plane_tolerance_mm": 6.0,
   "contact_height_fraction": 0.9090909090909091,
@@ -203,7 +203,6 @@
       0
     ],
     "fast_speed_percent": 30,
-    "lift_start_tolerance_deg": 0.5,
     "shake_start_tolerance_deg": 0.5,
     "shake_feedback_freshness_limit_s": 0.3,
     "recovery_attempts": 2,
@@ -236,7 +235,6 @@
     "fast_minimize_lift_travel": true,
     "strategy_file": "vision/strategy/green_cup.json",
     "lower_recovery_attempts": 0,
-    "home_execution_mode": "together",
     "fast_finger_duration_s": 0.3,
     "lower_command_mode": "controller_endpoint",
     "fast_file_check_interval_s": 0.25

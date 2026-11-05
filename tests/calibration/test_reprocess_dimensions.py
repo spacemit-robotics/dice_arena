@@ -1,3 +1,7 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
+"""Reprocessing board observations with measured printed dimensions."""
+
 import tempfile
 from pathlib import Path
 import unittest
@@ -14,20 +18,37 @@ class ReprocessDimensionsTests(unittest.TestCase):
     def check_known_pose(self, width_m, height_m):
         detector = Mock()
         detector.roi = None
-        detector.cfg = {"squares_x": 4, "squares_y": 5, "square_length_m": 0.0215, "max_reprojection_px": 1.0}
-        detector.points = np.array([[x * 0.0215, y * 0.0215, 0] for y in range(1, 5) for x in range(1, 4)])
-        physical = np.array([[x * width_m / 4, y * height_m / 5, 0] for y in range(1, 5) for x in range(1, 4)])
+        detector.cfg = {
+            "squares_x": 4,
+            "squares_y": 5,
+            "square_length_m": 0.0215,
+            "max_reprojection_px": 1.0,
+        }
+        detector.points = np.array(
+            [[x * 0.0215, y * 0.0215, 0] for y in range(1, 5) for x in range(1, 4)]
+        )
+        physical = np.array(
+            [[x * width_m / 4, y * height_m / 5, 0] for y in range(1, 5) for x in range(1, 4)]
+        )
         expected = pose_matrix([0.035, -0.027, 0.55, 0.3, -0.2, 0.1])
-        K = np.array([[600.0, 0, 320], [0, 601.0, 240], [0, 0, 1.0]])
-        D = np.zeros(5)
-        pixels = cv2.projectPoints(physical, cv2.Rodrigues(expected[:3, :3])[0], expected[:3, 3], K, D)[0]
+        camera_matrix = np.array([[600.0, 0, 320], [0, 601.0, 240], [0, 0, 1.0]])
+        dist_coeffs = np.zeros(5)
+        pixels = cv2.projectPoints(
+            physical,
+            cv2.Rodrigues(expected[:3, :3])[0],
+            expected[:3, 3],
+            camera_matrix,
+            dist_coeffs,
+        )[0]
         ids = np.arange(12).reshape(-1, 1)
         image = np.zeros((480, 640, 3), np.uint8)
         with (
             patch("cv2.aruco.detectMarkers", return_value=([], ids, [])),
             patch("cv2.aruco.interpolateCornersCharuco", return_value=(12, pixels, ids)),
         ):
-            actual, quality, _, _ = measured_observation(image, detector, K, D, width_m, height_m)
+            actual, quality, _, _ = measured_observation(
+                image, detector, camera_matrix, dist_coeffs, width_m, height_m
+            )
         np.testing.assert_allclose(actual, expected, atol=1e-7)
         self.assertLess(quality["reprojection_rms_px"], 1e-5)
         np.testing.assert_array_equal(image, np.zeros_like(image))
@@ -49,10 +70,22 @@ class ReprocessDimensionsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "new"
             with patch(
-                "tools.reprocess_dimensions.read_dataset", return_value=({"opencv_version": "different-version"}, [])
+                "tools.reprocess_dimensions.read_dataset",
+                return_value=({"opencv_version": "different-version"}, []),
             ):
                 with self.assertRaisesRegex(ValueError, "recorded OpenCV version"):
-                    main(["--dataset", tmp, "--output", str(output), "--width-mm", "86.5", "--height-mm", "108"])
+                    main(
+                        [
+                            "--dataset",
+                            tmp,
+                            "--output",
+                            str(output),
+                            "--width-mm",
+                            "86.5",
+                            "--height-mm",
+                            "108",
+                        ]
+                    )
             self.assertFalse(output.exists())
 
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Config-driven calibration commands; existing collectors remain authoritative."""
 
 import argparse
@@ -25,7 +27,7 @@ def read(path):
 
 
 def site_pipeline(path):
-    """cup-shake's green-cup configuration in the site, made once from its algorithm template.
+    """The application's green-cup configuration in the site, made once from its algorithm template.
 
     Relative resource paths stay relative to the algorithm source; the installed hand-eye result and
     the table registration are site files, and the gate stays closed until the table is registered.
@@ -82,11 +84,15 @@ def validate(c):
     if c["measurement"] is not None:
         for key in ("width_mm", "height_mm"):
             value = c["measurement"][key]
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+            ):
                 raise ValueError(f"Invalid measurement.{key}")
     for key in (
         "serial",
-        "channel",
         "reference_id",
         "hand_board",
         "reference_board",
@@ -133,7 +139,10 @@ class Workflow:
     def save(self, **values):
         if not self.dry:
             self.state.update({k: str(v) for k, v in values.items()})
-            atomic_bytes(self.state_path, (json.dumps(self.state, ensure_ascii=False, indent=2) + "\n").encode())
+            atomic_bytes(
+                self.state_path,
+                (json.dumps(self.state, ensure_ascii=False, indent=2) + "\n").encode(),
+            )
 
     def call(self, script, *args, quality_exit=False):
         argv = [sys.executable, str(CODE / script), *map(str, args)]
@@ -148,7 +157,8 @@ class Workflow:
         if not self.dry and not read(path).get("quality_passed"):
             if not self.c["allow_provisional"]:
                 raise ValueError(
-                    f"质量未通过：{path}。结果已保留；如明确接受临时精度，在配置中设置 allow_provisional=true"
+                    f"质量未通过：{path}。结果已保留；如明确接受临时精度，在配置中设置 "
+                    "allow_provisional=true"
                 )
             print("注意：使用质量未通过的临时标定，质量标记保持 false", flush=True)
 
@@ -203,8 +213,6 @@ class Workflow:
         return [
             "--home",
             resolve(c["home"]),
-            "--channel",
-            c["channel"],
             "--speed-percent",
             c["motion"]["speed_percent"],
             "--smooth-speed-deg-s",
@@ -238,8 +246,6 @@ class Workflow:
                 c["serial"],
                 "--tcp",
                 c["tcp"],
-                "--channel",
-                c["channel"],
                 "--board",
                 board,
                 "--dataset",
@@ -365,7 +371,10 @@ class Workflow:
                     for label, path in [
                         ("pipeline_config.json", config),
                         ("handeye_result.json", resolve(pipeline["calibration"])),
-                        ("home_table_scene.json", resolve(pipeline["green_cup"]["home_table_scene"])),
+                        (
+                            "home_table_scene.json",
+                            resolve(pipeline["green_cup"]["home_table_scene"]),
+                        ),
                     ]:
                         if path.exists():  # The first apply has no previous result or table yet.
                             shutil.copy2(path, backup / label)
@@ -374,7 +383,9 @@ class Workflow:
                 self.call("calibration/apply_result.py", "--result", result, "--config", config)
             out = self.new("table")
             self.call(TABLE_TOOLS[0], "--config", config, "--session", out)
-            self.call(TABLE_TOOLS[1], "--config", config, "--table-scene", out / "planar_table_scene.json")
+            self.call(
+                TABLE_TOOLS[1], "--config", config, "--table-scene", out / "planar_table_scene.json"
+            )
             self.save(table=out / "planar_table_scene.json")
         print("完成" + ("（仅预览，未执行）" if self.dry else ""), flush=True)
 
@@ -383,7 +394,18 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "action",
-        choices=("first", "window", "solve", "plan", "auto", "register", "restore", "apply", "table", "status"),
+        choices=(
+            "first",
+            "window",
+            "solve",
+            "plan",
+            "auto",
+            "register",
+            "restore",
+            "apply",
+            "table",
+            "status",
+        ),
     )
     parser.add_argument("--config", type=Path, default=CONFIG)
     parser.add_argument("--dry-run", action="store_true")

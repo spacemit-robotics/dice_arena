@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Offline Nero seven-axis kinematics from the official URDF joint chain.
 
 All transforms are base_link -> link7 (the arm flange). This module reads only a
@@ -78,11 +80,17 @@ def _identity() -> Matrix4:
 
 
 def _matmul(a: Matrix4, b: Matrix4) -> Matrix4:
-    return tuple(tuple(sum(a[i][k] * b[k][j] for k in range(4)) for j in range(4)) for i in range(4))
+    return tuple(
+        tuple(sum(a[i][k] * b[k][j] for k in range(4)) for j in range(4)) for i in range(4)
+    )
 
 
-def _rotation_transform(r: Sequence[Sequence[float]], p: Sequence[float] = (0.0, 0.0, 0.0)) -> Matrix4:
-    return tuple(tuple((r[i][j] if j < 3 else p[i]) for j in range(4)) for i in range(3)) + ((0.0, 0.0, 0.0, 1.0),)
+def _rotation_transform(
+    r: Sequence[Sequence[float]], p: Sequence[float] = (0.0, 0.0, 0.0)
+) -> Matrix4:
+    return tuple(tuple((r[i][j] if j < 3 else p[i]) for j in range(4)) for i in range(3)) + (
+        (0.0, 0.0, 0.0, 1.0),
+    )
 
 
 def _rpy_transform(xyz: Sequence[float], rpy: Sequence[float]) -> Matrix4:
@@ -208,7 +216,10 @@ class NeroModel:
         q = self._check_q(q_rad)
         if margin_rad < 0.0:
             raise ValueError("margin_rad must be nonnegative")
-        return all(lo + margin_rad <= angle <= hi - margin_rad for angle, (lo, hi) in zip(q, self.limits_rad))
+        return all(
+            lo + margin_rad <= angle <= hi - margin_rad
+            for angle, (lo, hi) in zip(q, self.limits_rad)
+        )
 
     def _forward(
         self, q_rad: Sequence[float]
@@ -257,7 +268,8 @@ class NeroModel:
             raise ValueError("target_matrix must be homogeneous")
         columns = [tuple(target[i][j] for i in range(3)) for j in range(3)]
         if any(
-            abs(sum(columns[i][k] * columns[j][k] for k in range(3)) - (1.0 if i == j else 0.0)) > 1e-4
+            abs(sum(columns[i][k] * columns[j][k] for k in range(3)) - (1.0 if i == j else 0.0))
+            > 1e-4
             for i in range(3)
             for j in range(3)
         ):
@@ -303,7 +315,8 @@ class NeroModel:
             jrows = [[jac[col][row] for col in range(7)] for row in range(6)]
             normal = [
                 [
-                    sum(jrows[i][k] * jrows[j][k] for k in range(7)) + (damping * damping if i == j else 0.0)
+                    sum(jrows[i][k] * jrows[j][k] for k in range(7))
+                    + (damping * damping if i == j else 0.0)
                     for j in range(6)
                 ]
                 for i in range(6)
@@ -319,11 +332,17 @@ class NeroModel:
             accepted = False
             for backtrack in range(12):
                 scale = 0.5**backtrack
-                candidate = [max(lo, min(hi, q[i] + scale * delta[i])) for i, (lo, hi) in enumerate(self.limits_rad)]
+                candidate = [
+                    max(lo, min(hi, q[i] + scale * delta[i]))
+                    for i, (lo, hi) in enumerate(self.limits_rad)
+                ]
                 candidate_t = self.fk(candidate)
                 cand_ep = tuple(target[i][3] - candidate_t[i][3] for i in range(3))
                 cand_er = _rotation_error(target, candidate_t)
-                cand_metric = _norm(cand_ep) / position_tolerance_m + _norm(cand_er) / orientation_tolerance_rad
+                cand_metric = (
+                    _norm(cand_ep) / position_tolerance_m
+                    + _norm(cand_er) / orientation_tolerance_rad
+                )
                 if cand_metric < metric - 1e-8:
                     q = candidate
                     accepted = True
@@ -331,7 +350,9 @@ class NeroModel:
             if not accepted:
                 reason = "stalled_or_joint_bound"
                 break
-        return IKResult(False, best_q, best_pos, best_ori, iteration, reason)  # type: ignore[arg-type]
+        return IKResult(  # type: ignore[arg-type]
+            False, best_q, best_pos, best_ori, iteration, reason
+        )
 
     def check_joint_path(
         self,
@@ -354,14 +375,18 @@ class NeroModel:
         steps = max(1, ceil(max(abs(b - a) for a, b in zip(start, goal)) / max_sample_step_rad))
         if steps + 1 > max_samples:
             return JointPathCheck((), False, False, False, False, False, "max_samples_exceeded")
-        samples = tuple(tuple(a + (b - a) * i / steps for a, b in zip(start, goal)) for i in range(steps + 1))
+        samples = tuple(
+            tuple(a + (b - a) * i / steps for a, b in zip(start, goal)) for i in range(steps + 1)
+        )
         limits_pass = all(self.within_limits(q) for q in samples)
         continuity_pass = all(
-            max(abs(b - a) for a, b in zip(samples[i], samples[i + 1])) <= max_sample_step_rad + 1e-12
+            max(abs(b - a) for a, b in zip(samples[i], samples[i + 1]))
+            <= max_sample_step_rad + 1e-12
             for i in range(steps)
         )
         singularity_warning = any(
-            abs(q[1]) <= singularity_window_rad or abs(q[3]) <= singularity_window_rad for q in samples
+            abs(q[1]) <= singularity_window_rad or abs(q[3]) <= singularity_window_rad
+            for q in samples
         )
         reason = "joint_checks_passed_collision_unverified"
         if not limits_pass:
@@ -384,7 +409,12 @@ def load_model(urdf_path: str | Path | None = None) -> NeroModel:
     source = (
         Path(urdf_path)
         if urdf_path is not None
-        else Path(__file__).resolve().parent / "models" / "hand_geometry" / "nero" / "urdf" / "nero_description.urdf"
+        else Path(__file__).resolve().parent
+        / "models"
+        / "hand_geometry"
+        / "nero"
+        / "urdf"
+        / "nero_description.urdf"
     )
     root = ElementTree.parse(source).getroot()
     joints = []

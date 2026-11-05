@@ -1,3 +1,7 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
+"""Fixed reference board registration and camera recovery after the camera moves."""
+
 import copy
 import json
 import tempfile
@@ -48,7 +52,10 @@ class ReferenceTests(unittest.TestCase):
             "board": copy.deepcopy(self.board),
             "T_camera_board": cb.tolist(),
             "records": [
-                {"T_camera_board": cb.tolist(), "quality": {"corners": 12, "reprojection_rms_px": 0.15}}
+                {
+                    "T_camera_board": cb.tolist(),
+                    "quality": {"corners": 12, "reprojection_rms_px": 0.15},
+                }
                 for _ in range(10)
             ],
         }
@@ -123,7 +130,11 @@ class ReferenceTests(unittest.TestCase):
         records = self.observation(self.bc)["records"]
         with self.assertRaises(ValueError):
             summarize(records[:9])
-        for key, value in [("corners", 11), ("reprojection_rms_px", float("nan")), ("reprojection_rms_px", 0.6)]:
+        for key, value in [
+            ("corners", 11),
+            ("reprojection_rms_px", float("nan")),
+            ("reprojection_rms_px", 0.6),
+        ]:
             changed = copy.deepcopy(records)
             changed[0]["quality"][key] = value
             with self.assertRaises(ValueError):
@@ -141,7 +152,7 @@ class ReferenceTests(unittest.TestCase):
         calls = []
 
         class Camera:
-            K, D, info = np.eye(3), np.zeros(5), {"serial": "test"}
+            camera_matrix, dist_coeffs, info = np.eye(3), np.zeros(5), {"serial": "test"}
 
             def __init__(self, *args, **kwargs):
                 pass
@@ -156,7 +167,7 @@ class ReferenceTests(unittest.TestCase):
             def __init__(self, cfg):
                 pass
 
-            def detect(self, image, K, D):
+            def detect(self, image, camera_matrix, dist_coeffs):
                 calls.append(len(calls))
                 if calls[-1] in misses:
                     raise ValueError("Too few ChArUco corners: 角点不足（10/12）")
@@ -165,7 +176,10 @@ class ReferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             board = Path(tmp) / "board.json"
             board.write_text(json.dumps(self.board))
-            with patch("sensors.RealSenseCamera", Camera), patch("sensors.CharucoDetector", Detector):
+            with (
+                patch("sensors.RealSenseCamera", Camera),
+                patch("sensors.CharucoDetector", Detector),
+            ):
                 return observe(board, "test", "table", Path(tmp) / "out", frames)
 
     def test_occasional_missed_frame_is_skipped_not_fatal(self):

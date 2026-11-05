@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Exact XY azimuth, table height, legacy behavior, and frozen-scene planning."""
 
 from copy import deepcopy
@@ -26,7 +28,9 @@ class AzimuthTest(unittest.TestCase):
         if not legacy.is_file():
             raise unittest.SkipTest("旧银杯流程配置已随瘦身移除：" + str(legacy))
         cfg = load_config(legacy)
-        cls.rotation = np.array(load_model().fk(read_json(cfg["orientation_reference"])["joints_rad"]))[:3, :3]
+        cls.rotation = np.array(
+            load_model().fk(read_json(cfg["orientation_reference"])["joints_rad"])
+        )[:3, :3]
         link = read_json(cfg["tcp_candidate"])["link"]
         cls.palm = RightRevo2Model().link_transforms_from_flange(np.eye(4))[link][:3, 0]
         cls.normal = np.array([0.04, -0.08, 1.0])
@@ -59,7 +63,9 @@ class AzimuthTest(unittest.TestCase):
         facing = -palm + (palm @ self.normal) * self.normal
         facing /= np.linalg.norm(facing)
         np.testing.assert_allclose(facing, d, atol=1e-12)
-        self.assertAlmostEqual(float(palm @ self.normal), float((self.rotation @ self.palm) @ self.normal))
+        self.assertAlmostEqual(
+            float(palm @ self.normal), float((self.rotation @ self.palm) @ self.normal)
+        )
         np.testing.assert_allclose(rotation.T @ rotation, np.eye(3), atol=1e-12)
         self.assertAlmostEqual(np.linalg.det(rotation), 1)
 
@@ -71,7 +77,10 @@ class AzimuthTest(unittest.TestCase):
 
     def test_new_zero_angle_matches_legacy_base_x(self):
         old = contact_direction(
-            self.rotation, self.palm, self.normal, dict(mode="base_x_table_section", side="positive")
+            self.rotation,
+            self.palm,
+            self.normal,
+            dict(mode="base_x_table_section", side="positive"),
         )
         new = self.direction(0)
         np.testing.assert_array_equal(old[0], new[0])
@@ -110,7 +119,9 @@ class AzimuthCaptureTest(unittest.TestCase):
         cls.cfg = load_config(cls.config)
         cls.cfg.pop("cup_perception", None)  # Keep the original geometric azimuth regression.
         cls.cfg["contact_height_fraction"] = 9 / 11  # Preserve the original azimuth regression.
-        cls.cfg["side_grasp"].update(close_gap_mm=40, allow_hand_cup_contact=False, approach={"enabled": False})
+        cls.cfg["side_grasp"].update(
+            close_gap_mm=40, allow_hand_cup_contact=False, approach={"enabled": False}
+        )
         cls.fixture = ROOT / "cup_grasp_demo/datasets/contact_yaw20_20260917_01/current"
         cls.temp = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.temp.cleanup)
@@ -123,7 +134,9 @@ class AzimuthCaptureTest(unittest.TestCase):
         with (
             patch.object(debug, "load_config", return_value=cls.cfg),
             patch.object(debug, "capture_rgbd", side_effect=camera),
-            patch.object(debug, "bridge", return_value=read_json(cls.fixture / "after.json")) as sdk,
+            patch.object(
+                debug, "bridge", return_value=read_json(cls.fixture / "after.json")
+            ) as sdk,
         ):
             debug.capture(args)
             assert [call.args[0] for call in sdk.call_args_list] == ["snapshot", "snapshot"]
@@ -139,7 +152,9 @@ class AzimuthCaptureTest(unittest.TestCase):
         support = np.array(self.scene["cup_support_base_m"])
         normal = np.array(self.scene["cup_normal_base"])
         contact = np.array(self.session["contact_base_m"])
-        self.assertAlmostEqual(float((contact - support) @ normal), self.scene["geometry"]["height_m"] * 9 / 11)
+        self.assertAlmostEqual(
+            float((contact - support) @ normal), self.scene["geometry"]["height_m"] * 9 / 11
+        )
         np.testing.assert_array_equal(
             self.session["T_flange_tcp"], read_json(self.fixture / "session.json")["T_flange_tcp"]
         )
@@ -148,8 +163,12 @@ class AzimuthCaptureTest(unittest.TestCase):
         self.assertTrue(self.plan["screen_passed"])
         self.assertEqual(self.plan["blockers"], [])
         self.assertTrue(all(stage["kind"] == "arm" for stage in self.plan["stages"]))
-        self.assertGreater(min(stage["screen"]["table_min_mm"] for stage in self.plan["stages"]), 20)
-        self.assertGreater(min(stage["screen"]["cup_lower_bound_mm"] for stage in self.plan["stages"]), 9)
+        self.assertGreater(
+            min(stage["screen"]["table_min_mm"] for stage in self.plan["stages"]), 20
+        )
+        self.assertGreater(
+            min(stage["screen"]["cup_lower_bound_mm"] for stage in self.plan["stages"]), 9
+        )
 
     def test_smaller_gap_remains_blocked_and_never_adds_hand_commands(self):
         cfg = deepcopy(self.frozen_cfg)

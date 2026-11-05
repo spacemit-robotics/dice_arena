@@ -1,3 +1,5 @@
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
 // Presentation only: resize one existing video panel without touching its stream.
 (() => {
   'use strict';

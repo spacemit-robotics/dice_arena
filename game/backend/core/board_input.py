@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """板端物理键盘直读（``input_board_enable=true`` 时的附加输入源，2026-09-29）。
 
 零依赖原生 ``/dev/input`` 读取：板上没有 python-evdev、pypi 也不通，
@@ -136,7 +138,9 @@ class BoardKeyReader:
             "permission_denied": self._permission_denied,
             "last_action": self.last_action,
             "last_key_age_seconds": (
-                round(time.monotonic() - self.last_key_monotonic, 1) if self.last_key_monotonic is not None else None
+                round(time.monotonic() - self.last_key_monotonic, 1)
+                if self.last_key_monotonic is not None
+                else None
             ),
         }
 

@@ -18,6 +18,7 @@ class CupPolicy:
         self.pointer = self.library.cup_task_create()
         if not self.pointer:
             raise MemoryError("C++ cup policy allocation failed")
+        self.active = ""  # The phase begun and not yet finished.
 
     @property
     def state(self):
@@ -26,6 +27,11 @@ class CupPolicy:
     def step(self, phase, action):
         if self.library.cup_task_step(self.pointer, phase.encode(), action) != 0:
             raise RuntimeError(self.library.cup_task_error(self.pointer).decode())
+        self.active = phase if action == 0 else ""
+
+    def abandon(self, phase):
+        """End a begun phase that sent nothing to the device; the task state is unchanged."""
+        self.step(phase, 3)
 
     def confirm_grip(self):
         if self.library.cup_task_confirm_grip(self.pointer) != 0:

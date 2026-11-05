@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Project-wide (arena) configuration: deployment defaults under game manifests.
 
 ``backend/config.json`` describes what kind of machine this deployment is:
@@ -18,7 +20,8 @@ from urllib.parse import urlsplit
 from core.participants import normalize_participants
 
 ROOT = Path(__file__).resolve().parents[2]
-# `dice-arena serve` keeps the operator's copy in the site (DICE_ARENA_CONFIG); this file is the default.
+# `dice-arena serve` keeps the operator's copy in the site (DICE_ARENA_CONFIG); this file is the
+# default.
 ARENA_CONFIG_PATH = Path(os.environ.get("DICE_ARENA_CONFIG") or ROOT / "backend" / "config.json")
 
 
@@ -33,7 +36,8 @@ def validate_arena_config(payload: Any) -> dict[str, Any]:
         raise ArenaConfigError("arena config schema_version must be 1")
     providers = payload.get("providers", {})
     if not isinstance(providers, dict) or not all(
-        isinstance(key, str) and key and isinstance(value, str) and value.strip() for key, value in providers.items()
+        isinstance(key, str) and key and isinstance(value, str) and value.strip()
+        for key, value in providers.items()
     ):
         raise ArenaConfigError("providers must map slots to non-empty provider ids")
     participants = payload.get("participants")
@@ -48,7 +52,10 @@ def validate_arena_config(payload: Any) -> dict[str, Any]:
             raise ArenaConfigError("display.player_side must be LEFT or RIGHT")
         rotations = display.get("video_rotation_deg", {})
         if not isinstance(rotations, dict) or any(
-            not isinstance(game, str) or not game or type(angle) is not int or angle not in (0, 90, 180, 270)
+            not isinstance(game, str)
+            or not game
+            or type(angle) is not int
+            or angle not in (0, 90, 180, 270)
             for game, angle in rotations.items()
         ):
             raise ArenaConfigError("display.video_rotation_deg must map game ids to 0/90/180/270")
@@ -61,14 +68,20 @@ def validate_arena_config(payload: Any) -> dict[str, Any]:
             if not isinstance(base, str) or not base.strip():
                 raise ArenaConfigError("video.webrtc_base_url must be a non-empty string")
             parsed = urlsplit(base.strip())
-            if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+            if (
+                parsed.scheme not in {"http", "https"}
+                or not parsed.netloc
+                or parsed.username
+                or parsed.password
+            ):
                 raise ArenaConfigError("video.webrtc_base_url must be an absolute HTTP(S) URL")
             if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
                 raise ArenaConfigError("video.webrtc_base_url must not contain a path or query")
     games_enabled = payload.get("games_enabled")
     if games_enabled is not None:
         if not isinstance(games_enabled, dict) or not all(
-            isinstance(game, str) and game and isinstance(value, bool) for game, value in games_enabled.items()
+            isinstance(game, str) and game and isinstance(value, bool)
+            for game, value in games_enabled.items()
         ):
             raise ArenaConfigError("games_enabled must map game ids to true/false")
     voice = payload.get("voice")
@@ -78,7 +91,9 @@ def validate_arena_config(payload: Any) -> dict[str, Any]:
     if board_input is not None and not isinstance(board_input, bool):
         raise ArenaConfigError("input_board_enable must be true/false")
     speed = payload.get("speed")
-    if speed is not None and (not isinstance(speed, (int, float)) or isinstance(speed, bool) or speed <= 0):
+    if speed is not None and (
+        not isinstance(speed, (int, float)) or isinstance(speed, bool) or speed <= 0
+    ):
         raise ArenaConfigError("speed must be a positive number")
     asr_enabled = payload.get("asr_enabled", True)
     if not isinstance(asr_enabled, bool):
@@ -98,7 +113,11 @@ def validate_arena_config(payload: Any) -> dict[str, Any]:
         ):
             raise ArenaConfigError("standby.wake_phrases must be a non-empty list of words")
     idle_seconds = standby.get("idle_seconds", 120)
-    if not isinstance(idle_seconds, (int, float)) or isinstance(idle_seconds, bool) or not (5 <= idle_seconds <= 3600):
+    if (
+        not isinstance(idle_seconds, (int, float))
+        or isinstance(idle_seconds, bool)
+        or not (5 <= idle_seconds <= 3600)
+    ):
         raise ArenaConfigError("standby.idle_seconds must be between 5 and 3600 seconds")
     for field in ("enabled", "boot_standby"):
         if field in standby and not isinstance(standby[field], bool):
@@ -119,7 +138,8 @@ def validate_arena_config(payload: Any) -> dict[str, Any]:
             or len(words) != len(set(words))
         ):
             raise ArenaConfigError(
-                f"game_select.phrases.{game_id!r} must be a non-empty duplicate-free list of trigger words"
+                f"game_select.phrases.{game_id!r} must be a non-empty duplicate-free list of "
+                "trigger words"
             )
     # Optional "enter the currently highlighted game" words (list screen).
     # Empty/missing list = the voice-confirm affordance is off.
@@ -129,7 +149,9 @@ def validate_arena_config(payload: Any) -> dict[str, Any]:
         or not all(isinstance(word, str) and word.strip() for word in confirm_phrases)
         or len(confirm_phrases) != len(set(confirm_phrases))
     ):
-        raise ArenaConfigError("game_select.confirm_phrases must be a duplicate-free list of trigger words")
+        raise ArenaConfigError(
+            "game_select.confirm_phrases must be a duplicate-free list of trigger words"
+        )
     return payload
 
 
@@ -254,7 +276,9 @@ def arena_game_select_confirm_phrases(arena: Mapping[str, Any] | None) -> list[s
     return [str(word).strip() for word in words if isinstance(word, str) and word.strip()]
 
 
-def with_global_defaults(manifest: Mapping[str, Any], arena: Mapping[str, Any] | None) -> dict[str, Any]:
+def with_global_defaults(
+    manifest: Mapping[str, Any], arena: Mapping[str, Any] | None
+) -> dict[str, Any]:
     """Underlay arena defaults beneath one game manifest.
 
     Per field the game manifest wins; the arena fills only what it leaves

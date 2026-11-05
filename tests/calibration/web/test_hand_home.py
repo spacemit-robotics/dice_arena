@@ -1,3 +1,7 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
+"""Web HOME actions command the hand through the framework only when the arm is still."""
+
 from unittest.mock import Mock
 
 import pytest
@@ -8,8 +12,10 @@ from calibration.web.common import read, write
 READY = {"enabled": True, "fault": False, "moving": False, "position_mode": True}
 
 
-@pytest.mark.parametrize("mode", ["unverified", "measured", "moving", "fault", "cancel", "send_error"])
-def test_zero_command_through_framework(tmp_path, monkeypatch, mode):
+@pytest.mark.parametrize(
+    "mode", ["unverified", "measured", "moving", "fault", "cancel", "send_error"]
+)
+def test_open_command_through_framework(tmp_path, monkeypatch, mode):
     clock = [100.0]
     monkeypatch.setattr(hand_home.time, "time", lambda: clock[0])
     sent = []
@@ -26,12 +32,16 @@ def test_zero_command_through_framework(tmp_path, monkeypatch, mode):
     arm = Mock()
     arm.move_hand.side_effect = move_hand
     arm.state.side_effect = lambda: dict(READY, fault=mode == "fault" and bool(sent))
-    arm.read_joints.side_effect = lambda: {"joints_rad": [0.1 if mode == "moving" and sent else 0.0] * 7}
+    arm.read_joints.side_effect = lambda: {
+        "joints_rad": [0.1 if mode == "moving" and sent else 0.0] * 7
+    }
     if mode in ("unverified", "measured"):
         proof = hand_home.reset_hand(arm, tmp_path)
         assert proof["command_sent"] and proof["status"] == "completed"
         assert proof["confirmed"] is (mode == "measured")
-        assert proof["verification"] == ("position_feedback" if mode == "measured" else "command_only")
+        assert proof["verification"] == (
+            "position_feedback" if mode == "measured" else "command_only"
+        )
         assert proof["completed_at"] - proof["commanded_at"] >= 1.0
     else:
         with pytest.raises(KeyboardInterrupt if mode == "cancel" else RuntimeError):
@@ -39,7 +49,7 @@ def test_zero_command_through_framework(tmp_path, monkeypatch, mode):
         assert read(tmp_path / "hand_home.json")["status"] == "failed"
         assert read(tmp_path / "hand_home.json")["confirmed"] is False
     if mode not in ("cancel", "send_error"):
-        assert sent == [([0.0] * 6, 1.0)]
+        assert sent == [([1.0] * 6, 1.0)]
     arm.move.assert_not_called()
 
 
@@ -83,7 +93,8 @@ def test_arm_home_cannot_clear_pending_hand_check(tmp_path):
     assert read(config["state_file"])["home_required"] is True
     state = read(config["state_file"])
     state.update(
-        hand_home_required=False, hand_home={"confirmed": False, "command_sent": True, "verification": "command_only"}
+        hand_home_required=False,
+        hand_home={"confirmed": False, "command_sent": True, "verification": "command_only"},
     )
     write(config["state_file"], state)
     flow.save(home_required=False)
@@ -106,7 +117,7 @@ def test_home_adapter_changes_only_web_motion_actions(tmp_path, monkeypatch, act
 
     for obj, name in (
         (sensors, "RealSenseCamera"),
-        (sensors, "NeroFeedback"),
+        (sensors, "ArmFeedback"),
         (calibrate, "capture_sample"),
         (auto_collect, "capture_sample"),
         (auto_collect, "AutoCollectionView"),
@@ -119,7 +130,8 @@ def test_home_adapter_changes_only_web_motion_actions(tmp_path, monkeypatch, act
     monkeypatch.setattr(home_start, "move_home", original)
     reset = Mock(
         side_effect=lambda *a: (
-            order.append("hand") or {"confirmed": False, "command_sent": True, "verification": "command_only"}
+            order.append("hand")
+            or {"confirmed": False, "command_sent": True, "verification": "command_only"}
         )
     )
     monkeypatch.setattr(hand_home, "reset_hand", reset)

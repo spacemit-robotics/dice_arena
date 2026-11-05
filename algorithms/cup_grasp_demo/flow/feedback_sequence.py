@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Pure configuration validation for a two-pose feedback hand sequence."""
 
 import math
@@ -16,7 +18,9 @@ def sequence_values(raw, initial, completion_duration):
         not isinstance(poses, list)
         or len(poses) != 2
         or any(
-            not isinstance(p, list) or len(p) != 6 or any(type(v) is not int or not 0 <= v <= 100 for v in p)
+            not isinstance(p, list)
+            or len(p) != 6
+            or any(type(v) is not int or not 0 <= v <= 100 for v in p)
             for p in poses
         )
     ):
@@ -31,7 +35,11 @@ def sequence_values(raw, initial, completion_duration):
     # Revo2 position/time frame pairs are sent atomically; 50 ms prevents a
     # transition from overtaking its predecessor without forcing us to wait
     # for that predecessor to reach its final pose.
-    if type(interval) not in (int, float) or not math.isfinite(interval) or not 0.05 <= interval <= 5:
+    if (
+        type(interval) not in (int, float)
+        or not math.isfinite(interval)
+        or not 0.05 <= interval <= 5
+    ):
         raise ValueError("hand_sequence.interval_s must be 0.05..5")
     # Default: A, B, A, B, A ...; one cycle is A -> B -> A. A one-way
     # reveal may set return_to_initial=false and finish at B.

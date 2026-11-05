@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Small runtime adapters shared by the provider and snapshot tests.
 
 The full resident-process orchestration is implemented in the provider task.
@@ -8,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Mapping, Iterator
+import glob
 import json
 import os
 import subprocess
@@ -24,7 +27,9 @@ class SnapshotError(ValueError):
     """Raised when a runtime snapshot reference is invalid or unsafe."""
 
 
-def build_rtsp_args(config: Mapping[str, Any], selected_video: Mapping[str, Any] | None) -> list[str]:
+def build_rtsp_args(
+    config: Mapping[str, Any], selected_video: Mapping[str, Any] | None
+) -> list[str]:
     """Build one RTSP publisher argument set with a profile-owned path."""
     rtsp = config.get("rtsp", {}) if isinstance(config, Mapping) else {}
     if not isinstance(rtsp, Mapping) or not rtsp.get("enabled", False):
@@ -40,6 +45,24 @@ def build_rtsp_args(config: Mapping[str, Any], selected_video: Mapping[str, Any]
     if video_path is not None:
         args.extend(["--rtsp-path", str(video_path).rstrip("/") or "/"])
     return args
+
+
+def resolve_camera_pattern(camera: str) -> str:
+    """A camera selector with wildcards must name exactly one existing device node.
+
+    Stable /dev/v4l/by-id names carry the camera's serial number; a pattern such as
+    /dev/v4l/by-id/usb-046d_HD_Pro_Webcam_C920_*-video-index0 accepts any unit of that model.
+    """
+    if not any(character in camera for character in "*?["):
+        return camera
+    matches = sorted(glob.glob(camera))
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"camera pattern {camera!r} matches {len(matches)} devices; connect exactly one such "
+            "camera "
+            "or set its device path"
+        )
+    return matches[0]
 
 
 def load_runtime_defaults(
@@ -77,7 +100,8 @@ class YoloRuntimeProcess:
     """
 
     def _runtime_cwd(self) -> str | None:
-        """The runtime writes caches (OpenCL .shaders) into its working directory: the site's when given."""
+        """The runtime writes caches (OpenCL .shaders) into its working directory: the site's when
+        given."""
         runtime_dir = os.environ.get("DICE_RUNTIME_DIR")
         if not runtime_dir:
             return self.working_dir
@@ -85,7 +109,9 @@ class YoloRuntimeProcess:
         directory.mkdir(parents=True, exist_ok=True)
         return str(directory)
 
-    def __init__(self, binary: str | Path | None = None, working_dir: str | Path | None = None) -> None:
+    def __init__(
+        self, binary: str | Path | None = None, working_dir: str | Path | None = None
+    ) -> None:
         self.binary = str(binary or "yolov8_camera")
         self._binary_injected = binary is not None
         self.working_dir = str(working_dir) if working_dir else None
@@ -147,7 +173,11 @@ class YoloRuntimeProcess:
                     if configured:
                         root = Path(__file__).resolve().parents[3]
                         self.binary = str((root / str(configured)).resolve())
-                if not self.working_dir and isinstance(defaults, Mapping) and defaults.get("working_dir"):
+                if (
+                    not self.working_dir
+                    and isinstance(defaults, Mapping)
+                    and defaults.get("working_dir")
+                ):
                     root = Path(__file__).resolve().parents[3]
                     self.working_dir = str((root / str(defaults["working_dir"])).resolve())
             except Exception:
@@ -164,7 +194,9 @@ class YoloRuntimeProcess:
                 pass
         if not component_config:
             try:
-                component_config, runtime_config = load_runtime_defaults(Path(__file__).parent, profile)
+                component_config, runtime_config = load_runtime_defaults(
+                    Path(__file__).parent, profile
+                )
             except Exception:
                 component_config = {}
                 runtime_config = {}
@@ -192,10 +224,16 @@ class YoloRuntimeProcess:
                 if camera.strip().isdigit():
                     runtime_overrides.extend(["--camera", camera.strip()])
                 else:
-                    runtime_overrides.extend(["--device", camera.strip()])
+                    runtime_overrides.extend(["--device", resolve_camera_pattern(camera.strip())])
             selected_video = selected_view.get("video")
         else:
             selected_video = profile.get("video") if isinstance(profile, Mapping) else None
+            # The runtime config's camera may be a pattern; the runtime itself opens literal paths
+            # only.
+            camera = runtime_config.get("camera") if isinstance(runtime_config, Mapping) else None
+            device = runtime_config.get("device") if isinstance(runtime_config, Mapping) else None
+            if isinstance(camera, str) and not device and resolve_camera_pattern(camera) != camera:
+                runtime_overrides.extend(["--device", resolve_camera_pattern(camera)])
 
         control_read, control_write = os.pipe()
         event_read, event_write = os.pipe()
@@ -278,13 +316,17 @@ class YoloRuntimeProcess:
                 except (OSError, ValueError):
                     pass
 
-            self._stdout_thread = threading.Thread(target=drain, name="yolo-runtime-log", daemon=True)
+            self._stdout_thread = threading.Thread(
+                target=drain, name="yolo-runtime-log", daemon=True
+            )
             self._stdout_thread.start()
 
     def send(self, command: Mapping[str, Any]) -> None:
         if not self._process or self._process.poll() is not None or self._control_write is None:
             raise RuntimeError("YOLO runtime is not running")
-        payload = (json.dumps(dict(command), ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+        payload = (
+            json.dumps(dict(command), ensure_ascii=False, separators=(",", ":")) + "\n"
+        ).encode("utf-8")
         try:
             os.write(self._control_write, payload)
         except OSError as exc:

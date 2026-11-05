@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Side approach planning, isolated from the flange/TCP comparison workflow."""
 
 from copy import deepcopy
@@ -34,7 +36,11 @@ def options(cfg):
     bounds = (
         [("close_gap_mm", 5, 50)]
         if opts["strategy"] == "direct_close"
-        else [("pregrasp_gap_mm", 5, 100), ("approach_step_mm", 1, 5), ("approach_speed_percent", 1, 5)]
+        else [
+            ("pregrasp_gap_mm", 5, 100),
+            ("approach_step_mm", 1, 5),
+            ("approach_speed_percent", 1, 5),
+        ]
     )
     for key, lo, hi in bounds + [
         ("finger_duration_s", 0.5, 3),
@@ -89,10 +95,14 @@ def scene_from_points(session, cfg, geom, points):
     delta = points - np.array(geom["center_camera_m"])
     z = delta @ normal
     radial = np.linalg.norm(delta - z[:, None] * normal, axis=1)
-    selected = (z + geom["contact_height_m"] > 0) & (z + geom["contact_height_m"] <= geom["height_m"])
+    selected = (z + geom["contact_height_m"] > 0) & (
+        z + geom["contact_height_m"] <= geom["height_m"]
+    )
     if selected.sum() < 100:
         raise ValueError("Insufficient cup points for side approach")
-    radius = max(geom["radius_m"], float(np.percentile(radial[selected], opts["cup_radius_percentile"])))
+    radius = max(
+        geom["radius_m"], float(np.percentile(radial[selected], opts["cup_radius_percentile"]))
+    )
     radius += opts["cup_model_padding_mm"] / 1000
     if not 0.01 <= radius <= 0.1:
         raise ValueError("Observed cup collision radius outside model range")
@@ -117,7 +127,9 @@ class GraspScreen:
         self.full = screen or Screen()
         self.non_hand = Screen.__new__(Screen)
         self.non_hand.arm = self.full.arm
-        self.non_hand.meshes = {k: v for k, v in self.full.meshes.items() if not k.startswith("right_")}
+        self.non_hand.meshes = {
+            k: v for k, v in self.full.meshes.items() if not k.startswith("right_")
+        }
 
     def approach(self, samples, scene, cfg):
         table = self.full.check(samples, scene, True, cfg)
@@ -146,7 +158,11 @@ def make_grasp_plan(session, current, cfg, scene, start="home", until="grip"):
         from cup_grasp_demo.flow.direct_grasp import make_direct_plan
 
         return make_direct_plan(session, current, cfg, scene, opts, start, until)
-    if start not in STATES[:-1] or until not in STATES[1:] or STATES.index(start) >= STATES.index(until):
+    if (
+        start not in STATES[:-1]
+        or until not in STATES[1:]
+        or STATES.index(start) >= STATES.index(until)
+    ):
         raise ValueError("Invalid grasp stage interval")
     arm = load_model()
     tcp = matrix(session["T_flange_tcp"])
@@ -164,10 +180,19 @@ def make_grasp_plan(session, current, cfg, scene, start="home", until="grip"):
         if np.max(np.abs(current - home)) > math.radians(1):
             raise ValueError("先回新的 HOME，再从 home 阶段规划")
         shaped_session = {**session, "scene": scene}
-        transfer = make_plan(shaped_session, current, cfg, "tcp", opts["pregrasp_gap_mm"], False, screen=screen.full)
+        transfer = make_plan(
+            shaped_session, current, cfg, "tcp", opts["pregrasp_gap_mm"], False, screen=screen.full
+        )
         blockers.extend(transfer["blockers"])
         for stage in transfer["stages"]:
-            stages.append({**stage, "kind": "arm", "state": "TO_PREGRASP", "speed_percent": cfg["speed_percent"]})
+            stages.append(
+                {
+                    **stage,
+                    "kind": "arm",
+                    "state": "TO_PREGRASP",
+                    "speed_percent": cfg["speed_percent"],
+                }
+            )
         if not blockers and stages:
             stages[-1]["state_completed"] = "PREGRASP"
     else:
@@ -184,12 +209,20 @@ def make_grasp_plan(session, current, cfg, scene, start="home", until="grip"):
         for i in range(1, steps + 1):
             point = pregrasp + (contact - pregrasp) * i / steps
             target = flange_target(point, rotation, tcp, "tcp")
-            ik = arm.ik(target, seed, max_iterations=600, position_tolerance_m=1e-5, orientation_tolerance_rad=1e-4)
+            ik = arm.ik(
+                target,
+                seed,
+                max_iterations=600,
+                position_tolerance_m=1e-5,
+                orientation_tolerance_rad=1e-4,
+            )
             if not ik.success:
                 blockers.append(f"approach/{i}: IK {ik.reason}")
                 break
             path = arm.check_joint_path(seed, ik.joints_rad)
-            if not path.kinematic_checks_passed or np.max(np.abs(np.array(ik.joints_rad) - seed)) > math.radians(20):
+            if not path.kinematic_checks_passed or np.max(
+                np.abs(np.array(ik.joints_rad) - seed)
+            ) > math.radians(20):
                 blockers.append(f"approach/{i}: joint limit/discontinuity")
                 break
             # Bound the sampled joint-interpolation bow away from the intended radial line.

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Optional single-class YOLOv8-seg cup masks with registered depth geometry."""
 
 import ast
@@ -50,7 +52,13 @@ def perception_options(cfg):
     if not resolved.is_relative_to(ROOT):
         raise ValueError("Cup model must be inside the algorithm root for portable session hashing")
     opts["model"] = str(resolved.relative_to(ROOT))
-    for key in ("confidence", "iou_threshold", "mask_threshold", "min_workspace_fraction", "min_valid_depth_fraction"):
+    for key in (
+        "confidence",
+        "iou_threshold",
+        "mask_threshold",
+        "min_workspace_fraction",
+        "min_valid_depth_fraction",
+    ):
         value = opts[key]
         if (
             isinstance(value, bool)
@@ -82,7 +90,11 @@ def model_path(cfg):
 
 def decode(outputs, image_shape, transform, opts):
     """Decode this one-cap-class export: xywh, cap probability, 32 coefficients."""
-    if len(outputs) != 2 or outputs[0].shape != (1, 37, 8400) or outputs[1].shape != (1, 32, 160, 160):
+    if (
+        len(outputs) != 2
+        or outputs[0].shape != (1, 37, 8400)
+        or outputs[1].shape != (1, 32, 160, 160)
+    ):
         raise ValueError("Expected one-class YOLO-seg outputs [1,37,8400] and [1,32,160,160]")
     if not all(np.isfinite(x).all() for x in outputs):
         raise ValueError("Nonfinite YOLO output")
@@ -101,7 +113,9 @@ def decode(outputs, image_shape, transform, opts):
             anchors.append(int(index))
     if not boxes:
         return []
-    keep = cv2.dnn.NMSBoxes(boxes, [float(scores[i]) for i in anchors], opts["confidence"], opts["iou_threshold"])
+    keep = cv2.dnn.NMSBoxes(
+        boxes, [float(scores[i]) for i in anchors], opts["confidence"], opts["iou_threshold"]
+    )
     scale, left, top, nw, nh = transform
     height, width = image_shape[:2]
     py, px = np.indices((160, 160))
@@ -126,7 +140,15 @@ def decode(outputs, image_shape, transform, opts):
         x1, y1, x2, y2 = box
         roi[int(y1) : math.ceil(y2), int(x1) : math.ceil(x2)] = True
         mask &= roi
-        results.append(dict(class_id=0, class_name="cap", confidence=float(scores[index]), bbox_xyxy=box, mask=mask))
+        results.append(
+            dict(
+                class_id=0,
+                class_name="cap",
+                confidence=float(scores[index]),
+                bbox_xyxy=box,
+                mask=mask,
+            )
+        )
     return results
 
 
@@ -157,7 +179,9 @@ def _session(path, sha256, package_dir):
     ):
         raise ValueError("Unsupported cup ONNX input/output contract")
     metadata = session.get_modelmeta().custom_metadata_map
-    if metadata.get("task") != "segment" or ast.literal_eval(metadata.get("names", "{}")) != {0: "cap"}:
+    if metadata.get("task") != "segment" or ast.literal_eval(metadata.get("names", "{}")) != {
+        0: "cap"
+    }:
         raise ValueError("Require segmentation model with class 0 named cap")
     return session, dict(
         model_sha256=sha256,
@@ -181,7 +205,10 @@ def infer(image, opts):
         inference_s = time.monotonic() - inference_start
         instances = decode(outputs, image.shape, transform, opts)
         return instances, dict(
-            provenance, model=opts["model"], inference_s=inference_s, total_s=time.monotonic() - start
+            provenance,
+            model=opts["model"],
+            inference_s=inference_s,
+            total_s=time.monotonic() - start,
         )
     except Exception as exc:
         raise ValueError(f"YOLO-seg 推理失败，不回退几何选杯：{exc}") from exc
@@ -208,8 +235,12 @@ def yolo_candidates(depth, image, meta, cfg, output=None):
             row.update(instance=index, mask_pixels=int(item["mask"].sum()), geometry_accepted=False)
             report["instances"].append(row)
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        red = ((hsv[:, :, 0] < 15) | (hsv[:, :, 0] > 165)) & (hsv[:, :, 1] > 70) & (hsv[:, :, 2] > 50)
-        contours, _ = cv2.findContours(red.astype("uint8"), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        red = (
+            ((hsv[:, :, 0] < 15) | (hsv[:, :, 0] > 165)) & (hsv[:, :, 1] > 70) & (hsv[:, :, 2] > 50)
+        )
+        contours, _ = cv2.findContours(
+            red.astype("uint8"), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
         if not contours:
             raise ValueError("Red workspace not visible")
         workspace = np.zeros(depth.shape, "uint8")
@@ -230,14 +261,21 @@ def yolo_candidates(depth, image, meta, cfg, output=None):
                 if row["workspace_fraction"] < opts["min_workspace_fraction"]:
                     raise ValueError("outside_red_workspace")
                 mask = mask & (workspace > 0)
-                ring = (cv2.dilate(mask.astype("uint8"), np.ones((101, 101), "uint8")) > 0) & table_mask
+                ring = (
+                    cv2.dilate(mask.astype("uint8"), np.ones((101, 101), "uint8")) > 0
+                ) & table_mask
                 table_points = deproject(depth, ring, intr, scale)
                 if len(table_points) < geometry_cfg.min_points:
                     raise ValueError("insufficient_table_depth")
                 table, normal, table_fraction, rms = _plane(table_points, geometry_cfg)
                 radius = opts["mask_erode_px"]
                 if radius:
-                    mask = cv2.erode(mask.astype("uint8"), np.ones((2 * radius + 1, 2 * radius + 1), "uint8")) > 0
+                    mask = (
+                        cv2.erode(
+                            mask.astype("uint8"), np.ones((2 * radius + 1, 2 * radius + 1), "uint8")
+                        )
+                        > 0
+                    )
                 row["valid_depth_fraction"] = (
                     float(((depth > 0) & np.isfinite(depth))[mask].mean()) if mask.any() else 0.0
                 )
@@ -264,12 +302,20 @@ def yolo_candidates(depth, image, meta, cfg, output=None):
                     min_arc_deg=geometry_cfg.min_arc_deg,
                 )
                 if count < geometry_cfg.min_points:
-                    raise ValueError(f"insufficient_section_points: {count} < {geometry_cfg.min_points}")
+                    raise ValueError(
+                        f"insufficient_section_points: {count} < {geometry_cfg.min_points}"
+                    )
                 geom = section(
-                    points, table, normal, cfg["contact_height_fraction"], geometry_cfg, half_band_m=half_band
+                    points,
+                    table,
+                    normal,
+                    cfg["contact_height_fraction"],
+                    geometry_cfg,
+                    half_band_m=half_band,
                 )
                 row["section_fit"].update(
-                    circle_rms_mm=geom["circle_rms_m"] * 1000, visible_arc_deg=geom["visible_arc_deg"]
+                    circle_rms_mm=geom["circle_rms_m"] * 1000,
+                    visible_arc_deg=geom["visible_arc_deg"],
                 )
                 geom["section_fit"] = dict(row["section_fit"])
                 ys, xs = np.nonzero(mask)
@@ -277,7 +323,12 @@ def yolo_candidates(depth, image, meta, cfg, output=None):
                     table_fraction=table_fraction,
                     table_rms_m=rms,
                     table_point_camera_m=table.tolist(),
-                    bbox_xywh=[int(xs.min()), int(ys.min()), int(np.ptp(xs) + 1), int(np.ptp(ys) + 1)],
+                    bbox_xywh=[
+                        int(xs.min()),
+                        int(ys.min()),
+                        int(np.ptp(xs) + 1),
+                        int(np.ptp(ys) + 1),
+                    ],
                     segmentation=dict(
                         backend=opts["backend"],
                         class_id=0,
@@ -287,7 +338,9 @@ def yolo_candidates(depth, image, meta, cfg, output=None):
                     ),
                 )
                 row.update(
-                    geometry_accepted=True, height_mm=geom["height_m"] * 1000, diameter_mm=geom["radius_m"] * 2000
+                    geometry_accepted=True,
+                    height_mm=geom["height_m"] * 1000,
+                    diameter_mm=geom["radius_m"] * 2000,
                 )
                 proposals.append((geom, mask, points))
             except ValueError as exc:

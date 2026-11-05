@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Bounded, synchronized joint reciprocation. No SDK, numpy or hardware imports."""
 
 import math
@@ -38,7 +40,9 @@ def options(raw):
         raise ValueError("command_mode must be smooth_profile, blended or fixed_endpoints")
     result["endpoint_blend"] = number(result["endpoint_blend"], "endpoint_blend", 0, 1)
     if result["command_rate_hz"] is not None:
-        result["command_rate_hz"] = number(result["command_rate_hz"], "command_rate_hz", 20, 200, True)
+        result["command_rate_hz"] = number(
+            result["command_rate_hz"], "command_rate_hz", 20, 200, True
+        )
     targets = result["controller_acceleration_rad_s2"]
     if targets is not None:
         if not isinstance(targets, list) or len(targets) != 7:
@@ -151,7 +155,9 @@ def trajectory(raw):
             f"maximum {0.2 * segments[1]['duration_s']:.6f}s"
         )
     if elapsed > 60:
-        raise ValueError(f"Bounded test duration {elapsed:.2f}s exceeds 60s; reduce cycles/amplitude")
+        raise ValueError(
+            f"Bounded test duration {elapsed:.2f}s exceeds 60s; reduce cycles/amplitude"
+        )
     return cfg, segments, elapsed
 
 
@@ -266,7 +272,10 @@ def make_plan(feedback, raw, model_limits):
             dict(
                 t_s=t,
                 q_rad=joint_values(
-                    dict(parameters=cfg, segments=segments, start_q_rad=q0, amplitude_rad=amplitudes), t
+                    dict(
+                        parameters=cfg, segments=segments, start_q_rad=q0, amplitude_rad=amplitudes
+                    ),
+                    t,
                 ),
             )
         )
@@ -286,7 +295,10 @@ def make_plan(feedback, raw, model_limits):
         joint_peak_acceleration_rad_s2=a,
         triangular_profile=segments[1]["cruise_s"] == 0,
         warnings=(
-            ["反馈补偿延迟超过周期 10%；record 模式仅记录，不阻止规划。请结合原始误差、实际幅度和频率评估跟踪效果。"]
+            [
+                "反馈补偿延迟超过周期 10%；record 模式仅记录，不阻止规划。请结合原始误差、"
+                "实际幅度和频率评估跟踪效果。"
+            ]
             if cfg["feedback_reference_delay_s"] > 0.2 * segments[1]["duration_s"]
             else []
         ),
@@ -315,7 +327,9 @@ def feedback_check(row, plan, elapsed):
     if len(row["q_rad"]) != 7:
         raise RuntimeError("缺少七轴反馈")
     errors = reference_errors(row, plan, elapsed, cfg.get("feedback_reference_delay_s", 0.0))
-    for i, (q, center, amp) in enumerate(zip(row["q_rad"], plan["start_q_rad"], plan["amplitude_rad"])):
+    for i, (q, center, amp) in enumerate(
+        zip(row["q_rad"], plan["start_q_rad"], plan["amplitude_rad"])
+    ):
         margin = cfg.get("envelope_margin_deg")
         if margin is None:
             margin = cfg["tracking_error_deg"]
@@ -323,9 +337,14 @@ def feedback_check(row, plan, elapsed):
         if not math.isfinite(q) or abs(q - center) > abs(amp) + envelope:
             raise RuntimeError(f"J{i + 1} 超出往返包络或未选中关节发生运动")
         tolerance = cfg["tracking_error_deg"] if amp else cfg["inactive_error_deg"]
-        if abs(errors[i]) > tolerance and (not amp or cfg.get("tracking_error_action", "stop") == "stop"):
+        if abs(errors[i]) > tolerance and (
+            not amp or cfg.get("tracking_error_action", "stop") == "stop"
+        ):
             delay = cfg.get("feedback_reference_delay_s", 0.0)
-            raise RuntimeError(f"J{i + 1} 跟踪误差 {errors[i]:.2f}° 超限 (阈值 {tolerance:g}°，参考延迟 {delay:.3f}s)")
+            raise RuntimeError(
+                f"J{i + 1} 跟踪误差 {errors[i]:.2f}° 超限 (阈值 {tolerance:g}°，参考延迟 "
+                f"{delay:.3f}s)"
+            )
     return errors
 
 
@@ -436,8 +455,12 @@ def measurements(rows, plan, *, max_age_s=0.1):
                 stroke_deg=stroke,
                 frequency_hz=freq,
                 reference_frequency_hz=plan["reference_frequency_hz"],
-                estimated_peak_velocity_deg_s=max((abs(v) for _, v, _ in derivatives), default=None),
-                estimated_peak_acceleration_deg_s2=max((abs(a) for _, _, a in derivatives), default=None),
+                estimated_peak_velocity_deg_s=max(
+                    (abs(v) for _, v, _ in derivatives), default=None
+                ),
+                estimated_peak_acceleration_deg_s2=max(
+                    (abs(a) for _, _, a in derivatives), default=None
+                ),
                 derivative_window_s=window,
                 derivative_estimate_count=len(derivatives),
                 unique_feedback_samples=len(samples),
@@ -450,6 +473,7 @@ def measurements(rows, plan, *, max_age_s=0.1):
         )
     return dict(
         joints=result,
-        derivative_note="按关节包接收时间去重，固定时间窗二次拟合估算；会平滑尖峰，不是电机额定能力。数据不足为 null",
+        derivative_note="按关节包接收时间去重，固定时间窗二次拟合估算；会平滑尖峰，"
+        "不是电机额定能力。数据不足为 null",
         tracking_verified=bool(result) and all(r["tracking_verified"] for r in result),
     )

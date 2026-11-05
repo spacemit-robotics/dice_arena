@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Gesture registry: scan configs/actions/gestures/*.json and merge flat.
 
 Each group file keeps the result_feedback.json shape (top-level defaults +
@@ -69,7 +71,9 @@ def load_registry(source=GESTURES_DIR):
     for path, config in groups:
         conflicts = sorted(n for n in _group_names(config) if n in seen)
         if conflicts:
-            errors.append(f"{path.name}: 与 {seen[conflicts[0]]} 重复的动作名 {conflicts}，整组拒载")
+            errors.append(
+                f"{path.name}: 与 {seen[conflicts[0]]} 重复的动作名 {conflicts}，整组拒载"
+            )
             continue
         invalid = _first_recipe_error(path, config)
         if invalid:

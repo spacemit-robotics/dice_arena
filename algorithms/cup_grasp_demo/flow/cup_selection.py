@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Optional size-based initial cup selection; never lock to an old cup position."""
 
 import math
@@ -20,7 +22,10 @@ def selection_options(cfg):
         if (
             not isinstance(values, (list, tuple))
             or len(values) != 2
-            or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in values)
+            or any(
+                isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
+                for v in values
+            )
             or not 0 < values[0] < values[1]
         ):
             raise ValueError(f"Invalid cup_selection.{key}")

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Measured opening reference must not weaken unrelated hand verification."""
 
 import unittest
@@ -10,7 +12,9 @@ REF = [0, 19, 0, 0, 0, 0]
 def report(values=REF, stamps=(1, 2, 3)):
     return dict(
         position_target_reached=False,
-        position_samples=[dict(received_epoch_s=s, values=dict(zip(NAMES, values))) for s in stamps],
+        position_samples=[
+            dict(received_epoch_s=s, values=dict(zip(NAMES, values))) for s in stamps
+        ],
     )
 
 

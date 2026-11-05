@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """SDK-side grasp state execution. Uses only the Python standard library."""
 
 import math
@@ -12,7 +14,12 @@ def validate_sequence(plan, cfg=None):
     """Reject unexpected hand recipes and any arm movement after closing starts."""
     states = {"TO_PREGRASP": 0, "APPROACH": 1, "THUMB_BASE": 2, "CLOSE_FINGERS": 3}
     if plan.get("strategy") == "direct_close":
-        states = {"TO_CLOSE_READY": 0, "APPROACH_CLOSE_READY": 1, "THUMB_BASE": 2, "CLOSE_FINGERS": 3}
+        states = {
+            "TO_CLOSE_READY": 0,
+            "APPROACH_CLOSE_READY": 1,
+            "THUMB_BASE": 2,
+            "CLOSE_FINGERS": 3,
+        }
     prior, hands, hand_states = -1, [], []
     for stage in plan["stages"]:
         order = states.get(stage["state"], -1)
@@ -67,7 +74,8 @@ def send_closure(
     epoch, started = wallclock(), monotonic()
     hand.position_time_ctrl(mode="pos", **target)
     hand.position_time_ctrl(
-        mode="time", **dict.fromkeys(demo.FINGER_NAMES, 0 if maximum_speed else round(duration * 100))
+        mode="time",
+        **dict.fromkeys(demo.FINGER_NAMES, 0 if maximum_speed else round(duration * 100)),
     )
     interval = monotonic() - started
     if interval > 0.05:
@@ -79,12 +87,19 @@ def send_closure(
         monitor()
         feedback = hand.get_finger_pos() if read_feedback else None
         stamp = demo.feedback_stamp(feedback)
-        if stamp is not None and stamp > epoch and stamp != last_stamp and 0 <= wallclock() - stamp <= 1:
+        if (
+            stamp is not None
+            and stamp > epoch
+            and stamp != last_stamp
+            and 0 <= wallclock() - stamp <= 1
+        ):
             last_stamp = stamp
             positions.append(dict(received_epoch_s=stamp, values=demo.position_values(feedback)))
         sleep(min(0.05, max(0.0, duration + stage["settle_s"] - (monotonic() - started))))
     after = fresh_current(hand, demo, wallclock) if read_feedback else None
-    error = max(abs(positions[-1]["values"][k] - v) for k, v in target.items()) if positions else None
+    error = (
+        max(abs(positions[-1]["values"][k] - v) for k, v in target.items()) if positions else None
+    )
     if stage["state"] == "THUMB_BASE" and error is not None and error > 3:
         raise RuntimeError("拇指根位置反馈未到目标，停止后续闭手")
     return dict(
@@ -112,7 +127,9 @@ def execute(plan, cfg, robot, hand, demo, arm_step, result):
     for stage in plan["stages"]:
         result["last_state"] = stage["state"]
         print(f"GRASP_STATE {stage['state']} {stage['name']}", flush=True)
-        result["state_events"].append(dict(state=stage["state"], event="enter", epoch_s=time.time()))
+        result["state_events"].append(
+            dict(state=stage["state"], event="enter", epoch_s=time.time())
+        )
         if stage["kind"] == "arm":
             arm_step(stage, stage["speed_percent"])
         else:
@@ -124,7 +141,8 @@ def execute(plan, cfg, robot, hand, demo, arm_step, result):
                     or status.motion_status != 0
                     or status.ctrl_mode != 1
                     or robot.get_joints_enable_status_list() != [True] * 7
-                    or max(abs(a - b) for a, b in zip(joints, stage["current_q_rad"])) > math.radians(0.5)
+                    or max(abs(a - b) for a, b in zip(joints, stage["current_q_rad"]))
+                    > math.radians(0.5)
                 ):
                     raise RuntimeError("闭手期间机械臂状态或位置改变")
 
@@ -133,7 +151,13 @@ def execute(plan, cfg, robot, hand, demo, arm_step, result):
             row = send_closure(hand, demo, stage, monitor)
             result["stages"].append(dict(name=stage["name"], state=stage["state"], **row))
         result["state_events"].append(
-            dict(state=stage.get("state_completed", stage["state"]), event="completed", epoch_s=time.time())
+            dict(
+                state=stage.get("state_completed", stage["state"]),
+                event="completed",
+                epoch_s=time.time(),
+            )
         )
-    result["last_state"] = "GRIP_COMMANDS_SENT" if plan["until_state"] == "grip" else plan["until_state"].upper()
+    result["last_state"] = (
+        "GRIP_COMMANDS_SENT" if plan["until_state"] == "grip" else plan["until_state"].upper()
+    )
     result["physical_grip_verified"] = False

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Game manifest registry and pipeline dispatch."""
 
 from __future__ import annotations
@@ -85,7 +87,9 @@ def validate_asr_section(asr: Any, machine: dict[str, Any]) -> dict[str, Any]:
             known_intents.update((state.get("on_intent") or {}).keys())
     for intent, words in phrases.items():
         if intent not in known_intents:
-            raise ValueError(f"asr.phrases key {intent!r} is not an intent of this game's state machine")
+            raise ValueError(
+                f"asr.phrases key {intent!r} is not an intent of this game's state machine"
+            )
         if (
             not isinstance(words, list)
             or not words
@@ -124,7 +128,10 @@ class GameRegistry:
             return [public_game_manifest(manifest) for manifest in self._games.values()]
         from core.arena_config import with_global_defaults
 
-        return [public_game_manifest(with_global_defaults(manifest, arena)) for manifest in self._games.values()]
+        return [
+            public_game_manifest(with_global_defaults(manifest, arena))
+            for manifest in self._games.values()
+        ]
 
 
 def _public_video(video: Any) -> dict[str, Any]:
@@ -227,7 +234,8 @@ def load_games(root: Path | None = None) -> GameRegistry:
 
             providers = manifest.get("providers", {})
             if not isinstance(providers, dict) or not all(
-                isinstance(key, str) and isinstance(value, str) and value for key, value in providers.items()
+                isinstance(key, str) and isinstance(value, str) and value
+                for key, value in providers.items()
             ):
                 raise ValueError("providers must map semantic slots to provider ids")
             # Keep the old flat tts_provider spelling as a migration alias.
@@ -245,9 +253,13 @@ def load_games(root: Path | None = None) -> GameRegistry:
                 # so resolution falls back to the v8 module — the schema they
                 # were built against.  A provider id that exists nowhere
                 # fails later at component resolution, not here.
-                vision_provider_id = resolve_provider_id(manifest, "vision_adjudicator", "vision_yolov8_objdetect")
+                vision_provider_id = resolve_provider_id(
+                    manifest, "vision_adjudicator", "vision_yolov8_objdetect"
+                )
                 try:
-                    profile_module = importlib.import_module(f"components.{vision_provider_id}.profile")
+                    profile_module = importlib.import_module(
+                        f"components.{vision_provider_id}.profile"
+                    )
                 except ModuleNotFoundError:
                     from components.vision_yolov8_objdetect import profile as profile_module
                 if profile is not None:

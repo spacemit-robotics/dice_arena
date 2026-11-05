@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Workflow orchestration tests: no camera, CAN or robot motion."""
 
 import copy
@@ -45,7 +47,10 @@ class WorkflowTests(unittest.TestCase):
 
     def test_thresholds_reach_both_solvers_and_legacy_defaults_remain(self):
         for measurement in (None, {"width_mm": 86.5, "height_mm": 108}):
-            for thresholds, expected in ((None, (5.0, 2.0)), ({"position_mm": 15, "angle_deg": 5}, (15, 5))):
+            for thresholds, expected in (
+                (None, (5.0, 2.0)),
+                ({"position_mm": 15, "angle_deg": 5}, (15, 5)),
+            ):
                 self.cfg["measurement"] = measurement
                 self.cfg.pop("quality_thresholds", None)
                 if thresholds is not None:
@@ -135,7 +140,9 @@ class WorkflowTests(unittest.TestCase):
         table = self.root / "table.json"
         table.write_text("old table")
         pipeline = self.root / "pipeline.json"
-        pipeline.write_text(json.dumps({"calibration": str(old), "green_cup": {"home_table_scene": str(table)}}))
+        pipeline.write_text(
+            json.dumps({"calibration": str(old), "green_cup": {"home_table_scene": str(table)}})
+        )
         self.cfg.update(result=str(result), pipeline_config=str(pipeline))
         self.write()
         w = workflow.Workflow(self.path)
@@ -152,7 +159,9 @@ class WorkflowTests(unittest.TestCase):
         with patch("workflow.require_idle"), patch.object(w, "call", side_effect=call):
             with self.assertRaisesRegex(RuntimeError, "camera busy"):
                 w.run("apply")
-        self.assertEqual(calls, ["calibration/apply_result.py", "calibration/tools/table_capture.py"])
+        self.assertEqual(
+            calls, ["calibration/apply_result.py", "calibration/tools/table_capture.py"]
+        )
         self.assertNotIn("table", w.state)
 
     def test_missing_table_tools_stop_before_install_or_backup(self):
@@ -161,7 +170,11 @@ class WorkflowTests(unittest.TestCase):
         self.cfg["result"] = str(result)
         self.write()
         w = workflow.Workflow(self.path)
-        with patch("workflow.require_idle"), patch.object(workflow, "CODE", self.root), patch.object(w, "call") as call:
+        with (
+            patch("workflow.require_idle"),
+            patch.object(workflow, "CODE", self.root),
+            patch.object(w, "call") as call,
+        ):
             with self.assertRaisesRegex(ValueError, "桌面登记工具不存在"):
                 w.run("apply")
             call.assert_not_called()
@@ -204,12 +217,20 @@ class WorkflowTests(unittest.TestCase):
             w.run("apply")
         created = json.loads((site / "green_cup.json").read_text())
         self.assertEqual(created["calibration"], str(site / "calibration/handeye_result.json"))
-        self.assertEqual(created["green_cup"]["home_table_scene"], str(site / "calibration/home_table_scene.json"))
-        self.assertTrue(created["green_cup"]["installation_requires_calibration"])
-        self.assertEqual(created["home"], "configs/actions/home.json")  # Algorithm resources stay relative.
-        self.assertEqual(sorted(p.name for p in Path(w.state["backup"]).iterdir()), ["pipeline_config.json"])
         self.assertEqual(
-            [c.args[0] for c in call.call_args_list], ["calibration/apply_result.py", *workflow.TABLE_TOOLS]
+            created["green_cup"]["home_table_scene"],
+            str(site / "calibration/home_table_scene.json"),
+        )
+        self.assertTrue(created["green_cup"]["installation_requires_calibration"])
+        self.assertEqual(
+            created["home"], "configs/actions/home.json"
+        )  # Algorithm resources stay relative.
+        self.assertEqual(
+            sorted(p.name for p in Path(w.state["backup"]).iterdir()), ["pipeline_config.json"]
+        )
+        self.assertEqual(
+            [c.args[0] for c in call.call_args_list],
+            ["calibration/apply_result.py", *workflow.TABLE_TOOLS],
         )
 
     def test_table_retry_uses_existing_tools_and_records_only_complete_capture(self):

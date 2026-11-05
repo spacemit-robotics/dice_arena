@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Independent table capture for shaking; never detects cups or controls joints."""
 
 from pathlib import Path
@@ -63,7 +65,9 @@ def home_scene(run, cfg):
     options = workspace_options(cfg.get("green_cup", {}).get("perception", {}).get("workspace"))
     surface, _ = workspace_masks(image, options)
     if not surface.any():
-        raise ValueError("没有检测到配置的桌面工作区（" + options["color"] + "），请检查桌布颜色与光照")
+        raise ValueError(
+            "没有检测到配置的桌面工作区（" + options["color"] + "），请检查桌布颜色与光照"
+        )
     table, normal, fraction, rms = _plane(
         deproject(depth, surface, meta["intrinsics"], meta["depth_scale_m"]),
         Config(plane_tolerance_m=cfg["plane_tolerance_mm"] / 1000),

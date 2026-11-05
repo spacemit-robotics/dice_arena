@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Terminal aliases preserve the resident control protocol."""
 
 import json
@@ -16,12 +18,20 @@ class TerminalCommandsTest(unittest.TestCase):
             "g": dict(command="advance", until="RETURN_HOME"),
             "until lift": dict(command="advance", until="LIFT"),
             "home": dict(command="action", name="home"),
-            "action rps-ready": dict(command="action", name="rps-ready"),
+            "action home": dict(command="action", name="home"),
             "quit": dict(command="close"),
             "q": dict(command="close"),
             "?": dict(command="help"),
         }
-        for name in ("status", "actions", "reload", "refresh_perception", "query_pose", "close", "help"):
+        for name in (
+            "status",
+            "actions",
+            "reload",
+            "refresh_perception",
+            "query_pose",
+            "close",
+            "help",
+        ):
             pairs[name] = dict(command=name)
         for text, expected in pairs.items():
             with self.subTest(text=text):
@@ -36,7 +46,16 @@ class TerminalCommandsTest(unittest.TestCase):
             parse_command('{"command":')
 
     def test_incomplete_or_extra_arguments_are_rejected(self):
-        for text in ("run twice", "next home", "until", "action", "action rock paper", "home now", "ru", "stop"):
+        for text in (
+            "run twice",
+            "next home",
+            "until",
+            "action",
+            "action rock paper",
+            "home now",
+            "ru",
+            "stop",
+        ):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 parse_command(text)
         self.assertIsNone(parse_command(" \n"))

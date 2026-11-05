@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """统一错误类型与响应格式。
 
 所有业务错误继承 DiceArenaError，携带 HTTP 状态码和机器可读的错误码。
@@ -40,7 +42,9 @@ class GameConfigError(DiceArenaError):
     """游戏配置格式错误（manifest.json 无效）。"""
 
     def __init__(self, game_id: str, detail: str):
-        super().__init__(message=f"游戏 {game_id} 配置错误: {detail}", code="GAME_CONFIG_ERROR", status=500)
+        super().__init__(
+            message=f"游戏 {game_id} 配置错误: {detail}", code="GAME_CONFIG_ERROR", status=500
+        )
 
 
 # ---- 组件相关错误 ----
@@ -50,14 +54,18 @@ class ComponentNotFoundError(DiceArenaError):
     """组件未注册。"""
 
     def __init__(self, component_id: str):
-        super().__init__(message=f"组件未找到: {component_id}", code="COMPONENT_NOT_FOUND", status=500)
+        super().__init__(
+            message=f"组件未找到: {component_id}", code="COMPONENT_NOT_FOUND", status=500
+        )
 
 
 class ComponentNotReadyError(DiceArenaError):
     """组件健康检查失败（如 TTS 服务未启动）。"""
 
     def __init__(self, component_id: str, detail: str):
-        super().__init__(message=f"组件 {component_id} 未就绪: {detail}", code="COMPONENT_NOT_READY", status=503)
+        super().__init__(
+            message=f"组件 {component_id} 未就绪: {detail}", code="COMPONENT_NOT_READY", status=503
+        )
 
 
 class VisionError(DiceArenaError):
@@ -92,7 +100,9 @@ class JobTimeoutError(DiceArenaError):
     """任务超时。"""
 
     def __init__(self, job_id: str, timeout_seconds: int):
-        super().__init__(message=f"任务 {job_id} 超时（{timeout_seconds} 秒）", code="JOB_TIMEOUT", status=504)
+        super().__init__(
+            message=f"任务 {job_id} 超时（{timeout_seconds} 秒）", code="JOB_TIMEOUT", status=504
+        )
 
 
 class JobCancelledError(DiceArenaError):

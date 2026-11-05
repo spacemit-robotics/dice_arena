@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Backend-authoritative game state machine engine.
 
 One :class:`GameRound` drives one game session through the state graph
@@ -67,7 +69,10 @@ class IntentRejectedError(DiceArenaError):
 
     def __init__(self, round_id: str, state: str, intent: str, *, gated: bool = False) -> None:
         if gated:
-            message = f"intent {intent!r} is gated until the state's entry speech finishes in state {state!r}"
+            message = (
+                f"intent {intent!r} is gated until the state's entry speech finishes in "
+                f"state {state!r}"
+            )
         else:
             message = f"intent {intent!r} is not accepted in state {state!r}"
         super().__init__(message, "ROUND_INTENT_REJECTED", 409)
@@ -81,14 +86,24 @@ class RoundClosedError(DiceArenaError):
 
 
 AdjudicateFn = Callable[
-    [Mapping[str, Any], Callable[[dict[str, Any]], None], Callable[[], bool], Callable[[str], None]],
+    [
+        Mapping[str, Any],
+        Callable[[dict[str, Any]], None],
+        Callable[[], bool],
+        Callable[[str], None],
+    ],
     dict[str, Any],
 ]
 
 # Robot actions receive the resolved action mapping (feedback already carries
 # its ``kind``), a progress-event callback, a cancellation probe, and a logger.
 RobotFn = Callable[
-    [Mapping[str, Any], Callable[[dict[str, Any]], None], Callable[[], bool], Callable[[str], None]],
+    [
+        Mapping[str, Any],
+        Callable[[dict[str, Any]], None],
+        Callable[[], bool],
+        Callable[[str], None],
+    ],
     dict[str, Any],
 ]
 
@@ -118,7 +133,9 @@ class GameRound:
         # Snapshot the manifest at round creation: hot-reloaded manifests
         # only affect rounds created afterwards.
         self.manifest = dict(manifest)
-        self.machine = validate_state_machine(dict(self.manifest.get("state_machine") or {}), game_id)
+        self.machine = validate_state_machine(
+            dict(self.manifest.get("state_machine") or {}), game_id
+        )
         self._adjudicate_fn = adjudicate_fn or self._default_adjudicate_fn
         self._robot_fn = robot_fn
         self._await_fallback_seconds = await_fallback_seconds
@@ -195,7 +212,11 @@ class GameRound:
             transition = (state.get("on_intent") or {}).get(name)
             if transition is None:
                 raise IntentRejectedError(self.id, self.state, name)
-            if isinstance(transition, dict) and transition.get("after_speech") and self._entry_speech_active_locked():
+            if (
+                isinstance(transition, dict)
+                and transition.get("after_speech")
+                and self._entry_speech_active_locked()
+            ):
                 # The state asked this intent to wait for its opening
                 # announcement.  A press during playback is normal gameplay
                 # at the wrong moment, not an error: it is refused with the
@@ -289,7 +310,15 @@ class GameRound:
         event = dict(event)
         event.setdefault("timestamp_ms", now_ms())
         event.setdefault("state_version", self._generation)
-        if event.get("event") in {"video", "robot", "robot_result", "phase", "progress", "diagnosis", "tick"}:
+        if event.get("event") in {
+            "video",
+            "robot",
+            "robot_result",
+            "phase",
+            "progress",
+            "diagnosis",
+            "tick",
+        }:
             key = str(event["event"]) + ":" + str(event.get("command") or "")
             self._observations[key] = event
         self.event_sequence += 1
@@ -331,7 +360,11 @@ class GameRound:
         if not self._active_speech:
             return
         now = time.monotonic()
-        expired = [directive_id for directive_id, deadline in self._active_speech.items() if deadline <= now]
+        expired = [
+            directive_id
+            for directive_id, deadline in self._active_speech.items()
+            if deadline <= now
+        ]
         for directive_id in expired:
             del self._active_speech[directive_id]
 
@@ -388,7 +421,9 @@ class GameRound:
             return False
         if expected_generation is not None:
             with self.condition:
-                superseded = self.status in _TERMINAL_STATUSES or self._generation != expected_generation
+                superseded = (
+                    self.status in _TERMINAL_STATUSES or self._generation != expected_generation
+                )
             if superseded:
                 # Another transition (or cancellation) won the race; this
                 # one is silently dropped and the snapshot stays coherent.
@@ -424,8 +459,13 @@ class GameRound:
                         if not self._wait_speech_done(generation, directive["directive_id"]):
                             return
                         with self.condition:
-                            if self._speech_start_actions.pop(directive["directive_id"], None) is not None:
-                                raise RuntimeError("口令未开始播放，未执行出拳；请检查声音后再来一局")
+                            if (
+                                self._speech_start_actions.pop(directive["directive_id"], None)
+                                is not None
+                            ):
+                                raise RuntimeError(
+                                    "口令未开始播放，未执行出拳；请检查声音后再来一局"
+                                )
                 elif action.get("action") == "adjudicate":
                     if not self._run_adjudication(generation):
                         return
@@ -478,7 +518,9 @@ class GameRound:
                     return self._generation == generation
                 self.condition.wait(timeout=min(remaining, 0.5))
 
-    def _run_timer(self, generation: int, name: str, duration: float, state: Mapping[str, Any]) -> bool:
+    def _run_timer(
+        self, generation: int, name: str, duration: float, state: Mapping[str, Any]
+    ) -> bool:
         tick = float(state.get("tick_seconds") or 1.0)
         end = time.monotonic() + duration
         while True:
@@ -504,7 +546,9 @@ class GameRound:
 
     # ---- actions --------------------------------------------------------
 
-    def _emit_speech(self, action: Mapping[str, Any], *, entry_generation: int | None = None) -> dict[str, Any]:
+    def _emit_speech(
+        self, action: Mapping[str, Any], *, entry_generation: int | None = None
+    ) -> dict[str, Any]:
         """Resolve one speech action against the current context and emit it.
 
         ``entry_generation`` is set only for a state's on_enter speech: the
@@ -554,10 +598,15 @@ class GameRound:
             ):
                 self._entry_speech.add(directive["directive_id"])
                 if action.get("on_start"):
-                    self._speech_start_actions[directive["directive_id"]] = (entry_generation, list(action["on_start"]))
+                    self._speech_start_actions[directive["directive_id"]] = (
+                        entry_generation,
+                        list(action["on_start"]),
+                    )
                     directive["notify_start"] = True
                     directive["playback_seconds"] = action.get("playback_seconds", 0)
-            self._active_speech[directive["directive_id"]] = time.monotonic() + self._speech_ack_fallback_seconds
+            self._active_speech[directive["directive_id"]] = (
+                time.monotonic() + self._speech_ack_fallback_seconds
+            )
             self._emit_locked(directive)
         return directive
 
@@ -570,7 +619,11 @@ class GameRound:
 
         def is_cancelled() -> bool:
             with self.condition:
-                return self._cancelled or self.status in _TERMINAL_STATUSES or self._generation != generation
+                return (
+                    self._cancelled
+                    or self.status in _TERMINAL_STATUSES
+                    or self._generation != generation
+                )
 
         try:
             outcome = self._adjudicate_fn(self.manifest, on_event, is_cancelled, self._log)
@@ -688,7 +741,9 @@ class GameRound:
                 state = self._state_config_locked()
                 transition = (state.get("on_event") or {}).get(route)
             if not isinstance(transition, dict):
-                self.emit_observation({"event": "robot_unrouted", "route": route, "state": self.state})
+                self.emit_observation(
+                    {"event": "robot_unrouted", "route": route, "state": self.state}
+                )
                 return
             if self._apply_transition(transition, trigger=route, expected_generation=generation):
                 return

@@ -34,18 +34,18 @@ def make_planner(config, state, driver, directory=None):
         if driver != "mock_device":
             raise ValueError("fixture planner is forbidden for physical drivers")
         return FixturePlanner(config, state)
-    if kind == "legacy_green":
-        from .legacy_green import LegacyGreenPlanner
+    if kind == "green_cup":
+        from .green_cup import GreenCupPlanner
 
         resolved = dict(config)
         unknown = set(config) - {"type", "source_root", "config", "session_directory"}
         if unknown:  # Phase speeds, grasp and shake come from the algorithm configuration (FAST).
             raise ValueError(
-                "legacy_green planner keys: type, source_root, config, session_directory; got "
+                "green_cup planner keys: type, source_root, config, session_directory; got "
                 + ", ".join(sorted(unknown))
             )
         base = Path.cwd() if directory is None else Path(directory)
         for key in ("source_root", "config", "session_directory"):
             resolved[key] = str((base / config[key]).resolve())
-        return LegacyGreenPlanner(resolved, state)
+        return GreenCupPlanner(resolved, state)
     raise ValueError("unknown planner registration: " + kind)

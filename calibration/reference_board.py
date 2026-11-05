@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Observe/register a fixed board. Only restore-auto moves the arm."""
 
 import argparse
@@ -15,7 +17,15 @@ from calibrate import write_image_new, write_new
 from core import average, distance, inverse, matrix, matrix_pose
 
 
-GEOMETRY_KEYS = ("type", "dictionary", "squares_x", "squares_y", "square_length_m", "marker_length_m", "legacy_pattern")
+GEOMETRY_KEYS = (
+    "type",
+    "dictionary",
+    "squares_x",
+    "squares_y",
+    "square_length_m",
+    "marker_length_m",
+    "legacy_pattern",
+)
 DIRECTION = "T_base_camera maps camera optical coordinates into arm base"
 
 
@@ -28,7 +38,10 @@ def same_camera_geometry(first, second):
 
 def load_source(path):
     raw = Path(path).read_bytes()
-    return json.loads(raw), {"path": str(Path(path).resolve()), "sha256": hashlib.sha256(raw).hexdigest()}
+    return json.loads(raw), {
+        "path": str(Path(path).resolve()),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+    }
 
 
 def require_quality(calibration, allow_provisional):
@@ -51,7 +64,11 @@ def summarize(records):
     poses = [matrix(r["T_camera_board"]) for r in records]
     for r in records:
         q = r["quality"]
-        if q["corners"] < 12 or not np.isfinite(q["reprojection_rms_px"]) or not 0 <= q["reprojection_rms_px"] <= 0.5:
+        if (
+            q["corners"] < 12
+            or not np.isfinite(q["reprojection_rms_px"])
+            or not 0 <= q["reprojection_rms_px"] <= 0.5
+        ):
             raise ValueError("Reference requires 12 corners and RMS <= 0.5 px")
     mean = average(poses)
     errors = [distance(mean, t) for t in poses]
@@ -76,7 +93,11 @@ def check_observation(observation):
     ):
         raise ValueError("Expected a named reference-board observation")
     camera = observation["camera"]
-    if camera.get("backend") != "realsense" or camera.get("frame") != "color_optical" or not camera.get("serial"):
+    if (
+        camera.get("backend") != "realsense"
+        or camera.get("frame") != "color_optical"
+        or not camera.get("serial")
+    ):
         raise ValueError("Expected a RealSense color optical camera")
     mean, quality = summarize(observation["records"])
     if not np.allclose(mean, matrix(observation["T_camera_board"]), atol=1e-9, rtol=0):
@@ -111,7 +132,10 @@ def register(calibration, observation, allow_provisional=False):
 
 
 def restore(registration, observation, allow_provisional=False):
-    if registration.get("schema") != 1 or registration.get("mode") != "fixed_reference_registration":
+    if (
+        registration.get("schema") != 1
+        or registration.get("mode") != "fixed_reference_registration"
+    ):
         raise ValueError("Expected a fixed-reference registration")
     calibration = registration["source_calibration"]
     require_quality(calibration, allow_provisional)
@@ -137,7 +161,8 @@ def restore(registration, observation, allow_provisional=False):
             "provisional_opt_in": bool(allow_provisional),
             "reference_observation_quality": quality,
             "independent_accuracy_verified": False,
-            "residual_scope": "Retained residuals describe the source hand-eye fit, not the restored camera pose.",
+            "residual_scope": "Retained residuals describe the source hand-eye fit, not the "
+            "restored camera pose.",
         }
     )
     return result
@@ -157,7 +182,9 @@ def observe(board_path, serial, reference_id, output, frame_count):
     output.mkdir(parents=True, exist_ok=False)
     camera = None
     try:
-        camera = RealSenseCamera(serial, **({"image_profile": cfg["image_profile"]} if "image_profile" in cfg else {}))
+        camera = RealSenseCamera(
+            serial, **({"image_profile": cfg["image_profile"]} if "image_profile" in cfg else {})
+        )
         # A distant board's small markers are occasionally missed in one frame. Such frames are
         # skipped (kept as evidence, with the reason) until frame_count frames pass; every used
         # frame still needs all corners within the reprojection limit, as summarize() checks.
@@ -171,13 +198,18 @@ def observe(board_path, serial, reference_id, output, frame_count):
             image = camera.capture()
             write_image_new(output / f"frame_{i:03d}.png", image)
             try:
-                t, quality, vis = detector.detect(image, camera.K, camera.D)
+                t, quality, vis = detector.detect(image, camera.camera_matrix, camera.dist_coeffs)
             except ValueError as exc:
                 rejected.append({"frame_index": i, "reason": str(exc), "time_unix_s": time.time()})
             else:
                 write_image_new(output / f"frame_{i:03d}_detected.png", vis)
                 records.append(
-                    {"T_camera_board": t.tolist(), "quality": quality, "time_unix_s": time.time(), "frame_index": i}
+                    {
+                        "T_camera_board": t.tolist(),
+                        "quality": quality,
+                        "time_unix_s": time.time(),
+                        "frame_index": i,
+                    }
                 )
             i += 1
         mean, quality = summarize(records)
@@ -211,7 +243,6 @@ def restore_auto(
     frame_count=20,
     allow_provisional=False,
     home_path=None,
-    channel="can0",
     speed_percent=15,
     speed_deg_s=4.0,
     acc_deg_s2=6.0,
@@ -220,11 +251,16 @@ def restore_auto(
     from home_start import DEFAULT_HOME, return_home
 
     registration, origin = load_source(registration_path)
-    if registration.get("mode") != "fixed_reference_registration" or registration.get("schema") != 1:
+    if (
+        registration.get("mode") != "fixed_reference_registration"
+        or registration.get("schema") != 1
+    ):
         raise ValueError("Expected a fixed-reference registration")
     require_quality(registration["source_calibration"], allow_provisional)
     board, _ = load_source(board_path)
-    if reference_id != registration["reference_id"] or any(board[k] != registration["board"][k] for k in GEOMETRY_KEYS):
+    if reference_id != registration["reference_id"] or any(
+        board[k] != registration["board"][k] for k in GEOMETRY_KEYS
+    ):
         raise ValueError("Reference identity/geometry changed; register again")
     if (
         serial != registration["camera_at_registration"]["serial"]
@@ -234,10 +270,13 @@ def restore_auto(
         raise ValueError("Invalid camera identity, board ROI or frame count")
     if output.exists():
         raise ValueError("Automatic restore output directory already exists")
-    home_feedback = return_home(home_path or DEFAULT_HOME, channel, speed_percent, speed_deg_s, acc_deg_s2)
+    home_feedback = return_home(home_path or DEFAULT_HOME, speed_percent, speed_deg_s, acc_deg_s2)
     observation = observe(board_path, serial, reference_id, output, frame_count)
     result = restore(registration, observation, allow_provisional)
-    result["sources"] = {"registration": origin, "observation": str((output / "observation.json").resolve())}
+    result["sources"] = {
+        "registration": origin,
+        "observation": str((output / "observation.json").resolve()),
+    }
     result["home_start"] = {"joints_rad": home_feedback, "collision_checked": False}
     write_new(output / "restored_calibration.json", result)
     return result
@@ -258,7 +297,9 @@ def main(argv=None):
         p.add_argument("--observation", type=Path, required=True)
         p.add_argument("--output", type=Path, required=True, help="New output JSON")
         p.add_argument("--allow-provisional", action="store_true")
-    auto = sub.add_parser("restore-auto", help="Move to HOME, observe fixed board, then restore extrinsics")
+    auto = sub.add_parser(
+        "restore-auto", help="Move to HOME, observe fixed board, then restore extrinsics"
+    )
     auto.add_argument("--registration", type=Path, required=True)
     auto.add_argument("--board", type=Path, required=True)
     auto.add_argument("--serial", required=True)
@@ -267,7 +308,6 @@ def main(argv=None):
     auto.add_argument("--frames", type=int, default=20)
     auto.add_argument("--allow-provisional", action="store_true")
     auto.add_argument("--home", type=Path)
-    auto.add_argument("--channel", default="can0")
     auto.add_argument("--speed-percent", type=int, default=15)
     auto.add_argument("--smooth-speed-deg-s", type=float, default=4.0)
     auto.add_argument("--smooth-acc-deg-s2", type=float, default=6.0)
@@ -282,14 +322,16 @@ def main(argv=None):
             args.frames,
             args.allow_provisional,
             args.home,
-            args.channel,
             args.speed_percent,
             args.smooth_speed_deg_s,
             args.smooth_acc_deg_s2,
         )
         print(
             json.dumps(
-                {"output": str(args.output / "restored_calibration.json"), "quality_passed": result["quality_passed"]}
+                {
+                    "output": str(args.output / "restored_calibration.json"),
+                    "quality_passed": result["quality_passed"],
+                }
             )
         )
     elif args.command == "observe":

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Immutable per-observation images and data, separate from accepted solver samples."""
 
 import time
@@ -35,7 +37,12 @@ class FrameArchive:
         write_image_new(self.path / detected, visualization)
         write_new(
             self.path / (stem + ".json"),
-            dict(data, raw_image=raw, detection_image=detected, visualization_has_detection=not fallback),
+            dict(
+                data,
+                raw_image=raw,
+                detection_image=detected,
+                visualization_has_detection=not fallback,
+            ),
         )
         self.frames.append(stem + ".json")
         self.finish("capturing")

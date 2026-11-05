@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """One configured hand command while the arm remains stationary."""
 
 import math
@@ -28,7 +30,9 @@ def apply_open_reference(report, reference, names):
     if not samples:
         return  # Preserve the existing explicit unverified-feedback behavior.
     tail = samples[-3:]
-    errors = [max(abs(row["values"][key] - value) for key, value in zip(names, reference)) for row in tail]
+    errors = [
+        max(abs(row["values"][key] - value) for key, value in zip(names, reference)) for row in tail
+    ]
     stamps = [row["received_epoch_s"] for row in tail]
     reached = len(tail) == 3 and stamps[0] < stamps[1] < stamps[2] and max(errors) <= 3
     report["position_target_reached"] = reached
@@ -41,7 +45,9 @@ def execute(plan, cfg, robot, hand, demo, result, arm_step=None):
     options = cfg["green_cup"]
     arm_tolerance_deg = options.get("hand_start_tolerance_deg", 0.5)
     read_feedback = options.get("read_hand_feedback", True)
-    if type(read_feedback) is not bool or (not read_feedback and options.get("require_hand_position", True)):
+    if type(read_feedback) is not bool or (
+        not read_feedback and options.get("require_hand_position", True)
+    ):
         raise ValueError("Cannot require hand position while disabling hand feedback")
     reference = open_feedback_reference(options)
     target = plan["target_0_100"]
@@ -52,7 +58,9 @@ def execute(plan, cfg, robot, hand, demo, result, arm_step=None):
         or not options.get("fast_completion")
         or options.get("require_hand_position", True)
     ):
-        raise ValueError("Combined HOME requires FAST open-hand command without position confirmation")
+        raise ValueError(
+            "Combined HOME requires FAST open-hand command without position confirmation"
+        )
     if target not in (options["open_targets_0_100"], options["grip_targets_0_100"]):
         raise ValueError("Unexpected green-cup hand command")
     if len(target) != 6 or any(type(v) is not int or not 0 <= v <= 100 for v in target):
@@ -72,7 +80,9 @@ def execute(plan, cfg, robot, hand, demo, result, arm_step=None):
             or robot.get_joints_enable_status_list() != [True] * 7
         ):
             raise RuntimeError("Hand command requires healthy CAN control")
-        if not combined and max(abs(a - b) for a, b in zip(q, plan["start_q_rad"])) > math.radians(arm_tolerance_deg):
+        if not combined and max(abs(a - b) for a, b in zip(q, plan["start_q_rad"])) > math.radians(
+            arm_tolerance_deg
+        ):
             raise RuntimeError("Arm moved during hand command")
         return status
 
@@ -101,7 +111,11 @@ def execute(plan, cfg, robot, hand, demo, result, arm_step=None):
         monitor,
         **({"read_feedback": False} if not read_feedback else {}),
         **({"maximum_speed": True} if options.get("feedback_hand_max_speed") is True else {}),
-        **({"during_action": lambda: [arm_step(s, cfg["speed_percent"]) for s in plan["stages"]]} if combined else {}),
+        **(
+            {"during_action": lambda: [arm_step(s, cfg["speed_percent"]) for s in plan["stages"]]}
+            if combined
+            else {}
+        ),
     )
     result["finger_commands_sent"] = True
     if target == options["open_targets_0_100"]:

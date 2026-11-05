@@ -1,3 +1,7 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
+"""Camera capture freshness: both streams must advance and stale frames time out."""
+
 import unittest
 from unittest.mock import Mock, patch
 from vision.capture.realsense_session import argument_parser, next_frames
@@ -40,7 +44,16 @@ class FreshnessTests(unittest.TestCase):
         from vision.capture.realsense_session import CaptureSession
 
         args = argument_parser().parse_args(
-            ["--serial", "test", "--output", "/tmp/test", "--stereo", "--warmup-frames", "5", "--unique-warmup"]
+            [
+                "--serial",
+                "test",
+                "--output",
+                "/tmp/test",
+                "--stereo",
+                "--warmup-frames",
+                "5",
+                "--unique-warmup",
+            ]
         )
 
         def pair(c, d, ir):
@@ -99,7 +112,9 @@ class FreshnessTests(unittest.TestCase):
 def make_intr(w=64, h=48):
     from types import SimpleNamespace
 
-    return SimpleNamespace(width=w, height=h, fx=100.0, fy=100.0, ppx=32.0, ppy=24.0, coeffs=[], model="none")
+    return SimpleNamespace(
+        width=w, height=h, fx=100.0, fy=100.0, ppx=32.0, ppy=24.0, coeffs=[], model="none"
+    )
 
 
 def rich_frame(data, number):
@@ -123,16 +138,16 @@ def rich_frameset(color, depth, cn, dn):
     aligned.get_color_frame.return_value = rich_frame(color, cn)
     aligned.get_depth_frame.return_value = rich_frame(depth, dn)
     fs._aligned = aligned
-    aligned.get_color_frame.return_value.profile.as_video_stream_profile.return_value.get_intrinsics.return_value = (
-        make_intr()
-    )
-    aligned.get_color_frame.return_value.profile.as_video_stream_profile.return_value.fps.return_value = 6
+    color_stream = aligned.get_color_frame.return_value.profile.as_video_stream_profile
+    color_profile = color_stream.return_value
+    color_profile.get_intrinsics.return_value = make_intr()
+    color_profile.fps.return_value = 6
     raw_d.profile.as_video_stream_profile.return_value.width.return_value = 64
     raw_d.profile.as_video_stream_profile.return_value.height.return_value = 48
     raw_d.profile.as_video_stream_profile.return_value.fps.return_value = 6
     raw_d.profile.as_video_stream_profile.return_value.get_intrinsics.return_value = make_intr()
-    raw_d.profile.as_video_stream_profile.return_value.get_extrinsics_to.return_value = SimpleNamespace(
-        rotation=[1, 0, 0, 0, 1, 0, 0, 0, 1], translation=[0, 0, 0]
+    raw_d.profile.as_video_stream_profile.return_value.get_extrinsics_to.return_value = (
+        SimpleNamespace(rotation=[1, 0, 0, 0, 1, 0, 0, 0, 1], translation=[0, 0, 0])
     )
     return fs
 
@@ -236,7 +251,9 @@ class StreamingReaderTests(unittest.TestCase):
             files = sorted(p.name for p in out.glob("frame_*"))
             meta = json.loads((out / "frame_001.json").read_text())
         self.assertTrue(result.get("ok"), result)
-        self.assertEqual(files, ["frame_000.json", "frame_000.npz", "frame_001.json", "frame_001.npz"])
+        self.assertEqual(
+            files, ["frame_000.json", "frame_000.npz", "frame_001.json", "frame_001.npz"]
+        )
         self.assertEqual(meta["serial"], "t")
         self.assertEqual(meta["capture_timing"]["fresh_discard_frames"], 0)
         self.assertEqual(announced.getvalue(), "")  # reader thread must never print
@@ -252,7 +269,11 @@ class StreamingReaderTests(unittest.TestCase):
         color = np.zeros((48, 64, 3), np.uint8)
         depth = np.zeros((48, 64), np.uint16)
         feed = iter(
-            [rich_frameset(color, depth, 1, 1), rich_frameset(color, depth, 2, 2), rich_frameset(color, depth, 3, 3)]
+            [
+                rich_frameset(color, depth, 1, 1),
+                rich_frameset(color, depth, 2, 2),
+                rich_frameset(color, depth, 3, 3),
+            ]
         )
         rs = fake_rs(lambda t=3000: next(feed))
         with tempfile.TemporaryDirectory() as d, patch.dict("sys.modules", pyrealsense2=rs):

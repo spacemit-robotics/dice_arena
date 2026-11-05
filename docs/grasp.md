@@ -1,51 +1,88 @@
-# 抓杯摇杯真机操作
+# 标定与抓杯操作
 
-执行前检查手型、标定与安全条件。故障后不自动归位或恢复任务。
-
-先完成[运动控制验证](https://github.com/spacemit-robotics/manipulation#3-连接-nero)，并退出标定与独立设备控制程序。
-以下命令从 SDK 根目录执行，并已执行 `source build/envsetup.sh`。
-模型和网格须按[运行资源](../README.md#运行资源)准备；算法、TCP 和 HOME 配置随应用安装。
-
-## 1. 手眼标定与桌面登记
-
-按[手眼标定](../README.md#手眼标定)完成采样、求解和固定板登记，再执行 `calibrate.sh apply`（或网页“应用”）：
-备份后把结果安装到 `SITE/calibration/handeye_result.json`，首次运行时创建 `SITE/green_cup.json`，并重新采集、登记桌面。
-桌面登记失败时用 `calibrate.sh table` 重试；登记完成前 `dice-arena cycle` 拒绝运行。
-
-核对当前安装的工具中心点（TCP）、空手起始位（HOME）、手型、杯体尺寸和相机采集参数。
-HOME 用 `dice-arena home` 到达（原应用的 `home` 动作，回 HOME 同时张手）；不能把任意当前姿态改名为 HOME。
-抓杯中途出错时手可能还持杯：先人工确认杯子状态再执行。
-
-## 2. 检查场景
-
-清理桌面工作区，保持基座、相机和桌面固定；桌布颜色、工作区和桌面几何参数须与 `SITE/green_cup.json` 一致。
-更换外参后必须重新登记桌面，不手工修改桌面记录的摘要。
-
-## 3. 生成应用配置
+适用于已安装应用和运行资源的现场。以下命令从 SDK 根目录开始：
 
 ```bash
-dice-arena configure
+source build/envsetup.sh
+cd application/native/dice_arena
 ```
 
-配置保存到 `SITE/cup_application.json`。生成过程不连接设备。复核应用配置中的 `open_positions`、`grip_positions` 和结果手型，
-确认六通道方向、接触及保持方式与当前右手和杯体一致。默认位置数组需按当前安装与杯体调整。
+`SITE` 默认指 `~/.local/share/spacemit-manipulation/site/`。
+标定使用当前设备，须为 Nero；不是时先执行 `manipulation use nero`。退出其他设备控制程序，不同时运行网页与命令行标定。
 
-## 4. 单独验证一次抓、摇、放
+## 1. 命令行标定
 
-以下命令会驱动真机。须满足[现场安全前提](https://github.com/spacemit-robotics/manipulation#3-连接-nero)，机械臂和空手位于已验证的 HOME，
-杯子位于已确认的视觉工作区，操作者能观察接近、闭手、抬杯和放杯。
+固定相机、基座和标定板。在 `calibration/config/calibration_workflow.json` 中填写相机序列号、
+标定板实测尺寸、HOME 和采集参数。HOME 和 TCP 须匹配当前安装，不能把任意当前姿态当作 HOME。
+
+自动采样会驱动机械臂。现场须有人看护、急停可达，整条路线内无人、无障碍；不以断电或失能代替软件停止。
+依次执行，按提示遮挡或露出对应标定板：
 
 ```bash
-dice-arena inspect
+bash calibrate.sh first
+bash calibrate.sh window
+bash calibrate.sh plan
+bash calibrate.sh auto
+bash calibrate.sh register
+bash calibrate.sh apply
+```
+
+| 命令 | 作用 |
+| --- | --- |
+| `first` | 手动示教、采样并求解初始外参 |
+| `window` | 设置标定板可见区域 |
+| `plan` | 生成自动采样路线 |
+| `auto` | 沿路线运动、采样并求解 |
+| `register` | 登记固定参考板 |
+| `apply` | 备份并安装外参，生成现场算法配置，采集并登记桌面 |
+| `solve` | 用已有数据集重新求解外参，不采样 |
+| `restore` | 相机移动后，回 HOME 并通过固定参考板恢复外参 |
+| `status` | 只读，显示当前配置和标定进度 |
+
+各步骤加 `--dry-run` 只显示将执行的操作，不访问设备。
+
+结果保存在 `SITE/calibration/`，现场算法配置为 `SITE/green_cup.json`。
+
+标定网页也可以在后台运行：`bash calibration_web_service.sh start` 启动，`status` 查询，`stop` 停止。
+
+## 2. 更新桌面
+
+相机、基座或外参变化后，重新采集并登记桌面：
+
+```bash
+bash calibrate.sh table
+```
+
+保持相机、基座和桌面固定；桌布颜色、工作区和杯体尺寸须与 `SITE/green_cup.json` 一致。
+桌面记录缺失或与外参不匹配时，抓杯任务拒绝运行。不手工修改记录摘要。
+
+## 3. 人工持物确认
+
+默认闭手后直接抬杯，不使用力觉或触觉判断是否抓稳。在 `SITE/cup_application.json` 中设置
+`"grip_confirmation": "operator"` 后，每次闭手后等待人工确认。
+
+以下命令会驱动真机。机械臂须空手位于 HOME，杯子位于视觉工作区，操作者能观察完整动作：
+
+```bash
 dice-arena cycle
 ```
 
-`inspect` 仅检查连接与状态，不证明视觉、手型或场景正确。
-与原应用一致，闭手后直接抬杯，程序不检测是否抓稳；首次运行请在急停旁观察接近、闭手和抬杯。
-应用配置设置 `"grip_confirmation": "operator"` 时，闭手后等待输入 `CONFIRM` 才抬杯。
+确认实际持杯后输入 `CONFIRM` 才抬杯；输入其他内容则停止任务。
+人工确认不能替代力觉或触觉检测。
+故障或持杯取消后不自动张手、归位或恢复，由现场操作者处理。
 
-抓、摇、放三段均需返回 `status=completed`，并由操作者确认真实持杯、摇杯、放杯和最终姿态。
-输出中的 `physical_grip_verified` 始终为 `false`：系统没有力觉或触觉抓稳验证。
-实体流程未通过前，不运行游戏。
+## 4. 回到 HOME
 
-通过单次实体流程后，按[Dice Arena 真机运行](real_robot.md)运行骰子游戏。
+仅在空手且路径无障碍时执行；该命令同时张手：
+
+```bash
+dice-arena home
+```
+
+可能持杯或故障锁定时拒绝执行。故障锁定会记录在 `SITE/runtime/task_state.json`，重启后仍然有效。现场操作者检查机械臂、灵巧手和杯子并处理后，清除记录：
+
+```bash
+dice-arena reset
+```
+
+该命令不连接设备、不运动，只删除记录；之后重新启动 `dice-arena cycle` 或 `dice-arena serve`。

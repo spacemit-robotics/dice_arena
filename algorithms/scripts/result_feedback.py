@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Standalone dice feedback gestures; preview by default, no camera acquisition."""
 
 import argparse
@@ -15,13 +17,9 @@ sys.path.insert(0, str(ROOT))
 DEFAULT_SYSTEM = ROOT / "configs/green_cup.json"
 INTERACTIVE_ACTIONS = (
     ("win", "骰子：机械臂赢（V 手势）"),
-    ("lose", "骰子：机械臂输（点赞）"),
-    ("draw", "骰子：平局"),
-    ("rock", "猜拳：石头"),
-    ("paper", "猜拳：布"),
-    ("scissors", "猜拳：剪刀"),
+    ("lose", "骰子：机械臂输（竖拇指）"),
+    ("draw", "骰子：平局（开合手势）"),
     ("home", "归位：HOME（六路手指张开）"),
-    ("rps-ready", "猜拳：预备位置（抬臂同时张手）"),
 )
 
 
@@ -62,11 +60,17 @@ def recipe_for(config, action):
     max_wait = recipe.get("finger_max_wait_s", config.get("finger_max_wait_s", 0.65))
     if hand_mode not in ("timed", "max"):
         raise ValueError("finger_speed_mode must be timed or max")
-    if type(max_wait) not in (int, float) or not math.isfinite(max_wait) or not 0.65 <= max_wait <= 5:
+    if (
+        type(max_wait) not in (int, float)
+        or not math.isfinite(max_wait)
+        or not 0.65 <= max_wait <= 5
+    ):
         raise ValueError("finger_max_wait_s must be 0.65..5")
     arm_delivery = recipe.get("arm_delivery", config.get("arm_delivery", "smooth_profile"))
     if arm_delivery not in ("smooth_profile", "controller_endpoint", "bounded_blend"):
-        raise ValueError("arm_delivery must be smooth_profile, controller_endpoint or bounded_blend")
+        raise ValueError(
+            "arm_delivery must be smooth_profile, controller_endpoint or bounded_blend"
+        )
     blend = deepcopy(recipe.get("arm_blend", config.get("arm_blend", {})))
     if not isinstance(blend, dict) or set(blend) - {"endpoint_blend", "endpoint_lead_max_deg"}:
         raise ValueError("Invalid arm_blend options")
@@ -82,7 +86,11 @@ def recipe_for(config, action):
         raise ValueError("execution.delay_s must be 0..30")
     if type(speed) is not int or not 1 <= speed <= 100:
         raise ValueError("speed_percent must be 1..100")
-    if type(duration) not in (int, float) or not math.isfinite(duration) or not 0.5 <= duration <= 2.55:
+    if (
+        type(duration) not in (int, float)
+        or not math.isfinite(duration)
+        or not 0.5 <= duration <= 2.55
+    ):
         raise ValueError("finger_duration_s must be 0.5..2.55")
     recipe = config["gestures"][name]
     joints, hand = recipe["joints_deg"], recipe["hand_0_100"]
@@ -115,7 +123,9 @@ def execute_recipe(recipe, cfg, scene, directory, client, planner):
 
     cfg = deepcopy(cfg)
     cfg["speed_percent"] = recipe["speed_percent"]
-    cfg.setdefault("joint_delivery", {})["command_mode"] = recipe.get("arm_delivery", "smooth_profile")
+    cfg.setdefault("joint_delivery", {})["command_mode"] = recipe.get(
+        "arm_delivery", "smooth_profile"
+    )
     if cfg["joint_delivery"]["command_mode"] == "bounded_blend":
         cfg["joint_delivery"].update(profile="trapezoid", **recipe.get("arm_blend", {}))
     if cfg["joint_delivery"]["command_mode"] == "controller_endpoint":
@@ -124,7 +134,9 @@ def execute_recipe(recipe, cfg, scene, directory, client, planner):
         cfg["joint_delivery"]["endpoint_resend_interval_s"] = 0.05
     cfg["green_cup"].update(
         finger_duration_s=(
-            recipe["finger_max_wait_s"] if recipe["finger_speed_mode"] == "max" else recipe["finger_duration_s"]
+            recipe["finger_max_wait_s"]
+            if recipe["finger_speed_mode"] == "max"
+            else recipe["finger_duration_s"]
         ),
         finger_settle_s=0.0,
         read_hand_feedback=False,
@@ -148,7 +160,10 @@ def execute_recipe(recipe, cfg, scene, directory, client, planner):
         if plan["blockers"]:
             raise ValueError(str(plan["blockers"]))
         request = directory / (name + "_request.json")
-        write_json(request, dict(execution_authorized=True, authorized_epoch_s=time.time(), plan=plan, config=cfg))
+        write_json(
+            request,
+            dict(execution_authorized=True, authorized_epoch_s=time.time(), plan=plan, config=cfg),
+        )
         report = client.call("run", directory / (name + "_actual.json"), request)
         if not report.get("success"):
             raise RuntimeError(f"{name} failed: {report.get('error')}")
@@ -206,7 +221,11 @@ def execute_recipe(recipe, cfg, scene, directory, client, planner):
         send_hand()
     write_json(
         directory / "receipt.json",
-        dict(success=True, recipe=recipe, note="机械臂动作及手指指令/观察时间完成；手指姿态未实测确认；保持当前姿态"),
+        dict(
+            success=True,
+            recipe=recipe,
+            note="机械臂动作及手指指令/观察时间完成；手指姿态未实测确认；保持当前姿态",
+        ),
     )
 
 
@@ -230,7 +249,9 @@ def interactive_execute(registry, cfg, scene, session, client, planner, new_run_
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", nargs="?", help="配置中的动作名或别名")
-    parser.add_argument("--list", action="store_true", help="list configured actions without hardware")
+    parser.add_argument(
+        "--list", action="store_true", help="list configured actions without hardware"
+    )
     parser.add_argument(
         "--gestures",
         type=Path,
@@ -238,8 +259,12 @@ def main(argv=None):
         help="手势分组目录，或单个组文件路径（调试用）",
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_SYSTEM)
-    parser.add_argument("--session", type=Path, default=ROOT / "cup_grasp_demo/datasets/result_feedback")
-    parser.add_argument("--execute", action="store_true", help="execute immediately without another prompt")
+    parser.add_argument(
+        "--session", type=Path, default=ROOT / "cup_grasp_demo/datasets/result_feedback"
+    )
+    parser.add_argument(
+        "--execute", action="store_true", help="execute immediately without another prompt"
+    )
     args = parser.parse_args(argv)
     from scripts.action_registry import load_registry
 
@@ -266,7 +291,9 @@ def main(argv=None):
             controller_directory = new_run(args.session, "feedback_control")
             client = SDKClient(cfg, controller_directory)
             try:
-                interactive_execute(registry, cfg, table["scene"], args.session, client, arm_plan, new_run)
+                interactive_execute(
+                    registry, cfg, table["scene"], args.session, client, arm_plan, new_run
+                )
             finally:
                 client.close()
         return 0

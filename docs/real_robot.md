@@ -1,42 +1,75 @@
-# Dice Arena 真机运行
+# 游戏服务与排障
 
-以下命令从 SDK 根目录执行，并已执行 `source build/envsetup.sh`；
-先按[运行资源](../README.md#运行资源)准备模型、网格和视频程序，再安装应用。
-现场条件见[真机操作前提](https://github.com/spacemit-robotics/manipulation#3-连接-nero)。
+应用、运行资源和现场配置须已安装。以下命令从 SDK 根目录开始：
 
-## 1. 准备
+```bash
+source build/envsetup.sh
+cd application/native/dice_arena
+```
 
-- 完成[抓杯摇杯真机操作](grasp.md)，确认 `dice-arena cycle` 单次抓、摇、放通过。
-- 机械臂在 HOME、手张开，装好骰子的杯子在视觉工作区；C920 摄像头对准骰子区，音箱已连接。
-- 退出 `cup-shake` 等占用设备的程序。
+`SITE` 默认指 `~/.local/share/spacemit-manipulation/site/`。
 
-## 2. 启动
+## 1. 服务管理
+
+游戏会控制真机。机械臂须空手位于 HOME、手张开，装好骰子的杯子位于视觉工作区。
+退出其他设备控制程序，现场须有人看护、急停可达。
 
 ```bash
 dice-arena serve
 ```
 
-依次启动视频服务 mediamtx（端口 8554、8889）、本地语音 MOSS-TTS（端口 18082，首次加载模型需几十秒）和游戏（端口 8080），与原启动脚本相同；浏览器打开 `http://<K3地址>:8080/`。
-只监听本机时用 `dice-arena serve --host 127.0.0.1`。Ctrl+C 停止游戏和视频服务；本地语音服务保持运行，下次启动直接复用。
-游戏配置为 `SITE/dice_arena/config.json`（首次启动时由默认配置生成，修改后游戏自动重新加载，重新安装不会覆盖）。
+服务启动视频转发、本地语音和游戏，网页地址为 `http://<主机地址>:8080/`。
+仅本机访问时使用 `dice-arena serve --host 127.0.0.1`。
+Ctrl+C 停止游戏和视频服务，语音服务保留供下次复用。
 
-端口被占用时 `serve` 拒绝启动并说明原因；以前单独安装的视频服务或语音服务需先停止，例如
-`systemctl --user disable --now mediamtx`。
+首次启动生成 `SITE/dice_arena/config.json`；配置修改后自动重载，重新安装不覆盖。
+机械臂获胜做 V 手势，失败做竖拇指手势，平局做开合手势；正常结束后回 HOME 并张手。
+故障后不自动归位或恢复，由现场操作者处理持物和设备，再执行 `dice-arena reset` 并重新启动游戏。
 
-进入游戏时后台连接设备并启动相机、模型和碰撞几何（与原应用常驻进程预热一致，由规则讲解时间覆盖），不使能、不运动。
-结果反馈与原应用相同：机械臂赢做 V 手势、输做点赞、平局做开合手势（手臂与手指同时运动），每局结束回 HOME 并张手。
-出错后不会自动回 HOME：可能还持杯，需人工处理。
+| 服务 | 默认端口 |
+| --- | --- |
+| 游戏网页 | TCP 8080 |
+| 标定网页 | TCP 8091 |
+| 本地语音 | TCP 18082 |
+| 视频 RTSP / WebRTC 信令 | TCP 8554 / 8889 |
+| WebRTC 媒体 | UDP 8189 |
 
-## 3. 检查
+## 2. 状态与持物确认
 
-在另一终端检查服务，不启动第二个设备控制端：
+在另一终端从 SDK 根目录执行 `source build/envsetup.sh`，再查询服务：
 
 ```bash
 dice-arena status
 ```
 
-核对语音播报、骰子识别和机械臂各组件的健康字段。故障后不自动重试；先停止游戏，核对持物状态和机械臂实际姿态，
-不删除资源锁或用其他程序接管运动中的设备。
+显示机械臂、语音和识别服务的状态。
+开启 `grip_confirmation: operator` 时，用 `dice-arena events ROUND_ID` 读取当前局事件。
+`ROUND_ID` 为本局标识，取自 `dice-arena status` 输出中的 `active_round.id`。收到 `phase=await_grip_confirmation` 后，现场确认实际持杯，再执行
+`dice-arena ack-grip TOKEN OUTPUT`；两个参数分别取本次事件的 `token` 和 `acknowledgement`。
 
-开启人工持物确认（抓杯应用配置 `grip_confirmation: operator`）时，用 `dice-arena events ROUND_ID` 观察当前局，
-收到 `phase=await_grip_confirmation` 后用该事件的 `token` 和 `acknowledgement` 路径执行 `dice-arena ack-grip TOKEN OUTPUT`。
+## 3. 离线检查
+
+以下命令不连接机械臂、相机或音频设备：
+
+```bash
+dice-arena mock
+dice-arena check
+manipulation check --profile vision
+python3 tools/check_assets.py --verify
+```
+
+`mock` 执行模拟抓、摇、放，`check` 检查游戏接口，后两项分别检查依赖和资源摘要。
+
+## 4. 常见问题
+
+| 现象 | 处理 |
+| --- | --- |
+| 设备连接失败 | 用 `ip -details link show can0` 查看接口；配置要求 1 Mbps，并须按设备规程供电、使能和进入位置控制模式 |
+| 提示设备被占用 | 退出厂商 Web、遥操、标定及其他控制程序；不删除锁文件或接管运动中的设备 |
+| 端口被占用 | 停止占用端口的游戏、视频或其他安装的语音服务；本应用保留的语音服务可复用 |
+| 缺少 `pyrealsense2` | 安装与主机架构、Python 版本匹配的 RealSense Python 绑定 |
+| 缺少模型或视频程序 | 执行 `python3 tools/download_assets.py`，再执行 `mm --with-deps` |
+| 桌面记录缺失或外参不匹配 | 退出游戏，在应用目录执行 `bash calibrate.sh table` 重新采集并登记 |
+| 任务故障或取消 | 停止游戏，由现场操作者处理持物和姿态，再执行 `dice-arena reset`；不自动重试、张手或归位 |
+
+视频服务日志位于 `SITE/dice_arena/mediamtx.log`。

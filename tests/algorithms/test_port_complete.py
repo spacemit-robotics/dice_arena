@@ -1,4 +1,6 @@
-"""The algorithms cup-shake runs are complete: every local import resolves, except the arm-SDK
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
+"""The algorithms the application runs are complete: every local import resolves, except the arm-SDK
 modules that were deliberately not ported, and the planner's call paths never reach them."""
 
 import ast
@@ -28,7 +30,8 @@ def test_every_local_import_resolves():
             for module, name in imported:
                 if module.split(".")[0] not in LOCAL or module in NOT_PORTED:
                     continue
-                # `from package import name` may name a submodule; `from module import name` an attribute.
+                # `from package import name` may name a submodule; `from module import name` an
+                # attribute.
                 package = ROOT.joinpath(*module.split(".")).is_dir()
                 target = f"{module}.{name}" if name and package else module
                 if target not in NOT_PORTED and not module_exists(target):
@@ -37,11 +40,13 @@ def test_every_local_import_resolves():
 
 
 def test_planner_paths_never_reach_the_sdk_bridge():
-    # cup_shake.legacy_green calls capture(), plan(), table() and held_geometry(), and replaces
+    # cup_shake.green_cup calls capture(), plan(), table() and held_geometry(), and replaces
     # snapshot() with framework feedback; nothing else on those paths may open an arm SDK client.
     source = (ROOT / "cup_grasp_demo/flow/green_pipeline.py").read_text()
     workflow = next(
-        node for node in ast.parse(source).body if isinstance(node, ast.ClassDef) and node.name == "Workflow"
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.ClassDef) and node.name == "Workflow"
     )
     methods = {node.name: node for node in workflow.body if isinstance(node, ast.FunctionDef)}
     seen, todo = set(), ["capture", "plan", "table", "held_geometry"]
@@ -59,7 +64,7 @@ def test_planner_paths_never_reach_the_sdk_bridge():
             and node.func.value.id == "self"
         ]
     assert {"bridge", "prepare_step_runtime", "close_sdk"}.isdisjoint(seen), seen
-    planner = (ROOT.parents[0] / "python/cup_shake/legacy_green.py").read_text()
+    planner = (ROOT.parents[0] / "python/cup_shake/green_cup.py").read_text()
     assert "work.snapshot = lambda" in planner
 
 

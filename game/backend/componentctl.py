@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Inspect and manage provider runtimes declared by component packages."""
 
 from __future__ import annotations
@@ -28,7 +30,11 @@ def _command_for(manifest: dict[str, Any], action: str) -> list[str] | None:
     command = lifecycle.get(action)
     if command is None:
         return None
-    if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
+    if (
+        not isinstance(command, list)
+        or not command
+        or not all(isinstance(item, str) and item for item in command)
+    ):
         raise ValueError(f"lifecycle.{action} must be a non-empty string array")
     resolved = list(command)
     executable = Path(resolved[0])
@@ -168,7 +174,9 @@ def main() -> int:
                 # Referenced is arena-wide: the arena slots plus every
                 # enabled game, so start/stop scripts manage the whole
                 # deployment regardless of which game is passed in.
-                for referenced_id in _referenced_tts_providers_arena(load_arena_config(), load_games().all()):
+                for referenced_id in _referenced_tts_providers_arena(
+                    load_arena_config(), load_games().all()
+                ):
                     print(referenced_id)
                 return 0
             selected_id = _selected_provider_id(args.provider, args.game)
@@ -176,7 +184,9 @@ def main() -> int:
             print(exc.message, file=sys.stderr)
             return 2
         if not selected_id:
-            print(f"No {args.provider} provider is configured for game {args.game}", file=sys.stderr)
+            print(
+                f"No {args.provider} provider is configured for game {args.game}", file=sys.stderr
+            )
             return 2
         if args.action == "selected":
             print(selected_id)
@@ -216,7 +226,8 @@ def main() -> int:
         return 2
     if command is None:
         print(
-            f"Provider {provider.id} has no lifecycle.{args.action} command; runtime is managed externally",
+            f"Provider {provider.id} has no lifecycle.{args.action} command; runtime is managed "
+            "externally",
             file=sys.stderr if args.action == "start" else sys.stdout,
         )
         # Cloud and externally managed providers are valid functional packages.

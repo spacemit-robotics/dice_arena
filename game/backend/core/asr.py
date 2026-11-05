@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Provider interface for streaming speech recognition.
 
 The recognition algorithm (zipformer on the board, or a future cloud model)

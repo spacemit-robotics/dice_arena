@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """HOME -> green open-cup GRASP -> lifted joint SHAKE -> PLACE -> HOME."""
 
 import hashlib
@@ -33,7 +35,10 @@ from cup_grasp_demo.flow.green_cup_planning import (
 from cup_grasp_demo.flow.core import save, log_output
 from cup_grasp_demo.flow.session_storage import session_lock
 from cup_grasp_demo.flow.shake import Kinematics
-from cup_grasp_demo.flow.joint_profile import make_plan as joint_plan, trajectory as joint_trajectory
+from cup_grasp_demo.flow.joint_profile import (
+    make_plan as joint_plan,
+    trajectory as joint_trajectory,
+)
 from vision.capture.frame_io import load_batch
 
 PHASES = (
@@ -108,7 +113,10 @@ def validate(cfg):
         raise ValueError("failure_recovery must be boolean")
     if g.get("table_plane_source", "live_depth") not in ("live_depth", "calibrated"):
         raise ValueError("table_plane_source must be live_depth or calibrated")
-    if type(g.get("recovery_attempts", 1)) is not int or not 0 <= g.get("recovery_attempts", 1) <= 2:
+    if (
+        type(g.get("recovery_attempts", 1)) is not int
+        or not 0 <= g.get("recovery_attempts", 1) <= 2
+    ):
         raise ValueError("recovery_attempts must be 0..2")
     lower_attempts = g.get("lower_recovery_attempts", g.get("recovery_attempts", 1))
     if type(lower_attempts) is not int or not 0 <= lower_attempts <= 2:
@@ -137,7 +145,10 @@ def validate(cfg):
         or not 0.1 <= freshness <= 0.5
     ):
         raise ValueError("shake_feedback_freshness_limit_s must be 0.1..0.5")
-    if type(g.get("fast_speed_percent", 100)) is not int or not 1 <= g.get("fast_speed_percent", 100) <= 100:
+    if (
+        type(g.get("fast_speed_percent", 100)) is not int
+        or not 1 <= g.get("fast_speed_percent", 100) <= 100
+    ):
         raise ValueError("fast_speed_percent must be 1..100")
     phase_speeds = g.get("fast_phase_speed_percent", {})
     if (
@@ -146,7 +157,10 @@ def validate(cfg):
         or any(type(v) is not int or not 1 <= v <= 100 for v in phase_speeds.values())
     ):
         raise ValueError("fast_phase_speed_percent: approach/lower/return_home must be 1..100")
-    if g.get("lower_command_mode", "smooth_profile") not in ("smooth_profile", "controller_endpoint"):
+    if g.get("lower_command_mode", "smooth_profile") not in (
+        "smooth_profile",
+        "controller_endpoint",
+    ):
         raise ValueError("lower_command_mode must be smooth_profile or controller_endpoint")
     interval = g.get("fast_file_check_interval_s", 0.0)
     if (
@@ -174,7 +188,10 @@ def validate(cfg):
         raise ValueError("approach_via_above must be boolean")
     if g["open_targets_0_100"] != [0] * 6:
         raise ValueError("HOME/PLACE require open hand")
-    g.setdefault("retreat_clearance_mm", g["approach_clearance_mm"] if g.get("approach_via_above", True) else 50)
+    g.setdefault(
+        "retreat_clearance_mm",
+        g["approach_clearance_mm"] if g.get("approach_via_above", True) else 50,
+    )
     g.setdefault("place_offset_base_mm", [0, 0, 0])
     for key, bounds in {
         "lift_mm": (10, 100),
@@ -226,7 +243,11 @@ def validate(cfg):
     for key in ("rim_band_mm", "rim_rms_mm", "min_area_px", "min_arc_deg"):
         if not isinstance(p[key], (int, float)) or not math.isfinite(p[key]) or p[key] <= 0:
             raise ValueError(key)
-    if p.get("geometry_method", "depth_band") not in ("depth_band", "image_rim_depth", "stereo_rim"):
+    if p.get("geometry_method", "depth_band") not in (
+        "depth_band",
+        "image_rim_depth",
+        "stereo_rim",
+    ):
         raise ValueError("Unknown green cup geometry_method")
     if g.get("table_plane_source") == "calibrated" and p.get("geometry_method") != "stereo_rim":
         raise ValueError("calibrated table plane currently requires stereo_rim")
@@ -261,14 +282,18 @@ class Workflow:
         self._joint_recipe = read_json(ROOT / self.g["joint_test_config"])
         joint_trajectory(self._joint_recipe)
         # FAST is the only green-cup mode; its tuning is applied unconditionally.
-        self.cfg.setdefault("joint_delivery", {})["profile"] = self.g.get("fast_motion_profile", "quintic")
+        self.cfg.setdefault("joint_delivery", {})["profile"] = self.g.get(
+            "fast_motion_profile", "quintic"
+        )
         self.g["perception"]["save_debug_images"] = False
         self.g["perception"]["analytic_jacobian"] = self.g.get("fast_analytic_rim_jacobian", False)
         self.cfg["speed_percent"] = self.g.get("fast_speed_percent", 100)
         self.g["fast_completion"] = True
         self.g["require_arm_position"] = False
         self.g["finger_settle_s"] = 0.0
-        self.g["finger_duration_s"] = self.g.get("fast_finger_duration_s", self.g["finger_duration_s"])
+        self.g["finger_duration_s"] = self.g.get(
+            "fast_finger_duration_s", self.g["finger_duration_s"]
+        )
         self.g["read_hand_feedback"] = False
         if (
             self.g["perception"].get("height_mode") == "fixed"
@@ -306,7 +331,9 @@ class Workflow:
         if "strategy_file" in self.g:
             strategy = self.g["strategy_file"]
             self.deps.append(
-                ROOT / strategy if str(strategy).endswith(".json") else ROOT / "vision/strategy" / f"{strategy}.json"
+                ROOT / strategy
+                if str(strategy).endswith(".json")
+                else ROOT / "vision/strategy" / f"{strategy}.json"
             )
         self.deps.append(ROOT / "vision/camera.json")
         self.deps += list(common.HERE.glob("*.py"))
@@ -324,11 +351,15 @@ class Workflow:
         if getattr(self, "_sdk", None) is None:
             self._sdk = (
                 self._startup.acquire("sdk")
-                if getattr(self, "_startup", None) is not None and "sdk" not in self._startup.claimed
+                if getattr(self, "_startup", None) is not None
+                and "sdk" not in self._startup.claimed
                 else SDKClient(cfg, common.new_run(self.root, "green_sdk_session"))
             )
         return self._sdk.call(
-            command, output, request, **({"on_dispatched": on_dispatched} if on_dispatched is not None else {})
+            command,
+            output,
+            request,
+            **({"on_dispatched": on_dispatched} if on_dispatched is not None else {}),
         )
 
     def close_sdk(self):
@@ -422,9 +453,9 @@ class Workflow:
             try:
                 return self._issue_once(plan, label)
             except ReplanStart:
-                if self.g.get("precision_error_action", "stop") != "record" or attempt >= self.g.get(
-                    "recovery_attempts", 1
-                ):
+                if self.g.get(
+                    "precision_error_action", "stop"
+                ) != "record" or attempt >= self.g.get("recovery_attempts", 1):
                     raise
                 # No arm/hand action was sent. Recheck the complete new path,
                 # including held-cup clearance, before authorizing another request.
@@ -432,7 +463,11 @@ class Workflow:
                 if plan.get("stages"):
                     context = plan["replan_context"]
                     updated = arm_plan(
-                        start, [s["target_q_rad"] for s in plan["stages"]], self.scene, self.cfg, **context
+                        start,
+                        [s["target_q_rad"] for s in plan["stages"]],
+                        self.scene,
+                        self.cfg,
+                        **context,
                     )
                     updated["kind"] = plan["kind"]
                     if "target_0_100" in plan:
@@ -457,7 +492,9 @@ class Workflow:
         if label == "lift":
             request["allow_lift_start_drift"] = True
         if label in self.g.get("fast_phase_speed_percent", {}):
-            request["config"] = dict(self.cfg, speed_percent=self.g["fast_phase_speed_percent"][label])
+            request["config"] = dict(
+                self.cfg, speed_percent=self.g["fast_phase_speed_percent"][label]
+            )
         if label == "lower":
             # Scope controller planning to placement; never leak it into LIFT,
             # SHAKE, correction moves or HOME in the persistent SDK session.
@@ -504,7 +541,9 @@ class Workflow:
         if label == "lift":
             events = actual.get("joint_delivery_events", [])
             began = events[0].get("motion_started_epoch_s") if events else None
-            self.record_handoff("GRIP_TO_LIFT", getattr(self, "_grip_finished_epoch_s", None), began)
+            self.record_handoff(
+                "GRIP_TO_LIFT", getattr(self, "_grip_finished_epoch_s", None), began
+            )
             self._lift_finished_epoch_s = actual.get("final_snapshot", {}).get("observed_epoch_s")
         return actual
 
@@ -514,7 +553,9 @@ class Workflow:
         if not hasattr(self, "handoff_timings"):
             self.handoff_timings = {}
         elapsed = began - ended
-        self.handoff_timings[label] = dict(gap_s=elapsed, target_s=0.5, target_met=0 <= elapsed <= 0.5)
+        self.handoff_timings[label] = dict(
+            gap_s=elapsed, target_s=0.5, target_met=0 <= elapsed <= 0.5
+        )
 
     def hand(self, target, label):
         return self.issue(
@@ -560,29 +601,40 @@ class Workflow:
         self.scene = self.table_scene
 
     def capture(self):
-        if self.g.get("table_plane_source", "live_depth") == "calibrated" and not hasattr(self, "table_scene"):
+        if self.g.get("table_plane_source", "live_depth") == "calibrated" and not hasattr(
+            self, "table_scene"
+        ):
             self.table()
         (self.root / "green_capture_retry.json").unlink(missing_ok=True)
         for attempt in range(2):
             try:
                 return self._capture_once()
             except ValueError as exc:
-                from vision.geometry.circle_rim import RimEdgeQualityError, WorkspaceCupSelectionError
+                from vision.geometry.circle_rim import (
+                    RimEdgeQualityError,
+                    WorkspaceCupSelectionError,
+                )
 
-                transient = isinstance(exc, (RimEdgeQualityError, WorkspaceCupSelectionError)) or str(exc) in (
+                transient = isinstance(
+                    exc, (RimEdgeQualityError, WorkspaceCupSelectionError)
+                ) or str(exc) in (
                     "table_plane_not_supported",
                     "Stereo rim requires one YOLO cup in the red workspace",
                 )
                 if attempt or getattr(self, "_vision", None) is None or not transient:
                     raise
                 save(
-                    self.root / "green_capture_retry.json", dict(reason=str(exc), retry=1, action="capture_fresh_frame")
+                    self.root / "green_capture_retry.json",
+                    dict(reason=str(exc), retry=1, action="capture_fresh_frame"),
                 )
                 # Reuse the running stream: no restart, sleep or extra discarded frames.
 
     def _cpu_recheck_enabled(self):
         p = self.g["perception"]
-        return p.get("cpu_recheck_on_detection_failure", False) and p.get("inference_provider", "cpu") == "spacemit"
+        return (
+            p.get("cpu_recheck_on_detection_failure", False)
+            and p.get("inference_provider", "cpu") == "spacemit"
+        )
 
     def _infer_cpu_recheck(self, run, image, reason, diagnostic, initial):
         """Recheck this recorded frame once, keeping all detection/geometry limits."""
@@ -636,9 +688,13 @@ class Workflow:
                     raise
                 primary = dict(error=f"{type(exc).__name__}: {exc}", candidates=None)
                 write_json(run / "yolo_seg.json", primary)
-                instances, model_info = self._infer_cpu_recheck(run, image, exc, diagnostic, primary)
+                instances, model_info = self._infer_cpu_recheck(
+                    run, image, exc, diagnostic, primary
+                )
         except Exception as exc:
-            failure = dict(diagnostic, valid=False, source_run=str(run), error=f"{type(exc).__name__}: {exc}")
+            failure = dict(
+                diagnostic, valid=False, source_run=str(run), error=f"{type(exc).__name__}: {exc}"
+            )
             save(self.root / "green_rim_diagnostics.json", failure)
             write_json(run / "rim_diagnostics.json", failure)
             raise
@@ -649,7 +705,11 @@ class Workflow:
 
         try:
             if self.g["perception"].get("geometry_method") == "stereo_rim":
-                from vision.geometry.circle_rim import detect_stereo, table_from_base_scene, WorkspaceCupSelectionError
+                from vision.geometry.circle_rim import (
+                    detect_stereo,
+                    table_from_base_scene,
+                    WorkspaceCupSelectionError,
+                )
 
                 fixed_table = None
                 if self.g.get("table_plane_source", "live_depth") == "calibrated":
@@ -671,9 +731,15 @@ class Workflow:
                         isinstance(exc, WorkspaceCupSelectionError)
                         or str(exc) == "Stereo rim requires one YOLO cup in the red workspace"
                     )
-                    if not selection_error or not self._cpu_recheck_enabled() or "inference_recheck" in diagnostic:
+                    if (
+                        not selection_error
+                        or not self._cpu_recheck_enabled()
+                        or "inference_recheck" in diagnostic
+                    ):
                         raise
-                    instances, model_info = self._infer_cpu_recheck(run, image, exc, diagnostic, primary)
+                    instances, model_info = self._infer_cpu_recheck(
+                        run, image, exc, diagnostic, primary
+                    )
                     report = diagnostic["inference_recheck"]
                     diagnostic.clear()
                     diagnostic["inference_recheck"] = report
@@ -712,6 +778,7 @@ class Workflow:
                 debug_image = overlay(image, diagnostic)
                 cv2.imwrite(str(run / "rim_debug.png"), debug_image)
                 cv2.imwrite(str(self.root / "green_rim_debug.png"), debug_image)
+
         def convert(p):
             return (camera @ np.r_[p, 1])[:3]
 
@@ -753,7 +820,9 @@ class Workflow:
         if self.g.get("approach_via_above", True):
             above = target.copy()
             above[2, 3] += self.g["approach_clearance_mm"] / 1000
-            self.above_q = solve(above, self.grasp_q, self.g["wrist_reference_deg"], **solver_options)
+            self.above_q = solve(
+                above, self.grasp_q, self.g["wrist_reference_deg"], **solver_options
+            )
             self.approach_targets.insert(0, self.above_q)
         ik_finished = time.perf_counter()
         geometry_future = getattr(self, "_geometry_future", None)
@@ -804,7 +873,11 @@ class Workflow:
             return
         overlap = self.g.get("fast_overlap_grip_preparation", False)
         cached = getattr(self, "_snapshot_cache", None)
-        if overlap and cached is not None and 0 <= time.time() - cached.get("observed_epoch_s", 0) <= 0.25:
+        if (
+            overlap
+            and cached is not None
+            and 0 <= time.time() - cached.get("observed_epoch_s", 0) <= 0.25
+        ):
             # APPROACH has already awaited fresh idle feedback. Pure geometry
             # work may overlap GRIP; the SDK remains owned by the main thread.
             common.ready(cached)
@@ -875,7 +948,12 @@ class Workflow:
         if self.g.get("fast_minimize_lift_travel", False):
             fast_options["minimize_travel"] = True
         lift = vertical_targets(
-            start, self.tcp, self.g["lift_mm"] / 1000, self.g["wrist_reference_deg"], single_target=True, **fast_options
+            start,
+            self.tcp,
+            self.g["lift_mm"] / 1000,
+            self.g["wrist_reference_deg"],
+            single_target=True,
+            **fast_options,
         )
         place = offset_target(
             start,
@@ -905,12 +983,18 @@ class Workflow:
             ("lower", lift[-1], [place], held, margin),
             ("return_home", place, [*retreat, self.home], None, 0),
         ):
-            route = arm_plan(source, targets, self.scene, self.cfg, held=load, cup_margin_mm=clearance)
+            route = arm_plan(
+                source, targets, self.scene, self.cfg, held=load, cup_margin_mm=clearance
+            )
             if route["blockers"]:
                 raise ValueError(f"{label}: {route['blockers']}")
             prepared.put(label, route, self.scene, load, clearance)
             if publish is not None:
-                publish(label, prepared.routes[label], dict(prepared.vertical) if label == "lift" else {})
+                publish(
+                    label,
+                    prepared.routes[label],
+                    dict(prepared.vertical) if label == "lift" else {},
+                )
         return prepared
 
     def finish_following(self):
@@ -937,7 +1021,9 @@ class Workflow:
                 self._prepared.put_vertical("lift", actual, targets)
                 self.lift_endpoint_reused = True
                 return
-        if np.max(np.abs(np.asarray(actual) - self.place_q)) > np.radians(self.cfg["start_tolerance_deg"]):
+        if np.max(np.abs(np.asarray(actual) - self.place_q)) > np.radians(
+            self.cfg["start_tolerance_deg"]
+        ):
             # Changed branch/pose: discard prepared paths, retain fresh planning.
             self._following_futures = {}
             self._shake_future = None
@@ -960,7 +1046,11 @@ class Workflow:
                 dz,
                 self.g["wrist_reference_deg"],
                 single_target=single_target,
-                **({"minimize_travel": True} if self.g.get("fast_minimize_lift_travel", False) else {}),
+                **(
+                    {"minimize_travel": True}
+                    if self.g.get("fast_minimize_lift_travel", False)
+                    else {}
+                ),
                 **({"fast_fk": True} if self.g.get("fast_batched_ik_rotations", False) else {}),
             )
         )
@@ -993,7 +1083,10 @@ class Workflow:
         print(f"{phase} 自动修正：{reason}", flush=True)
 
     def start_shake_prepare(self, target):
-        if getattr(self.args, "until", None) in ("ready", "grip") or getattr(self, "_shake_future", None) is not None:
+        if (
+            getattr(self.args, "until", None) in ("ready", "grip")
+            or getattr(self, "_shake_future", None) is not None
+        ):
             return
         if not getattr(self, "receipts", {}).get("approach"):
             return
@@ -1004,7 +1097,9 @@ class Workflow:
             return  # Legacy executor receipt: use fresh readback at SHAKE.
         self._shake_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="green-shake-plan")
         self._shake_future = self._shake_pool.submit(
-            copy_context().run, self.build_shake, dict(success=True, limits=limits, q_after_rad=list(target))
+            copy_context().run,
+            self.build_shake,
+            dict(success=True, limits=limits, q_after_rad=list(target)),
         )
 
     def build_shake(self, feedback):
@@ -1030,7 +1125,9 @@ class Workflow:
         p["model_flange_checks"] = []
         for factor in (0, 1, -1):
             q = [a + factor * b for a, b in zip(p["start_q_rad"], p["amplitude_rad"])]
-            p["model_flange_checks"].append(dict(q_rad=q, T_base_flange=self.kin.forward(q)[0].tolist()))
+            p["model_flange_checks"].append(
+                dict(q_rad=q, T_base_flange=self.kin.forward(q)[0].tolist())
+            )
         if p["blockers"]:
             raise ValueError(str(p["blockers"]))
         return p, table
@@ -1048,7 +1145,9 @@ class Workflow:
         elif persistent:
             receipt = read_json(self.receipts["lift"])
             limits = receipt["joint_delivery_events"][-1]["live_limits"]
-            p, table = self.build_shake(dict(success=True, limits=limits, q_after_rad=self.snapshot()))
+            p, table = self.build_shake(
+                dict(success=True, limits=limits, q_after_rad=self.snapshot())
+            )
         else:
             with (run / "readback.log").open("x") as log:
                 subprocess.run(
@@ -1114,7 +1213,9 @@ class Workflow:
                 )
             report = read_json(run / "actual.json")
         self.record_handoff(
-            "LIFT_TO_SHAKE", getattr(self, "_lift_finished_epoch_s", None), report.get("motion_started_epoch_s")
+            "LIFT_TO_SHAKE",
+            getattr(self, "_lift_finished_epoch_s", None),
+            report.get("motion_started_epoch_s"),
         )
         if not report.get("success") or not report.get("duration_completed"):
             if (
@@ -1143,11 +1244,17 @@ class Workflow:
             if already_home:
                 # CONTROL cycles reach HOME repeatedly; reuse the pools.
                 if getattr(self, "_geometry_pool", None) is None:
-                    self._geometry_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="green-geometry")
-                self._geometry_future = self._geometry_pool.submit(copy_context().run, lambda: Screen(table_only=True))
+                    self._geometry_pool = ThreadPoolExecutor(
+                        max_workers=1, thread_name_prefix="green-geometry"
+                    )
+                self._geometry_future = self._geometry_pool.submit(
+                    copy_context().run, lambda: Screen(table_only=True)
+                )
                 route = dict(start_q_rad=start, stages=[], blockers=[])
                 if getattr(self, "_capture_pool", None) is None:
-                    self._capture_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="green-capture")
+                    self._capture_pool = ThreadPoolExecutor(
+                        max_workers=1, thread_name_prefix="green-capture"
+                    )
                 self._capture_future = self._capture_pool.submit(self.capture)
             else:
                 route = arm_plan(start, [self.home], self.scene, self.cfg)
@@ -1203,12 +1310,16 @@ class Workflow:
             targets = self.place_targets(self.place_q)
             self.move(targets, "lower", self.held, -self.g["place_tolerance_mm"])
             before = self.kin.forward(targets[-1])[0] @ self.tcp
-            lower_attempts = self.g.get("lower_recovery_attempts", self.g.get("recovery_attempts", 1))
+            lower_attempts = self.g.get(
+                "lower_recovery_attempts", self.g.get("recovery_attempts", 1)
+            )
             for attempt in range(lower_attempts + 1):
                 after = self.kin.forward(self.snapshot())[0] @ self.tcp
                 error_mm = np.linalg.norm(after[:3, 3] - before[:3, 3]) * 1000
                 self.place_arrival_error_mm = float(error_mm)
-                if error_mm <= self.g.get("place_arrival_tolerance_mm", self.g["place_tolerance_mm"]):
+                if error_mm <= self.g.get(
+                    "place_arrival_tolerance_mm", self.g["place_tolerance_mm"]
+                ):
                     break
                 if attempt == lower_attempts:
                     if self.g.get("precision_error_action", "stop") == "record":
@@ -1250,9 +1361,13 @@ def run(args):
     if args.resume:
         raise ValueError("绿色杯流程暂不支持跨进程恢复；停止后核实持杯状态再开始")
     if getattr(args, "mode", "fast") != "fast":
-        raise ValueError("绿色杯流程仅支持 fast 模式（step/auto 已移除；CONTROL 会话内部同样走 fast 参数）")
+        raise ValueError(
+            "绿色杯流程仅支持 fast 模式（step/auto 已移除；CONTROL 会话内部同样走 fast 参数）"
+        )
     if not args.execute:
-        print("绿色杯：HOME → CAPTURE → GRASP → LIFT → SHAKE → LOWER → OPEN → HOME；加 --execute 执行")
+        print(
+            "绿色杯：HOME → CAPTURE → GRASP → LIFT → SHAKE → LOWER → OPEN → HOME；加 --execute 执行"
+        )
         return 0
     until = {
         "ready": "APPROACH",
@@ -1289,7 +1404,9 @@ def run(args):
                 state["phase_timings_s"][phase] = elapsed
                 if phase == "CAPTURE" and startup is not None:
                     state["startup_to_capture_s"] = time.perf_counter() - startup.started
-                state["reuse_events"] = flow._prepared.events if getattr(flow, "_prepared", None) else []
+                state["reuse_events"] = (
+                    flow._prepared.events if getattr(flow, "_prepared", None) else []
+                )
                 state["handoff_timings"] = getattr(flow, "handoff_timings", {})
                 state["lift_endpoint_reused"] = getattr(flow, "lift_endpoint_reused", False)
                 state["receipts"] = flow.receipts

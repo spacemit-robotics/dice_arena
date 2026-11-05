@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Independent synthetic stereo geometry and failure cases; no hardware actions."""
 
 import unittest
@@ -21,7 +23,10 @@ class StereoRimTest(unittest.TestCase):
         fixed = table_from_base_scene(scene, transform)
         np.testing.assert_allclose(fixed["point"], [0.1, -0.2, 0.7])
         np.testing.assert_allclose(fixed["normal"], [0, 0, -1])
-        with patch("vision.geometry.circle_rim._plane", side_effect=AssertionError("runtime table fit forbidden")):
+        with patch(
+            "vision.geometry.circle_rim._plane",
+            side_effect=AssertionError("runtime table fit forbidden"),
+        ):
             point, normal, fraction, rms, source = resolve_table(None, None, None, 6, fixed)
         np.testing.assert_allclose(point, fixed["point"])
         np.testing.assert_allclose(normal, fixed["normal"])
@@ -35,7 +40,15 @@ class StereoRimTest(unittest.TestCase):
         points = np.c_[0.0375 * np.cos(theta), 0.0375 * np.sin(theta), np.full(360, 0.6)]
         for baseline in (0, 0.05):
             record = {
-                "intrinsics": dict(width=640, height=480, fx=600.0, fy=600.0, cx=320.0, cy=240.0, dist_coeffs=[0] * 5),
+                "intrinsics": dict(
+                    width=640,
+                    height=480,
+                    fx=600.0,
+                    fy=600.0,
+                    cx=320.0,
+                    cy=240.0,
+                    dist_coeffs=[0] * 5,
+                ),
                 "to_color_rotation": np.eye(3).ravel(order="F").tolist(),
                 "to_color_translation": [baseline, 0, 0],
             }
@@ -74,14 +87,25 @@ class StereoRimTest(unittest.TestCase):
         bad[1] = dict(bad[1], distance=np.full((480, 640), 30.0))
         with self.assertRaises(ValueError):
             fit_circle(
-                bad, self.table, self.normal, [[0, 0, 0.6, 0.0375]], [0.025, 0.075], [0.04, 0.18], fixed_height=0.065
+                bad,
+                self.table,
+                self.normal,
+                [[0, 0, 0.6, 0.0375]],
+                [0.025, 0.075],
+                [0.04, 0.18],
+                fixed_height=0.065,
             )
 
     def test_height_mode_validation(self):
         from vision.geometry.circle_rim import height_options
 
         self.assertEqual(height_options({})[0], "measured")
-        opts = dict(height_mode="fixed", fixed_height_mm=65, geometry_method="stereo_rim", height_range_mm=[40, 180])
+        opts = dict(
+            height_mode="fixed",
+            fixed_height_mm=65,
+            geometry_method="stereo_rim",
+            height_range_mm=[40, 180],
+        )
         self.assertEqual(height_options(opts), ("fixed", 0.065))
         for change in (
             dict(fixed_height_mm=0),
@@ -134,13 +158,25 @@ class StereoRimTest(unittest.TestCase):
     def test_single_camera_cannot_supply_metric_scale(self):
         with self.assertRaisesRegex(ValueError, "independent"):
             fit_circle(
-                [self.views[0]] * 2, self.table, self.normal, [[0, 0, 0.6, 0.0375]], [0.025, 0.075], [0.04, 0.18]
+                [self.views[0]] * 2,
+                self.table,
+                self.normal,
+                [[0, 0, 0.6, 0.0375]],
+                [0.025, 0.075],
+                [0.04, 0.18],
             )
 
     def test_one_missing_rim_is_rejected(self):
         self.views[1]["distance"][:] = 30
         with self.assertRaises(ValueError):
-            fit_circle(self.views, self.table, self.normal, [[0, 0, 0.6, 0.0375]], [0.025, 0.075], [0.04, 0.18])
+            fit_circle(
+                self.views,
+                self.table,
+                self.normal,
+                [[0, 0, 0.6, 0.0375]],
+                [0.025, 0.075],
+                [0.04, 0.18],
+            )
 
     def test_distorted_images_require_rectification(self):
         with self.assertRaisesRegex(ValueError, "rectified"):
@@ -155,11 +191,16 @@ class StereoSequenceTest(unittest.TestCase):
         from unittest.mock import patch
         from vision.geometry.circle_rim import refine_sequence, QUALITY
 
-        initial = [dict(center=[0, 0, 0.60], radius_m=0.0375), dict(center=[0, 0, 0.61], radius_m=0.037)]
+        initial = [
+            dict(center=[0, 0, 0.60], radius_m=0.0375),
+            dict(center=[0, 0, 0.61], radius_m=0.037),
+        ]
         views = [object(), object()]
         independent_results = [dict(center=[0, 0, 0.6001]), dict(center=[0, 0, 0.6102])]
         with patch("vision.geometry.circle_rim.fit_circle", side_effect=independent_results) as fit:
-            result = refine_sequence(views, initial, [0, 0, 1], [0, 0, -1], [0.025, 0.075], [0.04, 0.18], QUALITY)
+            result = refine_sequence(
+                views, initial, [0, 0, 1], [0, 0, -1], [0.025, 0.075], [0.04, 0.18], QUALITY
+            )
         self.assertEqual(result, independent_results)
         self.assertIs(fit.call_args_list[0].args[0], views[0])
         self.assertIs(fit.call_args_list[1].args[0], views[1])
@@ -174,10 +215,18 @@ class StereoSequenceTest(unittest.TestCase):
         views = [object(), object()]
         diag = {}
         with patch(
-            "vision.geometry.circle_rim.fit_circle", side_effect=[ValueError("bad initial guess"), good, good, good]
+            "vision.geometry.circle_rim.fit_circle",
+            side_effect=[ValueError("bad initial guess"), good, good, good],
         ) as fit:
             result = fit_frame_sequence(
-                views, [0, 0, 1], [0, 0, -1], [[0, 0, 0.7, 0.04]], [0.025, 0.075], [0.04, 0.18], QUALITY, diag
+                views,
+                [0, 0, 1],
+                [0, 0, -1],
+                [[0, 0, 0.7, 0.04]],
+                [0.025, 0.075],
+                [0.04, 0.18],
+                QUALITY,
+                diag,
             )
         self.assertEqual(result, [good, good])
         self.assertIsNone(diag["initial_frames"][0])
@@ -209,7 +258,9 @@ class StereoSequenceTest(unittest.TestCase):
     def test_real_motion_still_fails_original_limits(self):
         from vision.geometry.circle_rim import validate_sequence, QUALITY
 
-        frames = [dict(center=[x, 0, 0.6], height_m=0.065, radius_m=0.0375) for x in [0, 0, 0, 0.01, 0.02]]
+        frames = [
+            dict(center=[x, 0, 0.6], height_m=0.065, radius_m=0.0375) for x in [0, 0, 0, 0.01, 0.02]
+        ]
         diag = {}
         with self.assertRaisesRegex(ValueError, "center spread 20.00 mm"):
             validate_sequence(frames, QUALITY, diag)
@@ -240,7 +291,16 @@ class FixedQuorumTest(unittest.TestCase):
             side_effect=[ValueError("weak edge"), good, ValueError("no rim"), good, good],
         ) as fit:
             results, first = fit_fixed_sequence(
-                [None] * 5, [0, 0, 0.665], [0, 0, -1], [], [0.025, 0.075], [0.04, 0.18], QUALITY, 0.065, 3, diagnostic
+                [None] * 5,
+                [0, 0, 0.665],
+                [0, 0, -1],
+                [],
+                [0.025, 0.075],
+                [0.04, 0.18],
+                QUALITY,
+                0.065,
+                3,
+                diagnostic,
             )
         self.assertEqual(first, 1)
         self.assertEqual(len(results), 3)
@@ -296,11 +356,21 @@ class WorkspaceGateTest(unittest.TestCase):
         mask[:, 5:25] = True  # 75% of the cup mask lies inside the red region
         self.instances = [dict(mask=mask)]
         self.meta = {"intrinsics": dict(fx=600.0, fy=600.0, cx=20.0, cy=20.0)}
-        self.fixed_table = dict(point=[0, 0, 0.665], normal=[0, 0, 1], fit=dict(inlier_fraction=0.9, rms_mm=2.0))
+        self.fixed_table = dict(
+            point=[0, 0, 0.665], normal=[0, 0, 1], fit=dict(inlier_fraction=0.9, rms_mm=2.0)
+        )
 
     def detect(self, opts):
         return self.detect_stereo(
-            self.run, None, self.image, self.meta, opts, 6, self.instances, {}, fixed_table=self.fixed_table
+            self.run,
+            None,
+            self.image,
+            self.meta,
+            opts,
+            6,
+            self.instances,
+            {},
+            fixed_table=self.fixed_table,
         )
 
     def test_default_threshold_rejects_partial_overlap(self):
@@ -312,7 +382,10 @@ class WorkspaceGateTest(unittest.TestCase):
         from unittest.mock import patch
 
         opts = dict(min_area_px=100, stereo_rim={}, min_workspace_fraction=0.1)
-        with patch("vision.geometry.circle_rim.image_contour", side_effect=ValueError("synthetic no contour")):
+        with patch(
+            "vision.geometry.circle_rim.image_contour",
+            side_effect=ValueError("synthetic no contour"),
+        ):
             # The gate passed; the failure moves to the next pipeline stage.
             with self.assertRaisesRegex(ValueError, "No complete image contour"):
                 self.detect(opts)

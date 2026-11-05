@@ -4,4 +4,5 @@
 由 `dice-arena serve` 启动，运行时文件（日志、自动生成的证书）在 `SITE/dice_arena/`。
 
 - 程序：MediaMTX v1.20.1 官方 riscv64 发布版（https://github.com/bluenviron/mediamtx），MIT 许可，见 [LICENSE](LICENSE)。
+- 下载：在应用根目录执行 `python3 tools/download_assets.py`，自动安装到 `mediamtx/mediamtx` 并校验 SHA-256。
 - 配置：`mediamtx.yml` 为该版本默认配置，只关闭了游戏用不到的 RTMP、HLS、SRT 和 MoQ。

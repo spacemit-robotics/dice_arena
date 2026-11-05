@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Green-cup IK and full sampled path checks, with soft wrist preferences."""
 
 import math
@@ -18,7 +20,9 @@ except (TypeError, ValueError):
 
 def proper_rotation_vector(matrix):
     """Log of an already validated proper rotation; stable fallback near pi."""
-    vector = 0.5 * np.array([matrix[2, 1] - matrix[1, 2], matrix[0, 2] - matrix[2, 0], matrix[1, 0] - matrix[0, 1]])
+    vector = 0.5 * np.array(
+        [matrix[2, 1] - matrix[1, 2], matrix[0, 2] - matrix[2, 0], matrix[1, 0] - matrix[0, 1]]
+    )
     sine = math.sqrt(float(vector @ vector))
     cosine = 0.5 * (float(matrix[0, 0] + matrix[1, 1] + matrix[2, 2]) - 1.0)
     angle = math.atan2(sine, cosine)
@@ -76,7 +80,11 @@ def solve(target, seed, wrist_deg, *, fast_fk=False, method="trf"):
         x, y, z = phi
         skew = np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]])
         theta = np.linalg.norm(phi)
-        coefficient = 1 / 12 + theta**2 / 720 if theta < 1e-4 else (1 - 0.5 * theta / np.tan(0.5 * theta)) / theta**2
+        coefficient = (
+            1 / 12 + theta**2 / 720
+            if theta < 1e-4
+            else (1 - 0.5 * theta / np.tan(0.5 * theta)) / theta**2
+        )
         right_inverse = np.eye(3) + 0.5 * skew + coefficient * (skew @ skew)
         if fast_fk:
             # Allocate independent results for scipy, without rebuilding the
@@ -91,7 +99,9 @@ def solve(target, seed, wrist_deg, *, fast_fk=False, method="trf"):
             derivative[6:] = wrist_derivative
         else:
             value = np.r_[10 * (pose[:3, 3] - target[:3, 3]), phi, 0.001 * (q[4:] - reference)]
-            derivative = np.vstack((10 * geometric[:3], -right_inverse @ geometric[3:], wrist_derivative))
+            derivative = np.vstack(
+                (10 * geometric[:3], -right_inverse @ geometric[3:], wrist_derivative)
+            )
         cached[:] = [q.copy(), value, derivative]
         return value, derivative
 
@@ -126,7 +136,8 @@ def solve(target, seed, wrist_deg, *, fast_fk=False, method="trf"):
         if position <= 0.0015 and angle <= math.radians(1):
             solutions.append(
                 (
-                    np.linalg.norm(result.x[4:] - reference) + 0.1 * np.linalg.norm(result.x - seed),
+                    np.linalg.norm(result.x[4:] - reference)
+                    + 0.1 * np.linalg.norm(result.x - seed),
                     result.x,
                 )
             )
@@ -137,8 +148,8 @@ def solve(target, seed, wrist_deg, *, fast_fk=False, method="trf"):
     return min(solutions, key=lambda item: item[0])[1]
 
 
-def held_cup_clearance(qs, T_flange_cup, radius, height, scene):
-    poses = Kinematics().forward_batch(qs) @ T_flange_cup
+def held_cup_clearance(qs, t_flange_cup, radius, height, scene):
+    poses = Kinematics().forward_batch(qs) @ t_flange_cup
     n = np.asarray(scene["cup_normal_base"])
     p = np.asarray(scene["cup_support_base_m"])
     alignment = poses[:, :3, 2] @ n
@@ -167,7 +178,9 @@ def arm_plan(start, targets, scene, cfg, *, held=None, cup_margin_mm=0):
         q = target
     review = Screen(table_only=True).check_table_batch(samples, scene, cfg)
     if held is not None:
-        gap = held_cup_clearance(samples, held["T_flange_cup"], held["radius_m"], held["height_m"], scene)
+        gap = held_cup_clearance(
+            samples, held["T_flange_cup"], held["radius_m"], held["height_m"], scene
+        )
         review["held_cup_min_mm"] = gap
         if gap < cup_margin_mm:
             review["blockers"].append(f"持杯桌面间隙不足：{gap:.1f} mm")
@@ -178,7 +191,9 @@ def arm_plan(start, targets, scene, cfg, *, held=None, cup_margin_mm=0):
         blockers=review["blockers"],
         table_screen=review,
         replan_context=dict(
-            held=None if held is None else dict(held, T_flange_cup=np.asarray(held["T_flange_cup"]).tolist()),
+            held=None
+            if held is None
+            else dict(held, t_flange_cup=np.asarray(held["T_flange_cup"]).tolist()),
             cup_margin_mm=cup_margin_mm,
         ),
     )
@@ -198,7 +213,8 @@ def minimize_joint_travel(start, candidate, target):
     def equality(x):
         pose = batched_rotation_forward(kin, x[:7])[0]
         return np.r_[
-            10 * (pose[:3, 3] - target[:3, 3]), Rotation.from_matrix(target[:3, :3] @ pose[:3, :3].T).as_rotvec()
+            10 * (pose[:3, 3] - target[:3, 3]),
+            Rotation.from_matrix(target[:3, :3] @ pose[:3, :3].T).as_rotvec(),
         ]
 
     def travel(x):
@@ -226,13 +242,17 @@ def minimize_joint_travel(start, candidate, target):
     return candidate
 
 
-def vertical_targets(start, tcp, dz, wrist_deg, *, single_target=False, fast_fk=False, minimize_travel=False):
+def vertical_targets(
+    start, tcp, dz, wrist_deg, *, single_target=False, fast_fk=False, minimize_travel=False
+):
     kin = Kinematics()
     flange, _ = kin.forward(start)
     pose = flange @ tcp
     targets = []
     q = np.asarray(start)
-    distances = [dz] if single_target else np.linspace(0, dz, max(2, math.ceil(abs(dz) / 0.01) + 1))[1:]
+    distances = (
+        [dz] if single_target else np.linspace(0, dz, max(2, math.ceil(abs(dz) / 0.01) + 1))[1:]
+    )
     for distance in distances:
         target = pose.copy()
         target[2, 3] += distance

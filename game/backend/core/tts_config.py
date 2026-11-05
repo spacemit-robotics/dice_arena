@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Shared loading and path resolution for component-local TTS configuration.
 
 Every TTS adapter owns a small ``config.json`` next to its ``provider.py``.

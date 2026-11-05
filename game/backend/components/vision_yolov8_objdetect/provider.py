@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Resident, game-agnostic YOLOv8 adjudication provider."""
 
 from __future__ import annotations
@@ -8,7 +10,13 @@ import os
 import tempfile
 import time
 import threading
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout, wait  # noqa: F401 - compatibility export
+
+# FuturesTimeout is re-exported for compatibility.
+from concurrent.futures import (  # noqa: F401
+    ThreadPoolExecutor,
+    TimeoutError as FuturesTimeout,
+    wait,
+)
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -61,7 +69,9 @@ def resolve_runtime_binary(
     return resolve_project_path(configured, root)
 
 
-def detected_divider_ratio(observation: Mapping[str, Any], orientation: str, enabled: bool = True) -> float | None:
+def detected_divider_ratio(
+    observation: Mapping[str, Any], orientation: str, enabled: bool = True
+) -> float | None:
     """Return where the runtime actually found the divider, as a 0..1 ratio.
 
     The whole point of ``divider_regions`` grouping is to split on the boundary
@@ -108,7 +118,9 @@ def detected_divider_ratio(observation: Mapping[str, Any], orientation: str, ena
     return ratio
 
 
-def normalize_observation(profile: Mapping[str, Any], observation: Mapping[str, Any]) -> dict[str, Any]:
+def normalize_observation(
+    profile: Mapping[str, Any], observation: Mapping[str, Any]
+) -> dict[str, Any]:
     """Project generic detector boxes into the profile's participants.
 
     The C++ runtime deliberately emits only model-neutral detections.  A
@@ -131,7 +143,9 @@ def normalize_observation(profile: Mapping[str, Any], observation: Mapping[str, 
         return result
     existing = result.get("participants")
     if isinstance(existing, Mapping):
-        result["participants"] = {str(name): existing[name] for name in participant_names if name in existing}
+        result["participants"] = {
+            str(name): existing[name] for name in participant_names if name in existing
+        }
         return result
     grouping = str(vision.get("grouping") or vision.get("participant_assignment") or "x_midpoint")
     if grouping not in {"x_midpoint", "divider_regions"}:
@@ -230,14 +244,18 @@ def normalize_observation(profile: Mapping[str, Any], observation: Mapping[str, 
         else:
             boundary = float(width) * (position if grouping == "divider_regions" else 0.5)
             is_first = center_x < boundary
-        participant = grouped[str(participant_names[0])] if is_first else grouped[str(participant_names[1])]
+        participant = (
+            grouped[str(participant_names[0])] if is_first else grouped[str(participant_names[1])]
+        )
         participant.append(mapped)
     if any(grouped.values()):
         result["participants"] = grouped
     return result
 
 
-def _has_incomplete_expected_counts(profile: Mapping[str, Any], observations: list[Mapping[str, Any]]) -> bool:
+def _has_incomplete_expected_counts(
+    profile: Mapping[str, Any], observations: list[Mapping[str, Any]]
+) -> bool:
     """Return whether stable detector evidence has an incomplete object count."""
     vision = profile.get("vision", {}) if isinstance(profile, Mapping) else {}
     vision = vision if isinstance(vision, Mapping) else {}
@@ -253,7 +271,9 @@ def _has_incomplete_expected_counts(profile: Mapping[str, Any], observations: li
         keys = names or [str(key) for key in participants]
         for name in keys:
             values = participants.get(name)
-            count = len(values) if isinstance(values, (list, tuple)) else (0 if values is None else 1)
+            count = (
+                len(values) if isinstance(values, (list, tuple)) else (0 if values is None else 1)
+            )
             if count != expected:
                 return True
     return False
@@ -299,7 +319,10 @@ class VisionYolov8Objdetect(VisionAdjudicatorProvider):
     version = "3.0"
 
     def __init__(
-        self, manifest: dict[str, Any] | None = None, *, runtime_factory: Callable[..., Any] | None = None
+        self,
+        manifest: dict[str, Any] | None = None,
+        *,
+        runtime_factory: Callable[..., Any] | None = None,
     ) -> None:
         super().__init__(manifest)
         self.runtime_factory = runtime_factory or (lambda view_id="default": YoloRuntimeProcess())
@@ -630,7 +653,9 @@ class VisionYolov8Objdetect(VisionAdjudicatorProvider):
         return str(profile_base or runtime_base or "")
 
     @staticmethod
-    def _video_event(profile: Mapping[str, Any], view_id: str, event: Mapping[str, Any]) -> dict[str, Any] | None:
+    def _video_event(
+        profile: Mapping[str, Any], view_id: str, event: Mapping[str, Any]
+    ) -> dict[str, Any] | None:
         """Project runtime video notifications to the public WebRTC endpoint.
 
         Runtime URLs may be RTSP, loopback, or otherwise deployment-private;
@@ -815,7 +840,9 @@ class VisionYolov8Objdetect(VisionAdjudicatorProvider):
         request = round_.request
         profile = round_.profile
         keep_warm = self._resident_mode(profile)
-        multi = profile.get("multi_view", {}) if isinstance(profile.get("multi_view"), Mapping) else {}
+        multi = (
+            profile.get("multi_view", {}) if isinstance(profile.get("multi_view"), Mapping) else {}
+        )
         views = multi.get("views") if multi.get("enabled") else None
         if not isinstance(views, list) or not views:
             views = [{"id": "default"}]
@@ -864,7 +891,9 @@ class VisionYolov8Objdetect(VisionAdjudicatorProvider):
                                 pass
                     raise RuntimeError("cancelled")
                 remaining = max(0, end - time.monotonic())
-                on_event({"event": "phase", "phase": "pre_wait", "remaining_ms": int(remaining * 1000)})
+                on_event(
+                    {"event": "phase", "phase": "pre_wait", "remaining_ms": int(remaining * 1000)}
+                )
                 time.sleep(min(0.25, remaining))
         for rt in runtimes:
             rt.send(
@@ -896,7 +925,9 @@ class VisionYolov8Objdetect(VisionAdjudicatorProvider):
                     on_event({**event, "view_id": vid})
                 elif event.get("event") == "runtime_exit":
                     returncode = event.get("returncode")
-                    raise RuntimeError(f"YOLO runtime exited before stable observation (returncode={returncode})")
+                    raise RuntimeError(
+                        f"YOLO runtime exited before stable observation (returncode={returncode})"
+                    )
                 elif event.get("event") in {"diagnostic_snapshot", "observation"}:
                     candidate = dict(event, view_id=vid)
                     with latest_lock:
@@ -992,9 +1023,13 @@ class VisionYolov8Objdetect(VisionAdjudicatorProvider):
                 if found is not None:
                     observations[vid] = found
             with latest_lock:
-                diagnostic_observations = [dict(latest_by_view[key]) for key in sorted(latest_by_view)]
+                diagnostic_observations = [
+                    dict(latest_by_view[key]) for key in sorted(latest_by_view)
+                ]
             if not diagnostic_observations:
-                diagnostic_observations = [{"view_id": str(view.get("id", "default"))} for view in views]
+                diagnostic_observations = [
+                    {"view_id": str(view.get("id", "default"))} for view in views
+                ]
             round_.diagnosis = self._diagnose_failure(
                 request,
                 profile,
@@ -1005,7 +1040,9 @@ class VisionYolov8Objdetect(VisionAdjudicatorProvider):
             return
         round_.observations = observations
 
-    def _release_round_runtimes(self, round_: "_ObservedRound", on_log: Callable[[str], None] | None = None) -> None:
+    def _release_round_runtimes(
+        self, round_: "_ObservedRound", on_log: Callable[[str], None] | None = None
+    ) -> None:
         """Stop and evict the round's runtimes (non-resident mode only).
 
         The eviction is guarded by the runtime-cache identity check, so for
@@ -1029,7 +1066,9 @@ class VisionYolov8Objdetect(VisionAdjudicatorProvider):
 
                     shutil.rmtree(root, ignore_errors=True)
 
-    def _complete_diagnosed(self, round_: "_ObservedRound", on_event: Callable[[dict[str, Any]], None]) -> None:
+    def _complete_diagnosed(
+        self, round_: "_ObservedRound", on_event: Callable[[dict[str, Any]], None]
+    ) -> None:
         """Close a diagnosed-failure round: complete event plus release."""
         on_event({"event": "complete", "phase": "complete"})
         round_.round_completed = True
@@ -1079,7 +1118,11 @@ class VisionYolov8Objdetect(VisionAdjudicatorProvider):
             if round_.diagnosis is not None:
                 return round_.diagnosis
             profile = round_.profile
-            multi = profile.get("multi_view", {}) if isinstance(profile.get("multi_view"), Mapping) else {}
+            multi = (
+                profile.get("multi_view", {})
+                if isinstance(profile.get("multi_view"), Mapping)
+                else {}
+            )
             runtimes = round_.runtimes
             _views = round_.views
             keep_warm = round_.keep_warm
@@ -1120,7 +1163,9 @@ class VisionYolov8Objdetect(VisionAdjudicatorProvider):
             # Otherwise evaluate the declared profile rule for each view so a
             # missing/legacy yolo_outcome cannot discard a camera's evidence.
             computed = [
-                str(item.get("yolo_outcome")) if item.get("yolo_outcome") else evaluate_rule(rule, [item])
+                str(item.get("yolo_outcome"))
+                if item.get("yolo_outcome")
+                else evaluate_rule(rule, [item])
                 for item in normalized
             ]
             if len(computed) > 1:
@@ -1169,7 +1214,13 @@ class VisionYolov8Objdetect(VisionAdjudicatorProvider):
                     if is_cancelled():
                         raise RuntimeError("cancelled")
                     remaining = max(0, end - time.monotonic())
-                    on_event({"event": "phase", "phase": "holding", "remaining_ms": int(remaining * 1000)})
+                    on_event(
+                        {
+                            "event": "phase",
+                            "phase": "holding",
+                            "remaining_ms": int(remaining * 1000),
+                        }
+                    )
                     time.sleep(min(0.25, remaining))
             on_event({"event": "complete", "phase": "complete"})
             round_.round_completed = True

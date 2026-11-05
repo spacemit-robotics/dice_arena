@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Single source of truth for the MOSS-TTS-Nano Dice Arena package settings."""
 
 from __future__ import annotations
@@ -76,10 +78,18 @@ def load_settings(config: dict[str, Any] | None = None) -> MossSettings:
     ).rstrip("/")
     voice_mode = str(config_value(config, "voice", "mode", default="builtin")).strip().lower()
     voice = str(config_value(config, "voice", "name", default="Junhao")).strip() or "Junhao"
-    reference_value = config_value(config, "voice", "reference_audio", default="") if voice_mode == "clone" else None
-    reference_audio = resolve_config_path(reference_value, base_dir=root) if voice_mode == "clone" else None
+    reference_value = (
+        config_value(config, "voice", "reference_audio", default="")
+        if voice_mode == "clone"
+        else None
+    )
+    reference_audio = (
+        resolve_config_path(reference_value, base_dir=root) if voice_mode == "clone" else None
+    )
     max_new_frames = int(config_value(config, "generation", "max_new_frames", default=120))
-    clone_tokens = int(config_value(config, "generation", "voice_clone_max_text_tokens", default=24))
+    clone_tokens = int(
+        config_value(config, "generation", "voice_clone_max_text_tokens", default=24)
+    )
     first_chunk = int(config_value(config, "generation", "first_chunk_text_tokens", default=16))
     warmup_text = str(config_value(config, "startup", "warmup_text", default="你好。"))
     seed = int(config_value(config, "generation", "seed", default=1234))
@@ -87,12 +97,18 @@ def load_settings(config: dict[str, Any] | None = None) -> MossSettings:
     request_timeout = float(config_value(config, "limits", "request_timeout_seconds", default=120))
     ep_intra = int(config_value(config, "execution_provider", "intra_thread_num", default=4))
     ep_inter = int(config_value(config, "execution_provider", "inter_thread_num", default=1))
-    ep_affinity = str(config_value(config, "execution_provider", "intra_thread_affinity", default="8;9;10;11"))
-    ep_filter = str(config_value(config, "execution_provider", "disable_op_type_filter", default=""))
+    ep_affinity = str(
+        config_value(config, "execution_provider", "intra_thread_affinity", default="8;9;10;11")
+    )
+    ep_filter = str(
+        config_value(config, "execution_provider", "disable_op_type_filter", default="")
+    )
     # EP 线程池在 import 时铺满全部 A100 核，一切配置都拦不住；daemon 在
     # ready 前把越界线程扳回此核集。默认 8-11：把 12-15 让给其他 EP 负载
     # （绿杯 YOLO 用 12;13）。空串 = 不扳。
-    process_affinity = str(config_value(config, "execution_provider", "process_affinity", default="8;9;10;11"))
+    process_affinity = str(
+        config_value(config, "execution_provider", "process_affinity", default="8;9;10;11")
+    )
     if voice_mode not in {"builtin", "clone"}:
         raise ValueError("MOSS voice.mode must be builtin or clone")
     if voice_mode == "clone" and reference_audio is None:

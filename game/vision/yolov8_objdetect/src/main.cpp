@@ -1,3 +1,5 @@
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
 #include "gstreamer_camera.h"
 #include "rtsp_streamer.h"
 #include "opencl_preprocess.h"
@@ -39,7 +41,10 @@ using Clock = std::chrono::steady_clock;
 volatile sig_atomic_t g_signal_stop = 0;
 int g_event_fd = -1;
 std::mutex g_event_mutex;
-void on_signal(int) { g_signal_stop = 1; }
+
+void on_signal(int) {
+    g_signal_stop = 1;
+}
 
 void emit_event(const std::string& json) {
     std::lock_guard<std::mutex> lock(g_event_mutex);
@@ -68,7 +73,7 @@ void emit_event(const std::string& json) {
 // When full, the oldest frame is discarded so latency cannot accumulate.
 template <typename T>
 class FrameQueue {
-    public:
+public:
     explicit FrameQueue(size_t capacity) : capacity_(std::max<size_t>(1, capacity)) {}
 
     bool push(std::shared_ptr<T> value) {
@@ -88,12 +93,12 @@ class FrameQueue {
 
     // Return the newest pending item and discard any older pending items.
     // This is the low-latency policy for an inference/display consumer.
-    bool popLatest(
-        std::shared_ptr<T>& value, const std::atomic<bool>& abort, bool prebuffer = false, size_t prebuffer_count = 1) {
+    bool popLatest(std::shared_ptr<T>& value, const std::atomic<bool>& abort,
+                   bool prebuffer = false, size_t prebuffer_count = 1) {
         std::unique_lock<std::mutex> lock(mutex_);
         auto ready = [&] {
             return closed_ || abort.load() || g_signal_stop != 0 ||
-                (!queue_.empty() && (!prebuffer || queue_.size() >= prebuffer_count));
+                   (!queue_.empty() && (!prebuffer || queue_.size() >= prebuffer_count));
         };
         // Poll periodically so Ctrl-C can be observed even while a stage is
         // waiting for a frame. A signal handler cannot safely notify this CV;
@@ -136,7 +141,7 @@ class FrameQueue {
         dropped_pending_ = 0;
     }
 
-    private:
+private:
     std::mutex mutex_;
     std::condition_variable cv_;
     std::deque<std::shared_ptr<T>> queue_;
@@ -222,14 +227,17 @@ struct Stats {
         std::lock_guard<std::mutex> l(timing_mutex);
         pre_ms += v;
     }
+
     void addInfer(double v) {
         std::lock_guard<std::mutex> l(timing_mutex);
         infer_ms += v;
     }
+
     void addDisplay(double v) {
         std::lock_guard<std::mutex> l(timing_mutex);
         display_ms += v;
     }
+
     void averages(double& p, double& i, double& d) {
         std::lock_guard<std::mutex> l(timing_mutex);
         p = prepared ? pre_ms / static_cast<double>(prepared.load()) : 0.0;
@@ -277,8 +285,8 @@ static bool read_config_bool(const cv::FileNode& root, const char* key, bool& va
     if (node.isString()) {
         std::string text;
         node >> text;
-        std::transform(
-            text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::transform(text.begin(), text.end(), text.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         if (text == "true" || text == "1") {
             value = true;
             return true;
@@ -310,7 +318,8 @@ static bool load_config(const std::string& path, Args& a) {
         if (!a.model.empty()) {
             const std::filesystem::path model_path(a.model);
             if (!model_path.is_absolute()) {
-                const std::filesystem::path config_path = std::filesystem::absolute(std::filesystem::path(path));
+                const std::filesystem::path config_path =
+                        std::filesystem::absolute(std::filesystem::path(path));
                 a.model = (config_path.parent_path() / model_path).lexically_normal().string();
             }
         }
@@ -323,7 +332,7 @@ static bool load_config(const std::string& path, Args& a) {
                 a.device.clear();
             } else {
                 std::cerr << "config camera must be a device path string such as /dev/video1 "
-                                "or a numeric camera index\n";
+                             "or a numeric camera index\n";
                 return false;
             }
         }
@@ -390,38 +399,41 @@ static bool load_config(const std::string& path, Args& a) {
 }
 
 static void usage(const char* exe) {
-    std::cout << "Usage: " << exe << " [options]\n"
-                << "  --config PATH      JSON config file (default config.json)\n"
-                << "  --model PATH       ONNX model; overrides config.json\n"
-                << "  --camera VALUE     V4L2 index or device path, e.g. /dev/video1\n"
-                << "  --device PATH      explicit V4L2 node, overrides --camera\n"
-                << "  --width N --height N --fps N\n"
-                << "  --conf FLOAT       confidence threshold\n"
-                << "  --queue-depth N    keep up to N frames per pipeline queue\n"
-                << "  --stable-frames N  matching YOLO observations required for stability\n"
-                << "  --divider-detection enable reusable scene divider assistance\n"
-                << "  --no-divider-detection disable scene divider assistance\n"
-                << "  --focus N          fixed manual focus (-1 unchanged)\n"
-                << "  --zoom N           zoom absolute value (-1 unchanged)\n"
-                << "  --intra-threads N  SpaceMIT EP threads\n"
-                << "  --ep-affinity LIST bind EP threads to cores, e.g. 14;15\n"
-                << "  --no-display       run pipeline without window (config: display_enabled=false)\n"
-                << "  --max-frames N     stop after N frames enter preprocess (0=unlimited)\n"
-                << "  --dump-input PATH  dump first preprocessed tensor as float32\n"
-                << "  --yolov8           enable YOLO preprocessing/inference\n"
-                << "  --no-yolov8        bypass preprocessing/inference and display camera frames only\n"
-                << "  --self-test        initialize OpenCL GPU and model, run one inference\n"
-                << "  --image PATH       run the scene divider detector on one image and print JSON (no camera)\n"
-                << "  --rtsp             publish H.264 to RTSP server with SpaceMIT VPU\n"
-                << "  --event-fd FD      write structured JSONL events to an inherited FD\n"
-                << "  --control-fd FD    read vision-control-v1 JSONL commands from an inherited FD\n"
-                << "  --snapshot-dir PATH save stable-frame JPEG snapshots under PATH\n"
-                << "  --prewarm          keep camera/RTSP resident and wait for START_ADJUDICATION\n"
-                << "  --view-id ID       identify this camera view in observation events\n"
-                << "  --rtsp-host HOST   RTSP server host, default 127.0.0.1\n"
-                << "  --rtsp-port N      RTSP server port, default 8554\n"
-                << "  --rtsp-path PATH   RTSP mount path, default /dice\n"
-                << "  --no-rtsp          disable RTSP publishing\n";
+    std::cout
+            << "Usage: " << exe << " [options]\n"
+            << "  --config PATH      JSON config file (default config.json)\n"
+            << "  --model PATH       ONNX model; overrides config.json\n"
+            << "  --camera VALUE     V4L2 index or device path, e.g. /dev/video1\n"
+            << "  --device PATH      explicit V4L2 node, overrides --camera\n"
+            << "  --width N --height N --fps N\n"
+            << "  --conf FLOAT       confidence threshold\n"
+            << "  --queue-depth N    keep up to N frames per pipeline queue\n"
+            << "  --stable-frames N  matching YOLO observations required for stability\n"
+            << "  --divider-detection enable reusable scene divider assistance\n"
+            << "  --no-divider-detection disable scene divider assistance\n"
+            << "  --focus N          fixed manual focus (-1 unchanged)\n"
+            << "  --zoom N           zoom absolute value (-1 unchanged)\n"
+            << "  --intra-threads N  SpaceMIT EP threads\n"
+            << "  --ep-affinity LIST bind EP threads to cores, e.g. 14;15\n"
+            << "  --no-display       run pipeline without window (config: display_enabled=false)\n"
+            << "  --max-frames N     stop after N frames enter preprocess (0=unlimited)\n"
+            << "  --dump-input PATH  dump first preprocessed tensor as float32\n"
+            << "  --yolov8           enable YOLO preprocessing/inference\n"
+            << "  --no-yolov8        bypass preprocessing/inference and display camera frames "
+               "only\n"
+            << "  --self-test        initialize OpenCL GPU and model, run one inference\n"
+            << "  --image PATH       run the scene divider detector on one image and print JSON "
+               "(no camera)\n"
+            << "  --rtsp             publish H.264 to RTSP server with SpaceMIT VPU\n"
+            << "  --event-fd FD      write structured JSONL events to an inherited FD\n"
+            << "  --control-fd FD    read vision-control-v1 JSONL commands from an inherited FD\n"
+            << "  --snapshot-dir PATH save stable-frame JPEG snapshots under PATH\n"
+            << "  --prewarm          keep camera/RTSP resident and wait for START_ADJUDICATION\n"
+            << "  --view-id ID       identify this camera view in observation events\n"
+            << "  --rtsp-host HOST   RTSP server host, default 127.0.0.1\n"
+            << "  --rtsp-port N      RTSP server port, default 8554\n"
+            << "  --rtsp-path PATH   RTSP mount path, default /dice\n"
+            << "  --no-rtsp          disable RTSP publishing\n";
 }
 
 static bool validate_args(Args& a) {
@@ -472,7 +484,7 @@ static bool validate_args(Args& a) {
                 ++count;
             else if (c < '0' || c > '9') {
                 std::cerr << "--ep-affinity must be a semicolon-separated list of core IDs, "
-                                "for example 14;15\n";
+                             "for example 14;15\n";
                 return false;
             }
         }
@@ -482,8 +494,8 @@ static bool validate_args(Args& a) {
             return false;
         }
         if (count != static_cast<std::size_t>(a.intra_threads)) {
-            std::cerr << "--ep-affinity contains " << count << " core IDs, but --intra-threads is " << a.intra_threads
-                        << "; the counts must match\n";
+            std::cerr << "--ep-affinity contains " << count << " core IDs, but --intra-threads is "
+                      << a.intra_threads << "; the counts must match\n";
             return false;
         }
     }
@@ -504,7 +516,8 @@ static bool parse(int argc, char** argv, Args& a) {
             else if (k == "--camera" && (v = need(i))) {
                 const std::string camera_value = v;
                 if (!device_override) {
-                    if (!camera_value.empty() && camera_value.find_first_not_of("0123456789") == std::string::npos) {
+                    if (!camera_value.empty() &&
+                        camera_value.find_first_not_of("0123456789") == std::string::npos) {
                         a.camera = std::stoi(camera_value);
                         a.device.clear();
                     } else {
@@ -586,7 +599,8 @@ static bool parse(int argc, char** argv, Args& a) {
 }
 
 static std::string control_command_name(const std::string& json) {
-    for (const char* command : {"START_ADJUDICATION", "STOP_ADJUDICATION", "FINAL_RESULT", "CANCEL"}) {
+    for (const char* command :
+         {"START_ADJUDICATION", "STOP_ADJUDICATION", "FINAL_RESULT", "CANCEL"}) {
         if (json.find(std::string("\"command\":\"") + command + "\"") != std::string::npos ||
             json.find(std::string("\"command\": \"") + command + "\"") != std::string::npos) {
             return command;
@@ -654,7 +668,8 @@ static std::string save_snapshot(const Args& args, const cv::Mat& bgr, uint64_t 
     std::filesystem::create_directories(args.snapshot_dir, error);
     if (error) return {};
     const std::filesystem::path path =
-        std::filesystem::path(args.snapshot_dir) / ("stable-" + args.view_id + "-" + std::to_string(frame_id) + ".jpg");
+            std::filesystem::path(args.snapshot_dir) /
+            ("stable-" + args.view_id + "-" + std::to_string(frame_id) + ".jpg");
     try {
         if (!cv::imwrite(path.string(), bgr, {cv::IMWRITE_JPEG_QUALITY, 90})) return {};
     } catch (const cv::Exception&) {
@@ -667,7 +682,8 @@ static std::string save_diagnostic_snapshot(const Args& args, const cv::Mat& bgr
     std::error_code error;
     std::filesystem::create_directories(args.snapshot_dir, error);
     if (error) return {};
-    const std::filesystem::path path = std::filesystem::path(args.snapshot_dir) / ("latest-" + args.view_id + ".jpg");
+    const std::filesystem::path path =
+            std::filesystem::path(args.snapshot_dir) / ("latest-" + args.view_id + ".jpg");
     try {
         if (!cv::imwrite(path.string(), bgr, {cv::IMWRITE_JPEG_QUALITY, 85})) return {};
     } catch (const cv::Exception&) {
@@ -676,29 +692,34 @@ static std::string save_diagnostic_snapshot(const Args& args, const cv::Mat& bgr
     return path.string();
 }
 
-static void emit_observation(const Args& args, const InferenceResult& item, const std::string& snapshot_path,
-    const DividerLine* divider_assist = nullptr, const char* event_name = "observation", bool stable = true) {
+static void emit_observation(const Args& args, const InferenceResult& item,
+                             const std::string& snapshot_path,
+                             const DividerLine* divider_assist = nullptr,
+                             const char* event_name = "observation", bool stable = true) {
     std::ostringstream event;
     event << "{\"event\":\"" << event_name << "\",\"view_id\":\"" << json_escape(args.view_id)
-            << "\",\"frame_id\":" << item.id << ",\"stable\":" << (stable ? "true" : "false")
-            << ",\"width\":" << item.width << ",\"height\":" << item.height;
+          << "\",\"frame_id\":" << item.id << ",\"stable\":" << (stable ? "true" : "false")
+          << ",\"width\":" << item.width << ",\"height\":" << item.height;
     if (!snapshot_path.empty()) {
-        event << ",\"snapshot\":{\"format\":\"image/jpeg\",\"path\":\"" << json_escape(snapshot_path) << "\"}";
+        event << ",\"snapshot\":{\"format\":\"image/jpeg\",\"path\":\""
+              << json_escape(snapshot_path) << "\"}";
     }
     if (divider_assist) {
         event << ",\"divider\":{\"found\":" << (divider_assist->valid ? "true" : "false")
-                << ",\"horizontal\":" << (divider_assist->horizontal ? "true" : "false") << ",\"point\":["
-                << divider_assist->point.x << "," << divider_assist->point.y << "]"
-                << ",\"direction\":[" << divider_assist->direction.x << "," << divider_assist->direction.y << "]"
-                << ",\"normal\":[" << divider_assist->normal.x << "," << divider_assist->normal.y << "]}";
+              << ",\"horizontal\":" << (divider_assist->horizontal ? "true" : "false")
+              << ",\"point\":[" << divider_assist->point.x << "," << divider_assist->point.y << "]"
+              << ",\"direction\":[" << divider_assist->direction.x << ","
+              << divider_assist->direction.y << "]"
+              << ",\"normal\":[" << divider_assist->normal.x << "," << divider_assist->normal.y
+              << "]}";
     }
     event << ",\"detections\":[";
     for (size_t i = 0; i < item.detections.size(); ++i) {
         if (i) event << ',';
         const auto& d = item.detections[i];
         event << "{\"class_id\":" << d.class_id << ",\"label\":\"class_" << d.class_id
-                << "\",\"confidence\":" << std::fixed << std::setprecision(4) << d.confidence << ",\"bbox\":[" << d.x1
-                << ',' << d.y1 << ',' << d.x2 << ',' << d.y2 << "]}";
+              << "\",\"confidence\":" << std::fixed << std::setprecision(4) << d.confidence
+              << ",\"bbox\":[" << d.x1 << ',' << d.y1 << ',' << d.x2 << ',' << d.y2 << "]}";
     }
     event << "]}";
     emit_event(event.str());
@@ -726,34 +747,37 @@ static std::string detection_signature(const std::vector<Detection>& detections)
 
 // Ultralytics-style vivid palette. OpenCV colors are BGR.
 static const std::array<cv::Scalar, 6> kClassColors = {
-    cv::Scalar(56, 56, 255),    // red       #FF3838
-    cv::Scalar(151, 157, 255),  // light red #FF9D97
-    cv::Scalar(31, 112, 255),   // orange    #FF701F
-    cv::Scalar(29, 178, 255),   // amber     #FFB21D
-    cv::Scalar(49, 210, 207),   // yellow    #CFD231
-    cv::Scalar(10, 249, 72),    // green     #48F90A
+        cv::Scalar(56, 56, 255),    // red       #FF3838
+        cv::Scalar(151, 157, 255),  // light red #FF9D97
+        cv::Scalar(31, 112, 255),   // orange    #FF701F
+        cv::Scalar(29, 178, 255),   // amber     #FFB21D
+        cv::Scalar(49, 210, 207),   // yellow    #CFD231
+        cv::Scalar(10, 249, 72),    // green     #48F90A
 };
 
 static bool is_tcm_resource_error(const std::string& message) {
     return message.find("tcm buffer acquire failed") != std::string::npos ||
-        message.find("tcm buffer release failed") != std::string::npos ||
-        message.find("wait tcm buffer failed") != std::string::npos;
+           message.find("tcm buffer release failed") != std::string::npos ||
+           message.find("wait tcm buffer failed") != std::string::npos;
 }
 
 static void print_tcm_resource_hint(const std::string& message, const std::string& ep_affinity) {
     std::cerr << "SpaceMIT EP TCM resource error: " << message << "\n"
-                << "The requested EP affinity (" << (ep_affinity.empty() ? "runtime default" : ep_affinity)
-                << ") does not directly identify the internal TCM block. "
-                << "Another EP process or stale runtime state may still own the TCM. "
-                << "Check owners with `spacemit-tcm-smi -i`; only when no EP process "
-                << "is running, clear stale blocks with `spacemit-tcm-smi -c`.\n";
+              << "The requested EP affinity ("
+              << (ep_affinity.empty() ? "runtime default" : ep_affinity)
+              << ") does not directly identify the internal TCM block. "
+              << "Another EP process or stale runtime state may still own the TCM. "
+              << "Check owners with `spacemit-tcm-smi -i`; only when no EP process "
+              << "is running, clear stale blocks with `spacemit-tcm-smi -c`.\n";
 }
 
 static void draw_detections(cv::Mat& bgr, const std::vector<Detection>& ds) {
     for (const auto& d : ds) {
-        cv::Rect r(static_cast<int>(d.x1), static_cast<int>(d.y1), std::max(1, static_cast<int>(d.x2 - d.x1)),
-            std::max(1, static_cast<int>(d.y2 - d.y1)));
-        const size_t class_index = static_cast<size_t>(std::max(0, d.class_id)) % kClassColors.size();
+        cv::Rect r(static_cast<int>(d.x1), static_cast<int>(d.y1),
+                   std::max(1, static_cast<int>(d.x2 - d.x1)),
+                   std::max(1, static_cast<int>(d.y2 - d.y1)));
+        const size_t class_index =
+                static_cast<size_t>(std::max(0, d.class_id)) % kClassColors.size();
         const cv::Scalar& color = kClassColors[class_index];
 
         cv::rectangle(bgr, r, color, 2, cv::LINE_AA);
@@ -763,13 +787,16 @@ static void draw_detections(cv::Mat& bgr, const std::vector<Detection>& ds) {
         const auto size = cv::getTextSize(label.str(), cv::FONT_HERSHEY_SIMPLEX, .6, 1, &baseline);
         const int label_top = std::max(0, r.y - size.height - baseline - 8);
         const int label_bottom = std::max(size.height + baseline + 2, r.y);
-        cv::rectangle(bgr, cv::Point(r.x, label_top), cv::Point(r.x + size.width + 6, label_bottom), color, cv::FILLED);
+        cv::rectangle(bgr, cv::Point(r.x, label_top), cv::Point(r.x + size.width + 6, label_bottom),
+                      color, cv::FILLED);
 
         // Pick a contrasting label color based on the palette luminance.
-        const int brightness = static_cast<int>(0.114 * color[0] + 0.587 * color[1] + 0.299 * color[2]);
-        const cv::Scalar text_color = brightness > 160 ? cv::Scalar(0, 0, 0) : cv::Scalar(255, 255, 255);
-        cv::putText(bgr, label.str(), cv::Point(r.x + 3, label_bottom - 4), cv::FONT_HERSHEY_SIMPLEX, .6, text_color, 1,
-            cv::LINE_AA);
+        const int brightness =
+                static_cast<int>(0.114 * color[0] + 0.587 * color[1] + 0.299 * color[2]);
+        const cv::Scalar text_color =
+                brightness > 160 ? cv::Scalar(0, 0, 0) : cv::Scalar(255, 255, 255);
+        cv::putText(bgr, label.str(), cv::Point(r.x + 3, label_bottom - 4),
+                    cv::FONT_HERSHEY_SIMPLEX, .6, text_color, 1, cv::LINE_AA);
     }
 }
 
@@ -826,7 +853,8 @@ static bool detect_black_divider(const cv::Mat& bgr, DividerLine& divider) {
         if (verticality < 0.90f) continue;
 
         const float contour_center_x = bounds.x + 0.5f * bounds.width;
-        const float center_error = std::abs(contour_center_x - center_x) / std::max(1.0f, 0.5f * small.cols);
+        const float center_error =
+                std::abs(contour_center_x - center_x) / std::max(1.0f, 0.5f * small.cols);
         // Keep the line near the middle even inside the central corridor.
         if (center_error > 0.20f) continue;
 
@@ -853,8 +881,8 @@ static bool detect_black_divider(const cv::Mat& bgr, DividerLine& divider) {
 
     divider.valid = true;
     divider.horizontal = false;
-    divider.point =
-        cv::Point2f(fitted[2] / static_cast<float>(kDividerScale), fitted[3] / static_cast<float>(kDividerScale));
+    divider.point = cv::Point2f(fitted[2] / static_cast<float>(kDividerScale),
+                                fitted[3] / static_cast<float>(kDividerScale));
     divider.direction = direction;
     divider.normal = normal;
     return true;
@@ -897,7 +925,8 @@ static float detect_warm_cool_vertical_boundary(const cv::Mat& bgr, bool green_g
         for (int y = 0; y < hsv.rows; ++y) {
             for (int x = 0; x < hsv.cols; ++x) {
                 const cv::Vec3b pixel = hsv.at<cv::Vec3b>(y, x);
-                const bool green = pixel[0] >= 25 && pixel[0] <= 55 && pixel[1] > 30 && pixel[2] > 40;
+                const bool green =
+                        pixel[0] >= 25 && pixel[0] <= 55 && pixel[1] > 30 && pixel[2] > 40;
                 const bool gray = !green && pixel[1] <= 60 && pixel[2] > 35 && pixel[2] <= 190;
                 channel_diff.at<float>(y, x) = green ? 100.0f : (gray ? -100.0f : 0.0f);
             }
@@ -917,6 +946,7 @@ static float detect_warm_cool_vertical_boundary(const cv::Mat& bgr, bool green_g
         float left_median;
         float right_median;
     };
+
     std::vector<RowMedians> row_medians;
     row_medians.reserve(height);
     int warm_left_rows = 0;
@@ -924,7 +954,8 @@ static float detect_warm_cool_vertical_boundary(const cv::Mat& bgr, bool green_g
     constexpr float kSidePolarity = 25.0f;
     for (int y = 0; y < height; ++y) {
         std::vector<float> left(channel_diff.ptr<float>(y), channel_diff.ptr<float>(y) + half);
-        std::vector<float> right(channel_diff.ptr<float>(y) + half, channel_diff.ptr<float>(y) + width);
+        std::vector<float> right(channel_diff.ptr<float>(y) + half,
+                                 channel_diff.ptr<float>(y) + width);
         std::nth_element(left.begin(), left.begin() + left.size() / 2, left.end());
         std::nth_element(right.begin(), right.begin() + right.size() / 2, right.end());
         const float left_median = left[left.size() / 2];
@@ -983,7 +1014,8 @@ static float detect_warm_cool_vertical_boundary(const cv::Mat& bgr, bool green_g
     constexpr double kCorridorMax = 0.75;
     int crossing = -1;
     float best_step = 0.0f;
-    for (int x = static_cast<int>(kCorridorMin * width); x < static_cast<int>(kCorridorMax * width) - 1; ++x) {
+    for (int x = static_cast<int>(kCorridorMin * width);
+         x < static_cast<int>(kCorridorMax * width) - 1; ++x) {
         const float left_value = profile.at<float>(0, x);
         const float right_value = profile.at<float>(0, x + 1);
         if (left_value > 0.0f && right_value <= 0.0f) {
@@ -1006,7 +1038,8 @@ static float detect_warm_cool_vertical_boundary(const cv::Mat& bgr, bool green_g
     return boundary / static_cast<float>(kDividerScale);
 }
 
-static bool detect_red_blue_divider(const cv::Mat& bgr, DividerLine& divider, bool green_gray = false) {
+static bool detect_red_blue_divider(const cv::Mat& bgr, DividerLine& divider,
+                                    bool green_gray = false) {
     // Orientation-independent by construction: the vertical (face-off) layout
     // is tried first, then the transposed view where a horizontal red/blue
     // split becomes a vertical one.  A transposed hit maps straight back --
@@ -1038,7 +1071,8 @@ static bool detect_red_blue_divider(const cv::Mat& bgr, DividerLine& divider, bo
 // mat's red/blue boundary when the scene has one, otherwise a printed dark
 // line.  Callers (stable-frame gating) only care whether the scene geometry is
 // readable, not which signal proved it.
-static bool detect_scene_divider(const cv::Mat& bgr, DividerLine& divider, const std::string& colors = "red_blue") {
+static bool detect_scene_divider(const cv::Mat& bgr, DividerLine& divider,
+                                 const std::string& colors = "red_blue") {
     const char* source = nullptr;
     if (detect_red_blue_divider(bgr, divider, colors == "green_gray")) {
         source = colors == "green_gray" ? "green/gray" : "red/blue";
@@ -1051,17 +1085,17 @@ static bool detect_scene_divider(const cv::Mat& bgr, DividerLine& divider, const
     // detection or a shift > 2% of the frame logs one stderr line.
     static float last_logged_ratio = -1.0f;
     const float ratio = divider.horizontal ? divider.point.y / static_cast<float>(bgr.rows)
-                                            : divider.point.x / static_cast<float>(bgr.cols);
+                                           : divider.point.x / static_cast<float>(bgr.cols);
     if (std::fabs(ratio - last_logged_ratio) > 0.02f) {
-        std::cerr << "[Divider] " << source << (divider.horizontal ? " horizontal" : " vertical") << " at "
-                    << std::fixed << std::setprecision(3) << ratio << std::endl;
+        std::cerr << "[Divider] " << source << (divider.horizontal ? " horizontal" : " vertical")
+                  << " at " << std::fixed << std::setprecision(3) << ratio << std::endl;
         last_logged_ratio = ratio;
     }
     return true;
 }
 
-static void draw_scene_assist(
-    cv::Mat& bgr, const DividerLine& divider, const std::string& status, bool show_debug_text) {
+static void draw_scene_assist(cv::Mat& bgr, const DividerLine& divider, const std::string& status,
+                              bool show_debug_text) {
     if (divider.valid) {
         const cv::Point2f p = divider.point;
         const cv::Point2f v = divider.direction * 2000.0f;
@@ -1075,7 +1109,8 @@ static void draw_scene_assist(
     // black panel in the top-left corner. A thin shadow preserves readability
     // without leaving the unwanted black background/bottom edge.
     const cv::Point text_origin(18, 48);
-    cv::putText(bgr, status, text_origin, cv::FONT_HERSHEY_SIMPLEX, .7, cv::Scalar(0, 0, 0), 4, cv::LINE_AA);
+    cv::putText(bgr, status, text_origin, cv::FONT_HERSHEY_SIMPLEX, .7, cv::Scalar(0, 0, 0), 4,
+                cv::LINE_AA);
     cv::putText(bgr, status, text_origin, cv::FONT_HERSHEY_SIMPLEX, .7, color, 2, cv::LINE_AA);
 }
 
@@ -1100,7 +1135,9 @@ int main(int argc, char** argv) {
     // requiring every caller to know Unix fd conventions.
     if (a.prewarm && a.control_fd < 0) a.control_fd = STDIN_FILENO;
     g_event_fd = a.event_fd;
-    emit_event("{\"event\":\"started\",\"component\":\"vision_yolov8_objdetect\",\"protocol\":\"jsonl-events-v2\"}");
+    emit_event(
+            "{\"event\":\"started\",\"component\":\"vision_yolov8_objdetect\",\"protocol\":\"jsonl-"
+            "events-v2\"}");
     const bool runtime_has_control = a.control_fd >= 0;
     const bool yolo_runtime_enabled = a.yolov8_enabled || runtime_has_control;
     if (yolo_runtime_enabled && !std::filesystem::exists(a.model)) {
@@ -1117,7 +1154,8 @@ int main(int argc, char** argv) {
         if (!detector->init(a.model, a.intra_threads, a.ep_affinity)) return 5;
     } else {
         // Camera-only mode intentionally avoids all YOLOv8/OpenCL/ORT setup.
-        std::cerr << "[YOLOv8] disabled; displaying camera frames without preprocessing or inference.\n";
+        std::cerr << "[YOLOv8] disabled; displaying camera frames without preprocessing or "
+                     "inference.\n";
     }
     if (!a.image_path.empty()) {
         // Single-frame divider diagnostics: no camera, no OpenCL, no model —
@@ -1136,10 +1174,11 @@ int main(int argc, char** argv) {
             << ",\"width\":" << image.cols << ",\"height\":" << image.rows
             << ",\"divider\":{\"found\":" << (found ? "true" : "false");
         if (found) {
-            out << ",\"horizontal\":" << (divider.horizontal ? "true" : "false") << ",\"point\":[" << divider.point.x
-                << "," << divider.point.y << "]"
+            out << ",\"horizontal\":" << (divider.horizontal ? "true" : "false") << ",\"point\":["
+                << divider.point.x << "," << divider.point.y << "]"
                 << ",\"split_ratio\":" << std::fixed << std::setprecision(4)
-                << (divider.horizontal ? divider.point.y / image.rows : divider.point.x / image.cols);
+                << (divider.horizontal ? divider.point.y / image.rows
+                                       : divider.point.x / image.cols);
         }
         out << "}}";
         std::cout << out.str() << std::endl;
@@ -1156,7 +1195,8 @@ int main(int argc, char** argv) {
             // that a model-only zero-tensor test cannot detect.
             constexpr int synthetic_width = 1280;
             constexpr int synthetic_height = 720;
-            cv::Mat synthetic_nv12(synthetic_height * 3 / 2, synthetic_width, CV_8UC1, cv::Scalar(128));
+            cv::Mat synthetic_nv12(synthetic_height * 3 / 2, synthetic_width, CV_8UC1,
+                                   cv::Scalar(128));
             const auto prep_result = pre->preprocess(synthetic_nv12);
             if (!prep_result.data || prep_result.data->size() != 3 * 640 * 640) {
                 throw std::runtime_error("OpenCL self-test returned an invalid tensor");
@@ -1166,11 +1206,12 @@ int main(int argc, char** argv) {
                     throw std::runtime_error("OpenCL self-test returned invalid tensor values");
                 }
             }
-            const auto ds = detector->infer(prep_result.data->data(), prep_result.data->size(), a.conf,
-                prep_result.scale, prep_result.pad_x, prep_result.pad_y, synthetic_width, synthetic_height);
-            std::cout << "Self-test passed: OpenCL preprocess " << prep_result.ms << " ms, " << ds.size()
-                        << " detections.\n"
-                        << std::flush;
+            const auto ds = detector->infer(prep_result.data->data(), prep_result.data->size(),
+                                            a.conf, prep_result.scale, prep_result.pad_x,
+                                            prep_result.pad_y, synthetic_width, synthetic_height);
+            std::cout << "Self-test passed: OpenCL preprocess " << prep_result.ms << " ms, "
+                      << ds.size() << " detections.\n"
+                      << std::flush;
             // Vendor OpenCL/ORT runtimes may leave worker threads blocked at
             // process teardown after inference. This one-shot, hardware-free
             // smoke test has completed; let the OS reclaim its process resources.
@@ -1186,18 +1227,19 @@ int main(int argc, char** argv) {
         std::cerr << "Camera open failed.\n";
         return 3;
     }
-    emit_event(std::string("{\"event\":\"phase\",\"phase\":\"") + (a.prewarm ? "idle" : "detecting") + "\"}");
+    emit_event(std::string("{\"event\":\"phase\",\"phase\":\"") +
+               (a.prewarm ? "idle" : "detecting") + "\"}");
     RtspStreamer rtsp_streamer;
-    if (a.rtsp_enabled &&
-        !rtsp_streamer.start(a.rtsp_host, a.rtsp_port, a.rtsp_path, a.width, a.height, camera.negotiated_fps())) {
+    if (a.rtsp_enabled && !rtsp_streamer.start(a.rtsp_host, a.rtsp_port, a.rtsp_path, a.width,
+                                               a.height, camera.negotiated_fps())) {
         rtsp_streamer.stop();
         camera.close();
         return 8;
     }
     emit_event("{\"event\":\"ready\",\"view_id\":\"" + json_escape(a.view_id) + "\"}");
     if (rtsp_streamer.running()) {
-        emit_event("{\"event\":\"video\",\"view_id\":\"" + json_escape(a.view_id) + "\",\"url\":\"" +
-            json_escape(rtsp_streamer.url()) + "\"}");
+        emit_event("{\"event\":\"video\",\"view_id\":\"" + json_escape(a.view_id) +
+                   "\",\"url\":\"" + json_escape(rtsp_streamer.url()) + "\"}");
     }
 
     if (!a.no_display) {
@@ -1234,7 +1276,7 @@ int main(int argc, char** argv) {
         if (!a.no_display) cv::destroyAllWindows();
         const double elapsed = std::chrono::duration<double>(Clock::now() - direct_start).count();
         std::cout << "Done. camera-only frames=" << frame_count << " elapsed_s=" << elapsed
-                    << " fps=" << frame_count / std::max(.001, elapsed) << "\n";
+                  << " fps=" << frame_count / std::max(.001, elapsed) << "\n";
         return 0;
     }
 
@@ -1283,9 +1325,11 @@ int main(int argc, char** argv) {
                         adjudication_active.store(false);
                         const std::string outcome = json_outcome_value(line);
                         const std::string source = json_string_field(line, "source");
-                        emit_event("{\"event\":\"result\",\"outcome\":{\"kind\":\"winner\",\"value\":\"" +
-                            json_escape(outcome) + "\"},\"source\":\"" +
-                            json_escape(source.empty() ? "provider" : source) + "\"}");
+                        emit_event(
+                                "{\"event\":\"result\",\"outcome\":{\"kind\":\"winner\",\"value\":"
+                                "\"" +
+                                json_escape(outcome) + "\"},\"source\":\"" +
+                                json_escape(source.empty() ? "provider" : source) + "\"}");
                         // The Python provider owns post-result holding and is
                         // the only layer allowed to publish lifecycle complete.
                     }
@@ -1307,7 +1351,8 @@ int main(int argc, char** argv) {
     std::thread preprocess_thread([&] {
         uint64_t id = 0;
         int timeout_count = 0;
-        while (!abort.load() && !camera_stop.load() && (a.max_frames <= 0 || static_cast<int>(id) < a.max_frames)) {
+        while (!abort.load() && !camera_stop.load() &&
+               (a.max_frames <= 0 || static_cast<int>(id) < a.max_frames)) {
             GstreamerFrame frame;
             if (!camera.read(frame, 1000)) {
                 if (abort.load()) break;
@@ -1335,7 +1380,8 @@ int main(int argc, char** argv) {
                     idle_result->height = packet->height;
                     idle_result->nv12 = packet->nv12;
                     idle_result->gst_owner = packet->gst_owner;
-                    if (result_queue.push(std::move(idle_result))) stats.dropped_result.fetch_add(1);
+                    if (result_queue.push(std::move(idle_result)))
+                        stats.dropped_result.fetch_add(1);
                     stats.dropped_result.fetch_add(result_queue.takeDroppedPending());
                     stats.prepared.fetch_add(1);
                     continue;
@@ -1346,7 +1392,8 @@ int main(int argc, char** argv) {
                     std::ofstream dump(a.dump_input, std::ios::binary);
                     if (!dump) throw std::runtime_error("cannot open --dump-input path");
                     dump.write(reinterpret_cast<const char*>(packet->prep.data->data()),
-                        static_cast<std::streamsize>(packet->prep.data->size() * sizeof(float)));
+                               static_cast<std::streamsize>(packet->prep.data->size() *
+                                                            sizeof(float)));
                 }
                 stats.addPre(std::chrono::duration<double, std::milli>(Clock::now() - t0).count());
                 if (prepared_queue.push(std::move(packet))) stats.dropped_pre.fetch_add(1);
@@ -1378,9 +1425,10 @@ int main(int argc, char** argv) {
                 result->gst_owner = packet->gst_owner;
                 if (adjudication_active.load()) {
                     try {
-                        result->detections = detector->infer(packet->prep.data->data(), packet->prep.data->size(),
-                            a.conf, packet->prep.scale, packet->prep.pad_x, packet->prep.pad_y, packet->width,
-                            packet->height);
+                        result->detections = detector->infer(
+                                packet->prep.data->data(), packet->prep.data->size(), a.conf,
+                                packet->prep.scale, packet->prep.pad_x, packet->prep.pad_y,
+                                packet->width, packet->height);
                     } catch (const std::exception& e) {
                         if (is_tcm_resource_error(e.what())) {
                             print_tcm_resource_hint(e.what(), a.ep_affinity);
@@ -1388,7 +1436,8 @@ int main(int argc, char** argv) {
                         throw;
                     }
                 }
-                stats.addInfer(std::chrono::duration<double, std::milli>(Clock::now() - t0).count());
+                stats.addInfer(
+                        std::chrono::duration<double, std::milli>(Clock::now() - t0).count());
                 stats.inferred.fetch_add(1);
                 if (!result->detections.empty()) stats.detected_frames.fetch_add(1);
                 stats.detections.fetch_add(result->detections.size());
@@ -1436,16 +1485,21 @@ int main(int argc, char** argv) {
             if (a.divider_detection_enabled && adjudication_active.load()) {
                 divider_assist.valid = detect_scene_divider(bgr, divider_assist, a.divider_colors);
             }
-            std::string scene_status = !adjudication_active.load()
-                ? "Ready"
-                : (a.divider_detection_enabled ? (divider_assist.valid ? "Divider detected" : "Searching divider")
-                                                : "YOLO observation");
-            if (a.control_fd >= 0 && adjudication_active.load() && !generic_observation_sent.load()) {
+            std::string scene_status =
+                    !adjudication_active.load()
+                            ? "Ready"
+                            : (a.divider_detection_enabled
+                                       ? (divider_assist.valid ? "Divider detected"
+                                                               : "Searching divider")
+                                       : "YOLO observation");
+            if (a.control_fd >= 0 && adjudication_active.load() &&
+                !generic_observation_sent.load()) {
                 const auto diagnostic_now = Clock::now();
                 if (diagnostic_now - last_diagnostic_snapshot >= std::chrono::milliseconds(250)) {
                     const std::string diagnostic_path = save_diagnostic_snapshot(a, bgr);
-                    emit_observation(a, *item, diagnostic_path, a.divider_detection_enabled ? &divider_assist : nullptr,
-                        "diagnostic_snapshot", false);
+                    emit_observation(a, *item, diagnostic_path,
+                                     a.divider_detection_enabled ? &divider_assist : nullptr,
+                                     "diagnostic_snapshot", false);
                     last_diagnostic_snapshot = diagnostic_now;
                 }
                 // Only a frame the consumer can actually use may advance
@@ -1481,27 +1535,32 @@ int main(int argc, char** argv) {
                 }
                 if (generic_last_reported_count.exchange(stable_count) != stable_count) {
                     emit_event("{\"event\":\"progress\",\"phase\":\"detecting\",\"stable_count\":" +
-                        std::to_string(stable_count) + ",\"stable_frames\":" + std::to_string(a.stable_frames) + "}");
+                               std::to_string(stable_count) +
+                               ",\"stable_frames\":" + std::to_string(a.stable_frames) + "}");
                 }
                 // Generic provider mode uses the detector's stable
                 // observation contract: only a layout that passed the
                 // evidence gate above may be published as stable once the
                 // streak reaches ``stable_frames``.
-                if (evidence_usable && stable_count >= a.stable_frames && !generic_observation_sent.exchange(true)) {
+                if (evidence_usable && stable_count >= a.stable_frames &&
+                    !generic_observation_sent.exchange(true)) {
                     const std::string snapshot_path = save_snapshot(a, bgr, item->id);
-                    emit_observation(a, *item, snapshot_path, a.divider_detection_enabled ? &divider_assist : nullptr);
+                    emit_observation(a, *item, snapshot_path,
+                                     a.divider_detection_enabled ? &divider_assist : nullptr);
                 }
             }
             if (!a.no_display || rtsp_streamer.running()) {
                 draw_detections(bgr, item->detections);
                 draw_scene_assist(bgr, divider_assist, scene_status, a.show_debug_text);
                 if (a.show_debug_text) {
-                    const double elapsed = std::chrono::duration<double>(Clock::now() - start).count();
+                    const double elapsed =
+                            std::chrono::duration<double>(Clock::now() - start).count();
                     const double fps = elapsed > 0.0 ? shown / elapsed : 0.0;
                     cv::putText(bgr,
-                        "DISPLAY " + std::to_string(static_cast<int>(fps)) + " FPS  DET " +
-                            std::to_string(item->detections.size()),
-                        {10, 96}, cv::FONT_HERSHEY_SIMPLEX, .75, {0, 255, 255}, 2, cv::LINE_AA);
+                                "DISPLAY " + std::to_string(static_cast<int>(fps)) + " FPS  DET " +
+                                        std::to_string(item->detections.size()),
+                                {10, 96}, cv::FONT_HERSHEY_SIMPLEX, .75, {0, 255, 255}, 2,
+                                cv::LINE_AA);
                 }
                 rtsp_streamer.publish(bgr);
                 if (!a.no_display) {
@@ -1522,16 +1581,16 @@ int main(int argc, char** argv) {
             const double elapsed = std::chrono::duration<double>(now - start).count();
             double p = 0.0, i = 0.0, d = 0.0;
             stats.averages(p, i, d);
-            std::cout << "pipeline prepared=" << stats.prepared.load() << " infer=" << stats.inferred.load()
-                        << " display=" << stats.presented.load()
-                        << " fps_pre=" << stats.prepared.load() / std::max(.001, elapsed)
-                        << " fps_infer=" << stats.inferred.load() / std::max(.001, elapsed)
-                        << " fps_display=" << stats.presented.load() / std::max(.001, elapsed)
-                        << " dropped_pre=" << stats.dropped_pre.load()
-                        << " dropped_result=" << stats.dropped_result.load()
-                        << " detected_frames=" << stats.detected_frames.load()
-                        << " detections=" << stats.detections.load() << " pre_ms=" << p << " infer_ms=" << i
-                        << " display_ms=" << d << "\n";
+            std::cout << "pipeline prepared=" << stats.prepared.load()
+                      << " infer=" << stats.inferred.load() << " display=" << stats.presented.load()
+                      << " fps_pre=" << stats.prepared.load() / std::max(.001, elapsed)
+                      << " fps_infer=" << stats.inferred.load() / std::max(.001, elapsed)
+                      << " fps_display=" << stats.presented.load() / std::max(.001, elapsed)
+                      << " dropped_pre=" << stats.dropped_pre.load()
+                      << " dropped_result=" << stats.dropped_result.load()
+                      << " detected_frames=" << stats.detected_frames.load()
+                      << " detections=" << stats.detections.load() << " pre_ms=" << p
+                      << " infer_ms=" << i << " display_ms=" << d << "\n";
             last_report = now;
         }
         if (abort.load()) break;
@@ -1556,15 +1615,18 @@ int main(int argc, char** argv) {
     double p = 0.0, i = 0.0, d = 0.0;
     stats.averages(p, i, d);
     std::cout << "Done. prepared=" << stats.prepared.load() << " infer=" << stats.inferred.load()
-                << " display=" << stats.presented.load() << " elapsed_s=" << elapsed
-                << " fps_pre=" << stats.prepared.load() / std::max(.001, elapsed)
-                << " fps_infer=" << stats.inferred.load() / std::max(.001, elapsed)
-                << " fps_display=" << stats.presented.load() / std::max(.001, elapsed)
-                << " dropped_pre=" << stats.dropped_pre.load() << " dropped_result=" << stats.dropped_result.load()
-                << " detected_frames=" << stats.detected_frames.load() << " detections=" << stats.detections.load()
-                << " pre_ms=" << p << " infer_ms=" << i << " display_ms=" << d << "\n";
+              << " display=" << stats.presented.load() << " elapsed_s=" << elapsed
+              << " fps_pre=" << stats.prepared.load() / std::max(.001, elapsed)
+              << " fps_infer=" << stats.inferred.load() / std::max(.001, elapsed)
+              << " fps_display=" << stats.presented.load() / std::max(.001, elapsed)
+              << " dropped_pre=" << stats.dropped_pre.load()
+              << " dropped_result=" << stats.dropped_result.load()
+              << " detected_frames=" << stats.detected_frames.load()
+              << " detections=" << stats.detections.load() << " pre_ms=" << p << " infer_ms=" << i
+              << " display_ms=" << d << "\n";
     if (inference_failed.load()) {
-        std::cerr << "Pipeline stopped because the inference stage failed; no further frames were processed.\n";
+        std::cerr << "Pipeline stopped because the inference stage failed; no further frames were "
+                     "processed.\n";
         return 8;
     }
     return 0;

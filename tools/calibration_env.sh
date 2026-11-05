@@ -5,7 +5,8 @@
 APP="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ -z "${MANIPULATION_PREFIX:-${PREFIX:-}}" ]]; then
     calibration_prefix="$APP"
-    while [[ "$calibration_prefix" != / && ! -f "$calibration_prefix/.spacemit-manipulation.json" ]]; do
+    while [[ "$calibration_prefix" != / ]] \
+            && [[ ! -f "$calibration_prefix/.spacemit-manipulation.json" ]]; do
         calibration_prefix="$(dirname -- "$calibration_prefix")"
     done
     if [[ -f "$calibration_prefix/.spacemit-manipulation.json" ]]; then

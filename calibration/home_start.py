@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Shared, explicitly requested arm HOME stage for calibration workflows."""
 
 import json
@@ -35,7 +37,9 @@ def joint_route(start, target, model, step_deg=2.0):
     # The start is measured feedback: the controller may hold it just past the URDF limits (the
     # taught path reaches joint2 = -100°). Only the commanded points must stay inside them.
     for q in route[1:]:
-        if any(not joint.lower_rad <= angle <= joint.upper_rad for joint, angle in zip(model.joints, q)):
+        if any(
+            not joint.lower_rad <= angle <= joint.upper_rad for joint, angle in zip(model.joints, q)
+        ):
             raise ValueError("HOME/approach exceeds joint limits")
     return route
 
@@ -58,15 +62,17 @@ def move_home(arm, route, speed_deg_s, acc_deg_s2, preview=None):
     error = math.degrees(max(abs(a - b) for a, b in zip(actual, route[-1])))
     if error > 0.8:
         raise RuntimeError("HOME feedback did not confirm arrival")
-    print(json.dumps({"phase": "HOME", "status": "completed", "joint_error_deg": error}), flush=True)
+    print(
+        json.dumps({"phase": "HOME", "status": "completed", "joint_error_deg": error}), flush=True
+    )
     return actual
 
 
-def return_home(home_path=DEFAULT_HOME, channel="can0", speed_percent=15, speed_deg_s=4.0, acc_deg_s2=6.0):
+def return_home(home_path=DEFAULT_HOME, speed_percent=15, speed_deg_s=4.0, acc_deg_s2=6.0):
     """Move only the arm, settle, then release CAN; never change the fingers."""
     from auto_collect import ensure_can_control
     from kinematics import load_model
-    from sensors import NeroFeedback
+    from sensors import ArmFeedback
 
     if (
         not 1 <= speed_percent <= 100
@@ -79,7 +85,7 @@ def return_home(home_path=DEFAULT_HOME, channel="can0", speed_percent=15, speed_
     home = load_home(home_path)
     model = load_model()
     joint_route(home, home, model)
-    arm = NeroFeedback(channel, motion=True)
+    arm = ArmFeedback(motion=True)
     try:
         route = joint_route(arm.read_joints()["joints_rad"], home, model)
         ensure_can_control(arm)

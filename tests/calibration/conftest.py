@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Import path for calibration package tests, and a throwaway site directory.
 
 calibration/ modules import each other by bare module name (e.g.

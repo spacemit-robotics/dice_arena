@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Low-contrast stereo observations and original-mode regression; no devices."""
 
 import copy
@@ -22,7 +24,15 @@ class StereoContrastTests(unittest.TestCase):
         angle = np.linspace(0, 2 * np.pi, 360, endpoint=False)
         for index, baseline in enumerate((0.0, 0.05)):
             record = dict(
-                intrinsics=dict(width=640, height=480, fx=600.0, fy=600.0, cx=320.0, cy=240.0, dist_coeffs=[0] * 5),
+                intrinsics=dict(
+                    width=640,
+                    height=480,
+                    fx=600.0,
+                    fy=600.0,
+                    cx=320.0,
+                    cy=240.0,
+                    dist_coeffs=[0] * 5,
+                ),
                 to_color_rotation=np.eye(3).ravel(order="F"),
                 to_color_translation=[baseline, 0, 0],
             )
@@ -30,7 +40,9 @@ class StereoContrastTests(unittest.TestCase):
             blank = make_view(image, record)
             if not (missing_right and index == 1):
                 for x in centers:
-                    points = np.c_[x + 0.0375 * np.cos(angle), 0.0375 * np.sin(angle), np.full(len(angle), 0.6)]
+                    points = np.c_[
+                        x + 0.0375 * np.cos(angle), 0.0375 * np.sin(angle), np.full(len(angle), 0.6)
+                    ]
                     uv = project(points, blank)
                     cv2.fillPoly(image, [np.rint(uv).astype("int32")], 100)
             views.append(make_view(image, record, contrast=contrast))
@@ -96,8 +108,13 @@ class StereoContrastTests(unittest.TestCase):
             opts = dict(min_area_px=10, image_rim=raw)
             diagnostics = {}
             with (
-                patch("vision.geometry.circle_rim.resolve_table", return_value=(None, None, None, None, "calibrated")),
-                patch("vision.geometry.circle_rim.image_contour", side_effect=ValueError("no contour")) as contour,
+                patch(
+                    "vision.geometry.circle_rim.resolve_table",
+                    return_value=(None, None, None, None, "calibrated"),
+                ),
+                patch(
+                    "vision.geometry.circle_rim.image_contour", side_effect=ValueError("no contour")
+                ) as contour,
             ):
                 with self.assertRaisesRegex(ValueError, "No complete image contour"):
                     detect_stereo(
@@ -110,8 +127,12 @@ class StereoContrastTests(unittest.TestCase):
                         [{"mask": np.ones((100, 100), bool)}],
                         diagnostics,
                     )
-            self.assertEqual(contour.call_args_list[0].args[2]["image_rim"]["opening_value_quantile"], expected)
-            self.assertEqual(diagnostics["stereo_image_processing"]["opening_value_quantile"], expected)
+            self.assertEqual(
+                contour.call_args_list[0].args[2]["image_rim"]["opening_value_quantile"], expected
+            )
+            self.assertEqual(
+                diagnostics["stereo_image_processing"]["opening_value_quantile"], expected
+            )
 
 
 if __name__ == "__main__":

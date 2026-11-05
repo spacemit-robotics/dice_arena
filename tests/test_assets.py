@@ -16,7 +16,10 @@ SPEC.loader.exec_module(ASSETS)
 
 class AssetTests(unittest.TestCase):
     def manifest(self, name="model.onnx"):
-        return dict(schema_version=1, files=[dict(path=name, size_bytes=4, sha256=hashlib.sha256(b"data").hexdigest())])
+        return dict(
+            schema_version=1,
+            files=[dict(path=name, size_bytes=4, sha256=hashlib.sha256(b"data").hexdigest())],
+        )
 
     def test_missing_and_valid_resources(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -31,7 +34,9 @@ class AssetTests(unittest.TestCase):
             (root / "model.onnx").write_bytes(b"longer")
             self.assertEqual(ASSETS.check_assets(root, self.manifest()), ([], ["model.onnx"]))
             (root / "model.onnx").write_bytes(b"fake")
-            self.assertEqual(ASSETS.check_assets(root, self.manifest(), verify=True), ([], ["model.onnx"]))
+            self.assertEqual(
+                ASSETS.check_assets(root, self.manifest(), verify=True), ([], ["model.onnx"])
+            )
 
     def test_linked_assets_are_supported(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -16,3 +16,5 @@ game/tts/moss-tts-nano/outputs/
 *.npz
 *.npy
 /mediamtx/mediamtx
+# Downloaded with the other runtime resources (runtime_assets.json).
+/calibration/trajectories/handeye_auto_teach_covered_20260922/teaching_frames.jsonl

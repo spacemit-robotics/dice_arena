@@ -1,10 +1,11 @@
 # Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 # SPDX-License-Identifier: Apache-2.0
-"""Green-cup planner over the application's algorithms (algorithms/). Never constructs Workflow/SDKClient.
+"""Green-cup planner over the application's algorithms (algorithms/). Never constructs
+Workflow/SDKClient.
 
 Camera acquisition, inference, IK, geometry, path checks and the FAST motion profiles are the
 algorithms' own; the arm and hand move only through the manipulation framework. Each phase is
-delivered as the original FAST executor delivered it: synchronized trapezoid profiles at the
+delivered as the FAST executor defines it: synchronized trapezoid profiles at the
 configured phase speeds of the controller's live joint limits, the joint-shake recipe as streamed
 blended commands, and the placement as a controller-planned point move. The algorithms' own
 worker, recovery loop and startup claim are not invoked; pyAgxArm cannot be imported here.
@@ -18,6 +19,7 @@ import importlib.abc
 import math
 import os
 from pathlib import Path
+import shutil
 import sys
 import time
 import uuid
@@ -26,12 +28,29 @@ import numpy as np
 from .planners import file_hash
 
 KNOT_HZ = 100  # Profile knots; the device interpolates between them.
-STREAM_STEP_RAD = math.radians(0.5)  # Original stream step, which sets the command rate.
-COMMAND_STEP_RAD = math.radians(1)  # Original per-command step limit for transitions.
+STREAM_STEP_RAD = math.radians(0.5)  # Stream step, which sets the command rate.
+COMMAND_STEP_RAD = math.radians(1)  # Per-command step limit for transitions.
 SHAKE_SETTLE_S = 2.0  # Longest wait for the arm to reach the shake centre.
-ENDPOINT_RESEND_S = 0.05  # Original controller-endpoint re-send interval (LOWER).
-FINGER_MAX_SPEED_S = 0.01  # Shortest Revo2 execution time: the original max-speed mode.
+ENDPOINT_RESEND_S = 0.05  # Controller-endpoint re-send interval (LOWER).
+FINGER_MAX_SPEED_S = 0.01  # Shortest Revo2 execution time: the max-speed mode.
 GEOMETRY_FORMAT = 1
+# Capture data kept under the session directory: each process start makes a session, and each grasp
+# a run of about 7 MB. Older ones are removed, so a long demonstration never fills the disk.
+KEEP_SESSIONS = 3
+KEEP_RUNS = 20
+
+
+def prune(directory, keep, current=None):
+    """Remove all but the newest `keep` subdirectories (by modification time), never `current`."""
+    if not directory.is_dir():
+        return
+    entries = sorted(
+        (entry for entry in directory.iterdir() if entry.is_dir() and entry != current),
+        key=lambda entry: entry.stat().st_mtime,
+        reverse=True,
+    )
+    for entry in entries[keep - (1 if current is not None else 0) :]:
+        shutil.rmtree(entry, ignore_errors=True)
 
 
 def save_geometry(path, cache):
@@ -94,11 +113,13 @@ def stamp(path):
 class _NoVendorSdk(importlib.abc.MetaPathFinder):
     def find_spec(self, name, path=None, target=None):
         if name.partition(".")[0] == "pyAgxArm":
-            raise ImportError("cup-shake reaches the arm only through the manipulation framework")
+            raise ImportError(
+                "The application reaches the arm only through the manipulation framework"
+            )
         return None
 
 
-class LegacyGreenPlanner:
+class GreenCupPlanner:
     def __init__(self, config, state):
         root = Path(config["source_root"]).resolve()
         if not any(isinstance(finder, _NoVendorSdk) for finder in sys.meta_path):
@@ -106,36 +127,49 @@ class LegacyGreenPlanner:
         sys.path.insert(0, str(root))
         pipeline = importlib.import_module("cup_grasp_demo.flow.green_pipeline")
         if not Path(pipeline.__file__).resolve().is_relative_to(root):
-            raise ValueError("different green-cup algorithms are already imported; use an isolated process")
+            raise ValueError(
+                "different green-cup algorithms are already imported; use an isolated process"
+            )
         self.np, self.module, self.root, self.state = np, pipeline, root, state
         self.config = config
         self.cfg = pipeline.load_config(Path(config["config"]).resolve())
         self.cfg["allow_provisional_calibration"] = False
-        # Validation is offline. The instance constructor starts the legacy startup claim: never call it.
+        # Validation is offline. The instance constructor starts the legacy startup claim: never
+        # call it.
         self.g = pipeline.validate(self.cfg)
         # The application's own gate: `calibrate.sh apply` sets it, and only a table registration
         # against the new calibration clears it; table() below checks that binding by hash.
         if self.g.get("installation_requires_calibration", False):
-            raise ValueError("相机/基座重新安装：请先完成新手眼标定、桌面板登记及桌面参数更新（calibrate.sh apply）")
+            raise ValueError(
+                "相机/基座重新安装：请先完成新手眼标定、桌面板登记及桌面参数更新（calibrate.sh "
+                "apply）"
+            )
         self.workflow = object.__new__(pipeline.Workflow)
         work = self.workflow
         work.cfg, work.g = self.cfg, self.g
-        work.root = Path(config["session_directory"]).resolve() / uuid.uuid4().hex
+        sessions = Path(config["session_directory"]).resolve()
+        work.root = sessions / uuid.uuid4().hex
         work.root.mkdir(parents=True, exist_ok=False)
-        work.tcp = np.asarray(pipeline.read_json(self.cfg["tcp_candidate"])["T_flange_contact_candidate"])
+        prune(sessions, KEEP_SESSIONS, current=work.root)
+        work.tcp = np.asarray(
+            pipeline.read_json(self.cfg["tcp_candidate"])["T_flange_contact_candidate"]
+        )
         work.tcp[:3, 3] += np.asarray(self.g["tcp_offset_flange_mm"]) / 1000
         work.reference = pipeline.read_json(root / self.g["reference"])
         work.kin = pipeline.Kinematics()
         work._prepared, work._vision = None, None
         work.snapshot = lambda: list(self.state()["joints_rad"])
         self.delivery = importlib.import_module("cup_grasp_demo.flow.joint_delivery")
-        # Feedback gestures use the configuration as loaded (result_feedback.py), not the FAST tuning.
-        self.gesture_options = self.delivery.delivery_options(dict(self.cfg.get("joint_delivery", {})))
+        # Feedback gestures use the configuration as loaded (result_feedback.py), not the FAST
+        # tuning.
+        self.gesture_options = self.delivery.delivery_options(
+            dict(self.cfg.get("joint_delivery", {}))
+        )
         self.fast_settings(work)
         self.home = np.radians(pipeline.read_json(self.cfg["home"])["joints_deg"]).tolist()
         work.home = self.home
         work.table()
-        # FAST settings, as the original Workflow applies them (green_pipeline.Workflow.__init__).
+        # FAST settings, as green_pipeline.Workflow.__init__ applies them.
         work._joint_recipe = pipeline.read_json(root / self.g["joint_test_config"])
         pipeline.joint_trajectory(work._joint_recipe)
         self.profile = importlib.import_module("cup_grasp_demo.flow.joint_profile")
@@ -160,9 +194,13 @@ class LegacyGreenPlanner:
         if "strategy_file" in self.g:
             strategy = self.g["strategy_file"]
             sources.append(
-                root / strategy if str(strategy).endswith(".json") else root / "vision/strategy" / (strategy + ".json")
+                root / strategy
+                if str(strategy).endswith(".json")
+                else root / "vision/strategy" / (strategy + ".json")
             )
-        self.fingerprints = {str(path.resolve()): (stamp(path), file_hash(path)) for path in sources}
+        self.fingerprints = {
+            str(path.resolve()): (stamp(path), file_hash(path)) for path in sources
+        }
         self.place = self.held = self.lift_end = None
         self.following = self.shake_future = self.geometry_ready = None
         self.core = importlib.import_module("cup_grasp_demo.flow.core")
@@ -173,8 +211,8 @@ class LegacyGreenPlanner:
 
     @contextlib.contextmanager
     def geometry(self):
-        """The original FAST run loads the arm/hand collision geometry once (cached_screen_geometry);
-        every planner call and background task shares this planner's cache of it."""
+        """The arm/hand collision geometry is loaded once (cached_screen_geometry); every planner
+        call and background task shares this planner's cache of it."""
         token = self.core._screen_cache.set(self.screen_cache)
         try:
             yield
@@ -185,10 +223,14 @@ class LegacyGreenPlanner:
         """The FAST tuning green_pipeline.Workflow.__init__ applies unconditionally."""
         g = self.g
         if "strategy_file" in g:
-            strategy = importlib.import_module("vision.strategy.loader").load_strategy(g["strategy_file"])
+            strategy = importlib.import_module("vision.strategy.loader").load_strategy(
+                g["strategy_file"]
+            )
             for key, value in vars(strategy).items():
                 g.setdefault(key, value)
-        self.cfg.setdefault("joint_delivery", {})["profile"] = g.get("fast_motion_profile", "quintic")
+        self.cfg.setdefault("joint_delivery", {})["profile"] = g.get(
+            "fast_motion_profile", "quintic"
+        )
         g["perception"]["save_debug_images"] = False
         g["perception"]["analytic_jacobian"] = g.get("fast_analytic_rim_jacobian", False)
         self.cfg["speed_percent"] = g.get("fast_speed_percent", 100)
@@ -197,17 +239,24 @@ class LegacyGreenPlanner:
         g["finger_settle_s"] = 0.0
         g["finger_duration_s"] = g.get("fast_finger_duration_s", g["finger_duration_s"])
         g["read_hand_feedback"] = False
-        if g["perception"].get("height_mode") == "fixed" and g["perception"].get("geometry_method") == "stereo_rim":
+        if (
+            g["perception"].get("height_mode") == "fixed"
+            and g["perception"].get("geometry_method") == "stereo_rim"
+        ):
             g["perception"]["frame_count"] = 1
         if g.get("persistent_runtime", True):
-            work._prepared = importlib.import_module("cup_grasp_demo.flow.green_prepared").PreparedRoutes()
+            work._prepared = importlib.import_module(
+                "cup_grasp_demo.flow.green_prepared"
+            ).PreparedRoutes()
 
     def warm_up(self):
-        """Start the camera, model and collision geometry in the background (the original parallel
-        startup and HOME-phase geometry preparation). VisionResources creates no arm SDK owner."""
+        """Start the camera, model and collision geometry in the background, in parallel.
+        VisionResources creates no arm SDK owner."""
         if self.workflow._vision is None:
             runtime = importlib.import_module("cup_grasp_demo.flow.green_runtime")
-            self.workflow._vision = runtime.VisionResources(self.cfg, self.workflow.root / "capture")
+            self.workflow._vision = runtime.VisionResources(
+                self.cfg, self.workflow.root / "capture"
+            )
         if self.geometry_ready is None:
             self.geometry_ready = self.pool.submit(self.load_geometry)
 
@@ -218,7 +267,7 @@ class LegacyGreenPlanner:
         self.geometry_ready.result(timeout=self.cfg["timeout_s"])
 
     def load_geometry(self):
-        """The collision geometry the original computes once per process (about 5 s on K3), stored
+        """The collision geometry, computed once (about 5 s on K3) and stored
         under SITE/runtime/geometry keyed by the content of every file it is computed from."""
         hand = importlib.import_module("cup_grasp_demo.hand_geometry")
         sources = [
@@ -246,19 +295,20 @@ class LegacyGreenPlanner:
                     old.unlink()
 
     def start_following(self, grasp):
-        """While the arm approaches, solve the lift endpoint from the planned grasp pose (the original
-        prepare_following overlap); LIFT reuses it when the hand closed there (lift_seed_close)."""
+        """While the arm approaches, solve the lift endpoint from the planned grasp pose; LIFT
+        reuses it when the hand closed there (lift_seed_close)."""
         start = list(grasp)
 
         def solve():
             with self.geometry():
-                return start, self.workflow.vertical("lift", start, self.g["lift_mm"] / 1000, single_target=True)
+                return start, self.workflow.vertical(
+                    "lift", start, self.g["lift_mm"] / 1000, single_target=True
+                )
 
         self.following = self.pool.submit(solve)
 
     def start_shake(self, limits):
-        """Plan and table-check the shake around the lift endpoint while the cup is lifted (the
-        original start_shake_prepare)."""
+        """Plan and table-check the shake around the lift endpoint while the cup is lifted."""
         work, centre = self.workflow, list(self.lift_end)
         work.held = self.held
 
@@ -269,19 +319,22 @@ class LegacyGreenPlanner:
         self.shake_future = self.pool.submit(plan)
 
     def unchanged(self):
-        """Files are re-hashed only when their metadata changed (the original cached digests)."""
+        """Files are re-hashed only when their metadata changed."""
         for path, (signature, digest) in self.fingerprints.items():
             current = stamp(path)
             if current != signature:
                 if file_hash(path) != digest:
-                    raise RuntimeError("algorithm/model/calibration/config changed; stop and rebuild deployment")
+                    raise RuntimeError(
+                        "algorithm/model/calibration/config changed; stop and rebuild deployment"
+                    )
                 self.fingerprints[path] = (current, digest)
 
     def ready(self):
-        """Wait for the background startup (camera, model, collision geometry); a no-op once warm."""
+        """Wait for the background startup (camera, model, collision geometry); a no-op once
+        warm."""
         self.warm_up()
         vision = self.workflow._vision
-        vision.camera_future.result(timeout=15)  # The original VisionResources.capture bounds.
+        vision.camera_future.result(timeout=15)  # The VisionResources.capture bounds.
         vision.model_future.result(timeout=30)
         self.geometry_ready.result(timeout=self.cfg["timeout_s"])
 
@@ -291,46 +344,74 @@ class LegacyGreenPlanner:
         with self.geometry():
             self.workflow.capture()
             self.workflow.plan()
+        prune(self.workflow.root / "runs", KEEP_RUNS)
+
+    def hand_poses(self):
+        """Open and grip hand positions (0 closed, 1 open) and the finger duration: the green cup
+        configuration is their only source. It keeps the hand's own scale (0 open, 100 closed)."""
+
+        def framework(values):
+            return [round(1 - value / 100, 4) for value in values]
+
+        return dict(
+            open=framework(self.g["open_targets_0_100"]),
+            grip=framework(self.g["grip_targets_0_100"]),
+            duration_s=float(self.g.get("fast_finger_duration_s", self.g["finger_duration_s"])),
+        )
 
     def speed_percent(self, phase):
         """FAST speed: fast_phase_speed_percent per phase, otherwise fast_speed_percent."""
-        return self.g.get("fast_phase_speed_percent", {}).get(phase, self.g.get("fast_speed_percent", 100))
+        return self.g.get("fast_phase_speed_percent", {}).get(
+            phase, self.g.get("fast_speed_percent", 100)
+        )
 
     @staticmethod
     def controller_limits(state):
         limits = state.get("controller_limits")
         if not limits or [row["joint"] for row in limits] != list(range(1, 8)):
-            raise RuntimeError("controller joint limits unavailable; FAST profiles are planned from them")
+            raise RuntimeError(
+                "controller joint limits unavailable; FAST profiles are planned from them"
+            )
         return limits
 
     def transition(self, start, stages, speed_percent, limits, options=None):
-        """Synchronized rest-to-rest profile per stage (trapezoid or quintic), as joint_delivery.move_js
-        streams it."""
+        """Synchronized rest-to-rest profile per stage (trapezoid or quintic), as
+        joint_delivery.move_js streams it."""
         options = options or self.options
         budget, cap = options["limit_utilization"], options["velocity_cap_deg_s"]
         velocity, acceleration = [], []
         for row in limits:
             speed = row["max_velocity_rad_s"] * speed_percent / 100 * budget
             velocity.append(speed if cap is None else min(speed, math.radians(cap)))
-            acceleration.append(min(row["max_acceleration_rad_s2"], options["acceleration_cap_rad_s2"]) * budget)
+            acceleration.append(
+                min(row["max_acceleration_rad_s2"], options["acceleration_cap_rad_s2"]) * budget
+            )
         times, knots, elapsed, peak = [0.0], [list(start)], 0.0, 0.0
         for target in stages:
             begin = knots[-1]
             if options["profile"] == "trapezoid":
-                duration, ramp, normalized = self.delivery.trapezoid_profile(begin, target, velocity, acceleration)
-                position = lambda t: self.delivery.trapezoid_position(t, duration, ramp, normalized)  # noqa: E731
+                duration, ramp, normalized = self.delivery.trapezoid_profile(
+                    begin, target, velocity, acceleration
+                )
+                position = lambda t: self.delivery.trapezoid_position(  # noqa: E731
+                    t, duration, ramp, normalized
+                )
             else:  # Quintic: u = 10t^3 - 15t^4 + 6t^5 over smooth_duration.
                 duration = self.delivery.smooth_duration(begin, target, velocity, acceleration)
                 normalized = 1.875 / duration
-                position = lambda t: (lambda x: 10 * x**3 - 15 * x**4 + 6 * x**5)(min(1.0, t / duration))  # noqa: E731
+                position = lambda t: (lambda x: 10 * x**3 - 15 * x**4 + 6 * x**5)(
+                    min(1.0, t / duration)
+                )  # noqa: E731
             peak = max(peak, normalized * max(abs(b - a) for a, b in zip(begin, target)))
             count = max(1, math.ceil(duration * KNOT_HZ))
             for i in range(1, count + 1):
                 u = position(duration * i / count)
-                knots.append(list(target) if i == count else [a + (b - a) * u for a, b in zip(begin, target)])
+                knots.append(
+                    list(target) if i == count else [a + (b - a) * u for a, b in zip(begin, target)]
+                )
                 times.append(elapsed + duration * i / count)
             elapsed += duration
-        # The original sample period is min(20 ms, 0.5 deg / peak speed).
+        # The sample period is min(20 ms, 0.5 deg / peak speed).
         rate = min(500.0, max(50.0, peak / STREAM_STEP_RAD))
         # FAST completion: hand over once the last target is sent; the arm settles meanwhile.
         return dict(
@@ -345,8 +426,9 @@ class LegacyGreenPlanner:
         )
 
     def shake(self, start, limits):
-        """The joint-shake recipe around the lift endpoint (prepared during the grip, or planned now as
-        build_shake does), streamed once the arm has settled there (shake_start_tolerance_deg)."""
+        """The joint-shake recipe around the lift endpoint (prepared during the grip, or planned now
+        as build_shake does), streamed once the arm has settled there
+        (shake_start_tolerance_deg)."""
         work = self.workflow
         work.held = self.held
         centre = list(self.lift_end) if self.lift_end is not None else list(start)
@@ -362,7 +444,7 @@ class LegacyGreenPlanner:
             if max(abs(a - b) for a, b in zip(current["joints_rad"], centre)) <= tolerance:
                 break
             if not current["moving"] or time.monotonic() > deadline:
-                # Settled elsewhere: re-read and re-check the shake from the real pose (original recovery).
+                # Settled elsewhere: re-read and re-check the shake from the real pose.
                 centre = list(current["joints_rad"])
                 plan, _ = work.build_shake(dict(success=True, limits=limits, q_after_rad=centre))
                 break
@@ -371,8 +453,11 @@ class LegacyGreenPlanner:
         parameters = plan["parameters"]
         rate = parameters["command_rate_hz"] or 200
         count = math.ceil(plan["duration_s"] * rate)
-        commands = [self.profile.command_values(plan, plan["duration_s"] * i / count) for i in range(count + 1)]
-        # The first command is sent one tick after the arm's position, as the original streamer did.
+        commands = [
+            self.profile.command_values(plan, plan["duration_s"] * i / count)
+            for i in range(count + 1)
+        ]
+        # The first command is sent one tick after the arm's position.
         times = [0.0] + [1 / rate + plan["duration_s"] * i / count for i in range(count + 1)]
         commands[-1] = list(start)
         return dict(
@@ -387,10 +472,11 @@ class LegacyGreenPlanner:
         )
 
     def gesture(self, name, state):
-        """A result-feedback gesture, or the original "home" action, as scripts/result_feedback.py runs it
-        (feedback_execution): the arm to the recipe pose at the recipe speed on the configured profile,
-        checked against the HOME table scene, with the hand targets sent on schedule from the first arm
-        command (together), after it (arm_then_hand) or before it (hand_then_arm)."""
+        """A result-feedback gesture, or the "home" action, as scripts/result_feedback.py
+        runs it (feedback_execution): the arm to the recipe pose at the recipe speed on the
+        configured profile, checked against the HOME table scene, with the hand targets sent on
+        schedule from the first arm command (together), after it (arm_then_hand) or before it
+        (hand_then_arm)."""
         self.unchanged()
         if self.registry is None:
             registry = importlib.import_module("scripts.action_registry").load_registry(
@@ -417,7 +503,9 @@ class LegacyGreenPlanner:
         maximum = recipe["finger_speed_mode"] == "max"
         wait = recipe["finger_max_wait_s"] if maximum else recipe["finger_duration_s"]
         sequence = importlib.import_module("cup_grasp_demo.flow.feedback_sequence")
-        poses, interval = sequence.sequence_values(recipe.get("hand_sequence"), recipe["hand_0_100"], wait)
+        poses, interval = sequence.sequence_values(
+            recipe.get("hand_sequence"), recipe["hand_0_100"], wait
+        )
         mode, delay = recipe["execution"]["mode"], recipe["execution"]["delay_s"]
         hand = (len(poses) - 1) * interval + wait
         first = {"together": delay, "arm_then_hand": motion["times_s"][-1] + delay}.get(mode, 0.0)
@@ -427,14 +515,17 @@ class LegacyGreenPlanner:
             motion["positions_rad"] = [list(start)] + motion["positions_rad"]
         execution = FINGER_MAX_SPEED_S if maximum else wait
         motion["effector_schedule"] = [
-            (first + i * interval, [value / 100 for value in pose], execution) for i, pose in enumerate(poses)
+            # hand_0_100 is the hand's scale (0 open, 100 closed); the framework's is 0 closed, 1
+            # open.
+            (first + i * interval, [1 - value / 100 for value in pose], execution)
+            for i, pose in enumerate(poses)
         ]
-        motion["hold_s"] = wait - execution  # The original waits the whole finger time after the last target.
+        motion["hold_s"] = wait - execution  # Waits the whole finger time after the last target.
         motion["hand_open"] = all(value == 0 for value in poses[-1])
         return motion
 
     def motions(self, phase, state):
-        """The deliveries of one phase, in order, as the original FAST executor issued them."""
+        """The deliveries of one phase, in order, as the FAST executor issues them."""
         with self.geometry():
             return self._motions(phase, state)
 
@@ -465,7 +556,8 @@ class LegacyGreenPlanner:
         return [self.transition(start, stages, self.speed_percent(phase), limits)]
 
     def targets(self, phase, state):
-        """Joint targets of a phase and their checked path, as green_pipeline.Workflow.perform plans them."""
+        """Joint targets of a phase and their checked path, as green_pipeline.Workflow.perform plans
+        them."""
         self.unchanged()
         work = self.workflow
         start = state["joints_rad"]
@@ -476,7 +568,11 @@ class LegacyGreenPlanner:
             targets = work.approach_targets
             # plan() checked this route from HOME; reused from an unchanged start (Workflow.move).
             route = work._prepared.take(
-                "approach", start, targets, work.scene, start_tolerance_deg=min(0.05, self.cfg["start_tolerance_deg"])
+                "approach",
+                start,
+                targets,
+                work.scene,
+                start_tolerance_deg=min(0.05, self.cfg["start_tolerance_deg"]),
             )
             if route is not None:
                 return [stage["target_q_rad"] for stage in route["stages"]]
@@ -485,9 +581,13 @@ class LegacyGreenPlanner:
             if self.following is not None:
                 seed, prepared = self.following.result(timeout=self.cfg["timeout_s"])
                 self.following = None
-                lift_seed_close = importlib.import_module("cup_grasp_demo.flow.green_prepared").lift_seed_close
+                lift_seed_close = importlib.import_module(
+                    "cup_grasp_demo.flow.green_prepared"
+                ).lift_seed_close
                 if lift_seed_close(seed, start, work.kin, work.tcp):
-                    targets = prepared  # The IK endpoint only; the path is checked from the real start.
+                    targets = (
+                        prepared  # The IK endpoint only; the path is checked from the real start.
+                    )
             self.place = list(start)
             self.held = work.held_geometry(start)
             held, margin = self.held, -self.g["place_tolerance_mm"]
@@ -496,23 +596,30 @@ class LegacyGreenPlanner:
             self.lift_end = list(targets[-1])
         elif phase == "lower":
             held, margin = self.held, -self.g["place_tolerance_mm"]
-            targets = work.place_targets(self.place)  # The grasp pose itself without a place offset.
+            targets = work.place_targets(
+                self.place
+            )  # The grasp pose itself without a place offset.
             self.lower_target = targets[-1]
         elif phase == "return_home":
             targets = [self.home]
             if not self.g.get("direct_return_home", False):
                 targets = (
-                    work.vertical("retreat", start, self.g["retreat_clearance_mm"] / 1000, single_target=True) + targets
+                    work.vertical(
+                        "retreat", start, self.g["retreat_clearance_mm"] / 1000, single_target=True
+                    )
+                    + targets
                 )
         else:
             raise ValueError("unsupported visual planner phase")
-        route = self.module.arm_plan(start, targets, work.scene, self.cfg, held=held, cup_margin_mm=margin)
+        route = self.module.arm_plan(
+            start, targets, work.scene, self.cfg, held=held, cup_margin_mm=margin
+        )
         if route["blockers"]:
             raise RuntimeError(str(route["blockers"]))
         return [stage["target_q_rad"] for stage in route["stages"]]
 
     def verify_lower(self, state):
-        """Placement arrival as the original checks it; returns a note when only recorded."""
+        """Placement arrival check; returns a note when only recorded."""
         actual = self.workflow.kin.forward(state["joints_rad"])[0] @ self.workflow.tcp
         target = self.workflow.kin.forward(self.lower_target)[0] @ self.workflow.tcp
         error_mm = float(self.np.linalg.norm(actual[:3, 3] - target[:3, 3])) * 1000
@@ -520,8 +627,13 @@ class LegacyGreenPlanner:
         if error_mm <= tolerance:
             return None
         if self.g.get("precision_error_action", "stop") != "record":
-            raise RuntimeError(f"placement error {error_mm:.2f} mm; keep hand closed, no release/retry")
-        return f"placement error {error_mm:.2f} mm above {tolerance} mm; recorded, releasing as configured"
+            raise RuntimeError(
+                f"placement error {error_mm:.2f} mm; keep hand closed, no release/retry"
+            )
+        return (
+            f"placement error {error_mm:.2f} mm above {tolerance} mm; recorded, releasing as "
+            "configured"
+        )
 
     def close(self):
         self.pool.shutdown(wait=True, cancel_futures=True)

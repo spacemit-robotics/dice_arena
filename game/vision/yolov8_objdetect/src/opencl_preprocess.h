@@ -1,5 +1,7 @@
-#ifndef OPENCL_PREPROCESS_H
-#define OPENCL_PREPROCESS_H
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
+#ifndef YOLOV8_OBJDETECT_SRC_OPENCL_PREPROCESS_H_
+#define YOLOV8_OBJDETECT_SRC_OPENCL_PREPROCESS_H_
 
 #include <memory>
 #include <opencv2/core/mat.hpp>
@@ -7,8 +9,9 @@
 #include <vector>
 
 class OpenClPreprocessor {
-    public:
+public:
     OpenClPreprocessor();
+
     struct Result {
         std::shared_ptr<std::vector<float>> data;
         float scale = 1.0f;  // source pixels per model pixel
@@ -23,12 +26,13 @@ class OpenClPreprocessor {
     // split into Y/U/V OpenCL images; color conversion, resize, letterbox and
     // CHW packing run in the GPU kernel.
     Result preprocess(const cv::Mat& nv12);
+
     const char* device_name() const { return device_name_.c_str(); }
 
-    private:
+private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
     std::string device_name_;
 };
 
-#endif  // OPENCL_PREPROCESS_H
+#endif  // YOLOV8_OBJDETECT_SRC_OPENCL_PREPROCESS_H_

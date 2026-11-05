@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Voice input channel: map recognized sentences onto round intents.
 
 The bridge owns the microphone *routing* on the ASR engine: every finalized

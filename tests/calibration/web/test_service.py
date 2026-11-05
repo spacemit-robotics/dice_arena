@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Exercise control boundaries without importing an SDK or opening hardware."""
 
 import json
@@ -8,7 +10,7 @@ import pytest
 
 from calibration.web import service as module
 from calibration.web.common import CONFIG, check_pin, digest, pin_record, read, write
-from calibration.web.service import Conflict, Service
+from calibration.web.service import ConflictError, Service
 
 
 @pytest.fixture
@@ -23,7 +25,7 @@ def service(tmp_path, monkeypatch):
     )
     write(tmp_path / "config.json", cfg)
     monkeypatch.setattr(module, "occupied", lambda **kw: [])
-    monkeypatch.setattr(module, "device_lock", lambda channel: tmp_path / "device.lock")
+    monkeypatch.setattr(module, "device_lock", lambda: tmp_path / "device.lock")
     service = Service(tmp_path / "config.json", tmp_path / "web")
     yield service
     if service.active:
@@ -65,14 +67,14 @@ def test_pin_hash_no_cleartext_and_validation():
 
 def test_readonly_blocks_all_jobs(service, process):
     service.readonly = True
-    with pytest.raises(Conflict, match="只读"):
+    with pytest.raises(ConflictError, match="只读"):
         service.start("first", body(), "owner", {})
     process[1].assert_not_called()
 
 
 def test_busy_is_checked_before_device_open(service, process, monkeypatch):
     monkeypatch.setattr(module, "occupied", lambda **kw: [{"pid": 24}])
-    with pytest.raises(Conflict, match="24"):
+    with pytest.raises(ConflictError, match="24"):
         service.start("first", body(), "owner", {})
     process[1].assert_not_called()
 
@@ -81,7 +83,7 @@ def test_preparation_and_recovery(service, process):
     with pytest.raises(ValueError, match="准备"):
         service.start("first", {}, "owner", {})
     service.set_recovery(True)
-    with pytest.raises(Conflict, match="检查"):
+    with pytest.raises(ConflictError, match="检查"):
         service.start("first", body(), "owner", {})
     process[1].assert_not_called()
 
@@ -89,16 +91,16 @@ def test_preparation_and_recovery(service, process):
 def test_one_owner_cannot_heartbeat_or_command_another_job(service, process):
     service.start("first", body(), "one:tab1", {})
     write(service.active["job"] / "stage.json", {"script": "calibration/calibrate.py"})
-    with pytest.raises(Conflict):
+    with pytest.raises(ConflictError):
         service.heartbeat("one:tab2")
-    with pytest.raises(Conflict):
+    with pytest.raises(ConflictError):
         service.cancel("one:tab2")
-    with pytest.raises(Conflict):
+    with pytest.raises(ConflictError):
         service.command("one:tab2", "sample")
-    with pytest.raises(Conflict):
+    with pytest.raises(ConflictError):
         service.start("inspect", body(), "two:tab1", {})
     service.command("one:tab1", "sample")
-    with pytest.raises(Conflict):
+    with pytest.raises(ConflictError):
         service.command("one:tab1", "sample")
     service.heartbeat("one:tab1")
 
@@ -113,7 +115,7 @@ def test_cancellation_keeps_locks_until_exit_and_does_not_resume(service, proces
     service.heartbeat("owner")
     assert active["record"]["status"] == "stopping"
     assert not active["device"].closed
-    with pytest.raises(Conflict):
+    with pytest.raises(ConflictError):
         service.command("owner", "sample")
     process[0].poll.return_value = 130
     service._tick()
@@ -178,7 +180,10 @@ def test_unlock_rate_limit(service):
 def test_window_is_bound_to_new_teaching_camera_and_invalidates_plan(service):
     dataset = service.data / "datasets" / "first"
     dataset.mkdir(parents=True)
-    write(dataset / "manifest.json", {"camera": {"width": 960, "height": 720}, "board": {"type": "charuco"}})
+    write(
+        dataset / "manifest.json",
+        {"camera": {"width": 960, "height": 720}, "board": {"type": "charuco"}},
+    )
     write(service.state_path, {"teaching_dataset": str(dataset), "plan": "old-plan"})
     with pytest.raises(ValueError):
         service.window([0, 0, 961, 720])
@@ -302,7 +307,7 @@ def test_live_connection_requires_fresh_camera_and_joint_feedback(service, proce
 def test_home_starts_without_motion_opt_in_and_pending_home_blocks_registration(service, process):
     write(service.state_path, {"home_required": True})
     for action in ("register", "apply", "table"):
-        with pytest.raises(Conflict, match="HOME"):
+        with pytest.raises(ConflictError, match="HOME"):
             service.start(action, body(), "owner", {})
     process[1].assert_not_called()
     service.start("home", body(), "owner", {})
@@ -365,10 +370,16 @@ def test_visibility_does_not_invent_bounds_for_invalid_windows(service, box):
 def test_live_window_requires_matching_camera_not_only_resolution(service):
     _, _, camera = visibility_fixture(service)
     job = service.data / "jobs" / "20261012_140000_12345678"
-    write(job / "record.json", {"id": job.name, "action": "inspect", "status": "completed", "started": 1})
+    write(
+        job / "record.json",
+        {"id": job.name, "action": "inspect", "status": "completed", "started": 1},
+    )
 
     def frame(profile):
-        write(job / "frame.json", {"time": time.time(), "width": 960, "height": 720, "camera": profile})
+        write(
+            job / "frame.json",
+            {"time": time.time(), "width": 960, "height": 720, "camera": profile},
+        )
         return service.snapshot()["visibility"]["live_compatible"]
 
     assert frame(camera)

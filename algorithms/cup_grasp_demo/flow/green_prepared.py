@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Conservative reuse: identical checked paths, bounded IK seed-pose changes."""
 
 import copy
@@ -7,7 +9,10 @@ import numpy as np
 
 def signature(scene, held, margin):
     return json.dumps(
-        [scene, held, margin], sort_keys=True, default=lambda value: np.asarray(value).tolist(), allow_nan=False
+        [scene, held, margin],
+        sort_keys=True,
+        default=lambda value: np.asarray(value).tolist(),
+        allow_nan=False,
     )
 
 
@@ -39,14 +44,17 @@ class PreparedRoutes:
             and item[1] == signature(scene, held, margin)
             and np.asarray(start).shape == (7,)
             and np.isfinite(start).all()
-            and np.max(np.abs(np.asarray(start) - item[0]["start_q_rad"])) <= np.radians(start_tolerance_deg)
+            and np.max(np.abs(np.asarray(start) - item[0]["start_q_rad"]))
+            <= np.radians(start_tolerance_deg)
             and np.array_equal(targets, [s["target_q_rad"] for s in item[0]["stages"]])
         )
         self.events.append(
             dict(
                 label=label,
                 path_reused=valid,
-                reason="start_within_executor_tolerance_same_scene_targets" if valid else "fresh_path_required",
+                reason="start_within_executor_tolerance_same_scene_targets"
+                if valid
+                else "fresh_path_required",
             )
         )
         return item[0] if valid else None

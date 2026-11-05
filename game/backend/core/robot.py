@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Game-facing contract for robot-arm providers.
 
 A robot provider drives exactly one physical arm.  The state machine calls it
@@ -122,21 +124,6 @@ class RobotProvider(Component):
         """
         return {"status": "completed", "noop": True}
 
-    def query_pose(
-        self,
-        *,
-        on_event: RobotEventFn,
-        is_cancelled: RobotCancelledFn,
-        timeout_seconds: float | None = None,
-    ) -> dict[str, Any]:
-        """Read-only "is the arm at home" probe for the idle patrol loop.
-
-        Floor implementation: providers without pose feedback report
-        ``skipped`` (cannot judge), which the patrol treats as "do nothing"
-        — never a reason to move or restart the arm.
-        """
-        return {"status": "skipped", "reason": "provider has no pose feedback"}
-
     def ensure_home(
         self,
         *,
@@ -150,4 +137,6 @@ class RobotProvider(Component):
         home, so it degrades to the unconditional reset_home — "ensure"
         must never silently skip the motion.
         """
-        return self.reset_home(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout_seconds)
+        return self.reset_home(
+            on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout_seconds
+        )

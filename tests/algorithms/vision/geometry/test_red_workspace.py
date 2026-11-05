@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Workspace selection with a desaturated red reflection connecting to the border."""
 
 import unittest
@@ -28,10 +30,14 @@ class RedWorkspaceTests(unittest.TestCase):
     def test_omitted_options_preserve_original_mask_exactly(self):
         image = np.random.default_rng(4).integers(0, 256, (120, 160, 3), dtype=np.uint8)
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        expected = ((hsv[:, :, 0] < 15) | (hsv[:, :, 0] > 165)) & (hsv[:, :, 1] > 70) & (hsv[:, :, 2] > 50)
+        expected = (
+            ((hsv[:, :, 0] < 15) | (hsv[:, :, 0] > 165)) & (hsv[:, :, 1] > 70) & (hsv[:, :, 2] > 50)
+        )
         red, workspace = workspace_masks(image)
         np.testing.assert_array_equal(red, expected)
-        contours, _ = cv2.findContours(expected.astype("uint8"), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(
+            expected.astype("uint8"), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
         original = np.zeros(expected.shape, np.uint8)
         cv2.drawContours(original, [max(contours, key=cv2.contourArea)], -1, 1, cv2.FILLED)
         np.testing.assert_array_equal(workspace, original)
@@ -53,7 +59,10 @@ class RedWorkspaceTests(unittest.TestCase):
         mask[35:60, 85:110] = True
         for instances in ([], [{"mask": mask}, {"mask": mask}], [{"mask": np.zeros_like(mask)}]):
             diagnostic = {}
-            with patch("vision.geometry.circle_rim.resolve_table", return_value=(None, None, None, None, "calibrated")):
+            with patch(
+                "vision.geometry.circle_rim.resolve_table",
+                return_value=(None, None, None, None, "calibrated"),
+            ):
                 with self.assertRaisesRegex(ValueError, "requires one YOLO cup"):
                     detect_stereo(
                         None,

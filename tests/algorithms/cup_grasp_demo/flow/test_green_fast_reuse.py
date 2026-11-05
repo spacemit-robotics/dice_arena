@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """FAST measured-pose preparation, coordinated HOME, and diagnostic isolation."""
 
 import tempfile
@@ -17,7 +19,12 @@ class FastReuseTest(unittest.TestCase):
         w = object.__new__(f.Workflow)
         w.args = SimpleNamespace(mode="fast", until="place")
         w.cfg = {"timeout_s": 5, "start_tolerance_deg": 0.5}
-        w.g = dict(lift_mm=50, wrist_reference_deg=[0, -13, 5], direct_return_home=True, place_tolerance_mm=3)
+        w.g = dict(
+            lift_mm=50,
+            wrist_reference_deg=[0, -13, 5],
+            direct_return_home=True,
+            place_tolerance_mm=3,
+        )
         w._prepared = PreparedRoutes()
         w._route_future = None
         w.snapshot = Mock(return_value=[0.1] * 7)
@@ -32,7 +39,9 @@ class FastReuseTest(unittest.TestCase):
         w = self.workflow()
 
         def route(start, targets, *a, **kw):
-            return dict(start_q_rad=list(start), stages=[dict(target_q_rad=t) for t in targets], blockers=[])
+            return dict(
+                start_q_rad=list(start), stages=[dict(target_q_rad=t) for t in targets], blockers=[]
+            )
 
         with (
             patch.object(f, "vertical_targets", return_value=[[0.2] * 7]) as ik,
@@ -51,7 +60,9 @@ class FastReuseTest(unittest.TestCase):
                     ("return_home", [0.101] * 7, [[0] * 7], None, 0),
                 ]:
                     self.assertIsNotNone(
-                        w._prepared.take(label, start, target, w.scene, held, margin, start_tolerance_deg=0.5)
+                        w._prepared.take(
+                            label, start, target, w.scene, held, margin, start_tolerance_deg=0.5
+                        )
                     )
                 ik.assert_called_once()
             finally:
@@ -65,7 +76,9 @@ class FastReuseTest(unittest.TestCase):
 
         def route(start, targets, *a, **kw):
             calls.append((list(start), targets))
-            return dict(start_q_rad=list(start), stages=[dict(target_q_rad=t) for t in targets], blockers=[])
+            return dict(
+                start_q_rad=list(start), stages=[dict(target_q_rad=t) for t in targets], blockers=[]
+            )
 
         with (
             patch.object(f, "vertical_targets", return_value=[[0.2] * 7]),
@@ -86,7 +99,9 @@ class FastReuseTest(unittest.TestCase):
 
         def route(start, targets, *args, **kwargs):
             seen.append(_screen_cache.get())
-            return dict(start_q_rad=list(start), stages=[dict(target_q_rad=t) for t in targets], blockers=[])
+            return dict(
+                start_q_rad=list(start), stages=[dict(target_q_rad=t) for t in targets], blockers=[]
+            )
 
         with (
             cached_screen_geometry(),
@@ -211,7 +226,11 @@ class FastReuseTest(unittest.TestCase):
 
     def test_combined_home_fault_prevents_hand_and_arm_commands(self):
         d = Mock()
-        d.arm_snapshot.return_value = ([0] * 7, None, SimpleNamespace(arm_status=1, ctrl_mode=1, motion_status=0))
+        d.arm_snapshot.return_value = (
+            [0] * 7,
+            None,
+            SimpleNamespace(arm_status=1, ctrl_mode=1, motion_status=0),
+        )
         robot = Mock()
         robot.get_joints_enable_status_list.return_value = [True] * 7
         options = dict(
@@ -243,7 +262,12 @@ class FastReuseTest(unittest.TestCase):
         w.cfg["plane_tolerance_mm"] = 6
         w._vision = Mock()
         image = np.zeros((20, 20, 3), dtype=np.uint8)
-        geo = dict(rim_center_camera_m=[0, 0, 1], table_normal_camera=[0, 0, 1], height_m=0.065, radius_m=0.0375)
+        geo = dict(
+            rim_center_camera_m=[0, 0, 1],
+            table_normal_camera=[0, 0, 1],
+            height_m=0.065,
+            radius_m=0.0375,
+        )
         with tempfile.TemporaryDirectory() as d:
             w.root = Path(d)
             with (
@@ -270,7 +294,9 @@ class FastReuseTest(unittest.TestCase):
                 entered.set()
                 if not release.wait(3):
                     raise RuntimeError("test planning stalled")
-            return dict(start_q_rad=list(start), stages=[dict(target_q_rad=t) for t in targets], blockers=[])
+            return dict(
+                start_q_rad=list(start), stages=[dict(target_q_rad=t) for t in targets], blockers=[]
+            )
 
         with (
             patch.object(f, "vertical_targets", return_value=[[0.2] * 7]),

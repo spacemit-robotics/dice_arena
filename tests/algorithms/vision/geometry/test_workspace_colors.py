@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Table colour selection without opening a camera or commanding hardware."""
 
 import unittest
@@ -104,7 +106,10 @@ class WorkspaceColorTests(unittest.TestCase):
         mask = np.zeros(image.shape[:2], bool)
         mask[90:130, 210:250] = True
         diagnostic = {}
-        with patch("vision.geometry.circle_rim.resolve_table", return_value=(None, None, None, None, "calibrated")):
+        with patch(
+            "vision.geometry.circle_rim.resolve_table",
+            return_value=(None, None, None, None, "calibrated"),
+        ):
             # Ambiguous cups are still refused; inspect selection before geometry.
             with self.assertRaisesRegex(ValueError, "requires one YOLO cup in the green workspace"):
                 detect_stereo(
@@ -137,7 +142,10 @@ class WorkspaceColorTests(unittest.TestCase):
             },
             "depth_scale_m": 0.001,
         }
-        cfg = {"plane_tolerance_mm": 6, "green_cup": {"perception": {"workspace": {"color": "green"}}}}
+        cfg = {
+            "plane_tolerance_mm": 6,
+            "green_cup": {"perception": {"workspace": {"color": "green"}}},
+        }
         with (
             patch.object(planar_scene, "load_batch", return_value=(meta, depth, image, [])),
             patch.object(planar_scene.common, "camera_transform", return_value=(np.eye(4), True)),
@@ -182,11 +190,23 @@ class WorkspaceColorTests(unittest.TestCase):
                     geometry.assert_not_called()
                     opts["min_workspace_fraction"] = 0.1
                     diagnostic = {}
-                    detect_depth(depth, image, meta, opts, 6, instances=[{"mask": mask}], diagnostics=diagnostic)
+                    detect_depth(
+                        depth,
+                        image,
+                        meta,
+                        opts,
+                        6,
+                        instances=[{"mask": mask}],
+                        diagnostics=diagnostic,
+                    )
                     self.assertTrue(diagnostic["valid"])
                     self.assertEqual(diagnostic["workspace"]["thresholds"]["color"], color)
-                    self.assertAlmostEqual(diagnostic["workspace"]["candidates"][0]["workspace_fraction"], 0.25)
+                    self.assertAlmostEqual(
+                        diagnostic["workspace"]["candidates"][0]["workspace_fraction"], 0.25
+                    )
                     with self.assertRaisesRegex(ValueError, "候选数：0"):
                         detect_depth(depth, image, meta, opts, 6, instances=[{"mask": outside}])
                     with self.assertRaisesRegex(ValueError, "候选数：2"):
-                        detect_depth(depth, image, meta, opts, 6, instances=[{"mask": mask}, {"mask": mask}])
+                        detect_depth(
+                            depth, image, meta, opts, 6, instances=[{"mask": mask}, {"mask": mask}]
+                        )

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Game-agnostic rule evaluation for visual adjudication profiles.
 
 The runtime only supplies observations.  This module is the small, pure
@@ -50,7 +52,9 @@ def _participant_counts(evidence: Mapping[str, Any]) -> dict[str, int]:
     return counts
 
 
-def diagnose_detection_failure(profile: Mapping[str, Any], evidence: Mapping[str, Any] | None) -> dict[str, Any]:
+def diagnose_detection_failure(
+    profile: Mapping[str, Any], evidence: Mapping[str, Any] | None
+) -> dict[str, Any]:
     """Explain why a detector could not produce a stable adjudication.
 
     This is deliberately evidence-only and game-agnostic.  A game may provide
@@ -68,7 +72,10 @@ def diagnose_detection_failure(profile: Mapping[str, Any], evidence: Mapping[str
     if expected is not None and isinstance(expected, int) and expected > 0 and counts:
         if detection_count == 0 or all(value == 0 for value in counts.values()):
             reason = "NO_OBJECTS_DETECTED"
-            message = "当前画面未检测到目标，可能是光线不足、镜头遮挡或摄像头画面异常，请检查环境后重新开始。"
+            message = (
+                "当前画面未检测到目标，可能是光线不足、镜头遮挡或摄像头画面异常，"
+                "请检查环境后重新开始。"
+            )
         elif any(value != expected for value in counts.values()):
             reason = "INCOMPLETE_OBJECTS"
             details = "、".join(f"{name}={count}" for name, count in counts.items())
@@ -76,18 +83,31 @@ def diagnose_detection_failure(profile: Mapping[str, Any], evidence: Mapping[str
                 f"当前目标数量不完整（{details}，每侧应为 {expected} 个），"
                 "可能存在目标叠放、遮挡或漏检，请重新摆放后再试。"
             )
-        elif isinstance(evidence.get("divider"), Mapping) and evidence["divider"].get("found") is False:
+        elif (
+            isinstance(evidence.get("divider"), Mapping)
+            and evidence["divider"].get("found") is False
+        ):
             reason = "SCENE_GEOMETRY_UNCLEAR"
-            message = "目标数量完整，但左右区域的场景分界线不清晰，无法可靠完成裁决，请调整光线或摆放位置后再试。"
+            message = (
+                "目标数量完整，但左右区域的场景分界线不清晰，无法可靠完成裁决，"
+                "请调整光线或摆放位置后再试。"
+            )
         else:
             reason = "UNSTABLE_DETECTION"
-            message = "目标数量虽然完整，但连续画面中的检测结果不稳定，可能存在画面抖动或遮挡，请重新摆放后再试。"
+            message = (
+                "目标数量虽然完整，但连续画面中的检测结果不稳定，可能存在画面抖动或遮挡，"
+                "请重新摆放后再试。"
+            )
     elif detection_count == 0:
         reason = "NO_OBJECTS_DETECTED"
-        message = "当前画面未检测到目标，可能是光线不足、镜头遮挡或摄像头画面异常，请检查环境后重新开始。"
+        message = (
+            "当前画面未检测到目标，可能是光线不足、镜头遮挡或摄像头画面异常，请检查环境后重新开始。"
+        )
     elif isinstance(divider, Mapping) and divider.get("found") is False:
         reason = "SCENE_GEOMETRY_UNCLEAR"
-        message = "检测到目标，但场景分界线不清晰，无法可靠区分左右区域，请调整光线或摆放位置后再试。"
+        message = (
+            "检测到目标，但场景分界线不清晰，无法可靠区分左右区域，请调整光线或摆放位置后再试。"
+        )
     else:
         reason = "UNSTABLE_DETECTION"
         message = "检测结果在连续画面中不稳定，可能存在遮挡、叠放或画面抖动，请重新摆放后再试。"
@@ -154,7 +174,11 @@ def _numeric_compare(rule: Mapping[str, Any], observation: Mapping[str, Any]) ->
     participants = _participants(observation)
     expected_count = rule.get("expected_count")
     if expected_count is not None:
-        if not isinstance(expected_count, int) or isinstance(expected_count, bool) or expected_count <= 0:
+        if (
+            not isinstance(expected_count, int)
+            or isinstance(expected_count, bool)
+            or expected_count <= 0
+        ):
             raise RuleError("numeric_compare expected_count must be a positive integer")
         for participant, raw in participants.items():
             values = raw if isinstance(raw, (list, tuple)) else [raw]
@@ -213,7 +237,11 @@ def evaluate_rule(rule: Mapping[str, Any], observations: Sequence[Mapping[str, A
 
     if not isinstance(rule, Mapping):
         raise RuleError("rule must be an object")
-    if not isinstance(observations, Sequence) or isinstance(observations, (str, bytes)) or not observations:
+    if (
+        not isinstance(observations, Sequence)
+        or isinstance(observations, (str, bytes))
+        or not observations
+    ):
         raise RuleError("observations must be a non-empty sequence")
     if any(not isinstance(item, Mapping) for item in observations):
         raise RuleError("observations must contain objects")
@@ -254,7 +282,11 @@ def project_result(
 ) -> dict[str, Any]:
     """Attach profile/evidence and migration-only dice fields to a decision."""
 
-    if not isinstance(profile, Mapping) or not isinstance(decision, Mapping) or not isinstance(evidence, Mapping):
+    if (
+        not isinstance(profile, Mapping)
+        or not isinstance(decision, Mapping)
+        or not isinstance(evidence, Mapping)
+    ):
         raise RuleError("profile, decision and evidence must be objects")
     profile_id = profile.get("game_id") or profile.get("id")
     if not isinstance(profile_id, str) or not profile_id:
@@ -277,15 +309,21 @@ def project_result(
             if isinstance(raw, (list, tuple)):
                 values = list(raw)
                 result[f"{prefix}_values"] = values
-                if values and all(isinstance(item, Real) and not isinstance(item, bool) for item in values):
+                if values and all(
+                    isinstance(item, Real) and not isinstance(item, bool) for item in values
+                ):
                     result[f"{prefix}_sum"] = sum(values)
         if profile_id == "dice" and isinstance(result.get("outcome"), Mapping):
             result["winner"] = result["outcome"]["value"]
             result["first_dice"] = (
-                list(participants.get("LEFT", [])) if isinstance(participants.get("LEFT"), (list, tuple)) else []
+                list(participants.get("LEFT", []))
+                if isinstance(participants.get("LEFT"), (list, tuple))
+                else []
             )
             result["second_dice"] = (
-                list(participants.get("RIGHT", [])) if isinstance(participants.get("RIGHT"), (list, tuple)) else []
+                list(participants.get("RIGHT", []))
+                if isinstance(participants.get("RIGHT"), (list, tuple))
+                else []
             )
             result["first_sum"] = result.get("left_sum", 0)
             result["second_sum"] = result.get("right_sum", 0)

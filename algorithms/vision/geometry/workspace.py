@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Select the robot's table surface; colour never assigns game participants."""
 
 import copy
@@ -46,13 +48,18 @@ def workspace_options(raw=None):
         raise ValueError("workspace.color must be red, green or gray")
     if set(raw) - (set(PRESETS[color]) | {"color"}):
         raise ValueError("Unknown workspace parameter")
-    result = dict(copy.deepcopy(PRESETS[color]), color=color, **{k: v for k, v in raw.items() if k != "color"})
+    result = dict(
+        copy.deepcopy(PRESETS[color]), color=color, **{k: v for k, v in raw.items() if k != "color"}
+    )
     for key in ("min_saturation", "max_saturation", "min_value", "max_value"):
         value = result[key]
         low, high = (-1, 254) if key.startswith("min_") else (0, 255)
         if type(value) is not int or not low <= value <= high:
             raise ValueError("workspace." + key + " outside integer range")
-    if result["min_saturation"] >= result["max_saturation"] or result["min_value"] >= result["max_value"]:
+    if (
+        result["min_saturation"] >= result["max_saturation"]
+        or result["min_value"] >= result["max_value"]
+    ):
         raise ValueError("workspace minimum must be below maximum")
     ranges = result["hue_ranges"]
     if (
@@ -68,7 +75,11 @@ def workspace_options(raw=None):
     ):
         raise ValueError("workspace.hue_ranges must contain integer [low, high] pairs in 0..179")
     fraction = result["min_region_fraction"]
-    if isinstance(fraction, bool) or not isinstance(fraction, (int, float)) or not 0 <= fraction <= 1:
+    if (
+        isinstance(fraction, bool)
+        or not isinstance(fraction, (int, float))
+        or not 0 <= fraction <= 1
+    ):
         raise ValueError("workspace.min_region_fraction must be in 0..1")
     if result["region_shape"] not in ("contour", "convex_hull"):
         raise ValueError("workspace.region_shape must be contour or convex_hull")
@@ -104,7 +115,9 @@ def workspace_masks(image, raw=None):
         & (hsv[:, :, 2] > options["min_value"])
         & (hsv[:, :, 2] <= options["max_value"])
     )
-    contours, _ = cv2.findContours(surface.astype("uint8"), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(
+        surface.astype("uint8"), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
     workspace = np.zeros(surface.shape, np.uint8)
     if contours:
         contour = max(contours, key=cv2.contourArea)

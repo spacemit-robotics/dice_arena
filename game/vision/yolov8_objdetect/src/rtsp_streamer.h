@@ -1,5 +1,7 @@
-#ifndef RTSP_STREAMER_H
-#define RTSP_STREAMER_H
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
+#ifndef YOLOV8_OBJDETECT_SRC_RTSP_STREAMER_H_
+#define YOLOV8_OBJDETECT_SRC_RTSP_STREAMER_H_
 
 #include <atomic>
 #include <chrono>
@@ -18,19 +20,22 @@
 // M2M device is available, otherwise by the software encoder x264enc — and
 // sent over RTSP (typically to MediaMTX running on the same board).
 class RtspStreamer {
-    public:
+public:
     RtspStreamer() = default;
     ~RtspStreamer();
     RtspStreamer(const RtspStreamer&) = delete;
     RtspStreamer& operator=(const RtspStreamer&) = delete;
 
-    bool start(const std::string& host, int port, const std::string& path, int width, int height, int fps);
+    bool start(const std::string& host, int port, const std::string& path, int width, int height,
+               int fps);
     void publish(const cv::Mat& bgr);
     void stop();
+
     bool running() const { return running_.load(); }
+
     std::string url() const;
 
-    private:
+private:
     bool initialize_pipeline(bool use_hardware_encoder);
     void destroy_pipeline();
     void encoder_loop();
@@ -58,4 +63,4 @@ class RtspStreamer {
     std::chrono::steady_clock::time_point start_time_{};
 };
 
-#endif  // RTSP_STREAMER_H
+#endif  // YOLOV8_OBJDETECT_SRC_RTSP_STREAMER_H_

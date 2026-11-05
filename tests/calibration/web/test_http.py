@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """HTTP boundaries: CSRF, readonly controls, file isolation and PIN session scope."""
 
 import http.client
@@ -71,7 +73,11 @@ def test_post_requires_origin_csrf_and_tab(http_server):
 
 
 def test_no_arbitrary_file_routes_or_dns_rebinding(http_server):
-    for path in ("/../../etc/passwd", "/api/image?kind=preview&job=../../engineer.json", "/engineer.json"):
+    for path in (
+        "/../../etc/passwd",
+        "/api/image?kind=preview&job=../../engineer.json",
+        "/engineer.json",
+    ):
         code, _, _ = request(http_server, path)
         assert code in (400, 404)
     code, _, _ = request(http_server, "/api/status", headers={"Host": "attacker.example"})
@@ -147,7 +153,9 @@ def test_gallery_frame_selection_and_file_boundaries(http_server):
         {"kind": "config"},
         {"key": "stale-dataset-key"},
     ):
-        assert request(http_server, "/api/sample-file?" + urlencode(dict(params, **invalid)))[0] == 400
+        assert (
+            request(http_server, "/api/sample-file?" + urlencode(dict(params, **invalid)))[0] == 400
+        )
     secret = http_server.service.data / "engineer.json"
     write(secret, {"secret": "not a sample"})
     (archive / "frame_000.json").unlink()

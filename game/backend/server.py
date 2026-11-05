@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """Small K3-local HTTP bridge for the Dice Arena web UI.
 
 The bridge owns only HTTP routing, static serving, and per-round job lifecycle.
@@ -127,7 +129,8 @@ def get_games() -> GameRegistry:
             )
             if missing:
                 print(
-                    f"[games] reload skipped; broken manifest removed {sorted(missing)}, keeping last good config",
+                    f"[games] reload skipped; broken manifest removed {sorted(missing)}, keeping "
+                    "last good config",
                     flush=True,
                 )
             elif conflict is not None:
@@ -284,7 +287,10 @@ def _single_asr_conflict(arena: dict[str, Any], registry: GameRegistry) -> str |
     manifests = [m for m in registry.all() if m.get("enabled", False)]
     ids = collect_provider_slot_ids("asr", arena, manifests)
     if len(ids) > 1:
-        return f"multiple ASR engines referenced: {', '.join(ids)} — keep exactly one (the engine owns the microphone)"
+        return (
+            f"multiple ASR engines referenced: {', '.join(ids)} — keep exactly one (the engine "
+            "owns the microphone)"
+        )
     return None
 
 
@@ -308,7 +314,10 @@ def _prewarm_resident_asr(arena: dict[str, Any]) -> None:
         raise RuntimeError(f"ASR provider {provider_id} unavailable: {exc.message}") from exc
     prewarm = getattr(provider, "prewarm", None)
     if not callable(prewarm):
-        print(f"[arena] ASR provider {provider_id} has no prewarm hook (per-session engine)", flush=True)
+        print(
+            f"[arena] ASR provider {provider_id} has no prewarm hook (per-session engine)",
+            flush=True,
+        )
         return
     try:
         prewarm()
@@ -411,7 +420,9 @@ def _selected_tts_id(game_id: str = "dice") -> str:
         return "tts_qwen3"
 
 
-def _safe_profile_metadata(profile: dict[str, Any], base_url: str, runtime: dict[str, Any]) -> dict[str, Any]:
+def _safe_profile_metadata(
+    profile: dict[str, Any], base_url: str, runtime: dict[str, Any]
+) -> dict[str, Any]:
     """Project one profile to public health fields; never recurse into registry metadata."""
     video = profile.get("video", {})
     path = video.get("path") if isinstance(video, dict) else ""
@@ -439,7 +450,11 @@ def _safe_profile_metadata(profile: dict[str, Any], base_url: str, runtime: dict
         view_video = view.get("video") if isinstance(view.get("video"), dict) else {}
         view_path = view_video.get("path", "")
         item = {"id": view["id"], "video_path": view_path if isinstance(view_path, str) else ""}
-        if bool(view_video.get("enabled", True)) and item["video_path"] and isinstance(base_url, str):
+        if (
+            bool(view_video.get("enabled", True))
+            and item["video_path"]
+            and isinstance(base_url, str)
+        ):
             try:
                 item["video_url"] = compose_video_url(base_url, item["video_path"])
             except Exception:
@@ -471,8 +486,14 @@ def _vision_profile_metadata(game_id: str, provider_id: str) -> dict[str, Any]:
         component_video = config.get("video", {}) if isinstance(config.get("video"), dict) else {}
         runtime_video = {}
         try:
-            runtime_config = load_runtime_config(resolve_runtime_config_path(config, profile=profile))
-            runtime_video = runtime_config.get("video", {}) if isinstance(runtime_config.get("video"), dict) else {}
+            runtime_config = load_runtime_config(
+                resolve_runtime_config_path(config, profile=profile)
+            )
+            runtime_video = (
+                runtime_config.get("video", {})
+                if isinstance(runtime_config.get("video"), dict)
+                else {}
+            )
         except Exception:
             runtime_video = {}
         base_url = (
@@ -567,7 +588,10 @@ def _sse_cancel_stale_rounds() -> None:
         if getattr(round_, "shared", False):
             continue  # Shared-session presence includes hall and round subscribers.
         if round_.status == "running":
-            print(f"[round:{round_id[:8]}] SSE 消费者离开超过 {SSE_GRACE_SECONDS:g}s，自动取消回合", flush=True)
+            print(
+                f"[round:{round_id[:8]}] SSE 消费者离开超过 {SSE_GRACE_SECONDS:g}s，自动取消回合",
+                flush=True,
+            )
             round_.cancel()  # terminal → asr bridge watcher stops the mic
         with _sse_presence_lock:
             _sse_presence.pop(round_id, None)
@@ -587,7 +611,9 @@ def _ensure_sse_watchdog() -> None:
     with _sse_presence_lock:
         if _sse_watchdog is not None and _sse_watchdog.is_alive():
             return
-        _sse_watchdog = threading.Thread(target=_sse_watchdog_loop, name="sse-watchdog", daemon=True)
+        _sse_watchdog = threading.Thread(
+            target=_sse_watchdog_loop, name="sse-watchdog", daemon=True
+        )
         _sse_watchdog.start()
 
 
@@ -729,6 +755,11 @@ def _board_active_round() -> GameRound | None:
     return None
 
 
+def _active_round_summary() -> dict | None:
+    round_ = _board_active_round()
+    return None if round_ is None else {"id": round_.id, "game": round_.game_id}
+
+
 def _board_local_client(peer: str, local: str) -> bool:
     """Identify a board-local browser from socket addresses, never HTTP headers."""
     try:
@@ -771,7 +802,9 @@ def _board_dispatch(action: str) -> None:
         if _SESSION is not None and _SESSION.enabled:
             snapshot = _SESSION.snapshot()
             current = snapshot.get("round") or {}
-            if _board_recent(f"shared:{snapshot.get('round_id')}:{current.get('state_version')}:{action}"):
+            if _board_recent(
+                f"shared:{snapshot.get('round_id')}:{current.get('state_version')}:{action}"
+            ):
                 return
             _SESSION.submit(
                 {
@@ -795,7 +828,11 @@ def _board_dispatch(action: str) -> None:
             # 路径），几十毫秒后本派发才看到"已有活跃回合"——若照常映射就
             # 会把 rules 的 confirm 也投出去，规则页被一闪跳过。判定标准：
             # 回合刚建不满 250ms 且动作是 confirm = 同一记按键的回声，跳过。
-            if intent == "confirm" and round_.state == "rules" and time.time() * 1000 - round_.created_at < 250:
+            if (
+                intent == "confirm"
+                and round_.state == "rules"
+                and time.time() * 1000 - round_.created_at < 250
+            ):
                 return
             if _board_recent(f"intent:{round_.id}:{intent}"):
                 return
@@ -825,7 +862,9 @@ def _board_dispatch(action: str) -> None:
             # 方向键也唤醒待机页（本地键盘的"任意键唤醒"同款语义）。
             # 合成事件带 source:'board'——前端对按键来源只做动作、
             # 不弹「听到…」语音浮条（按键不是语音）。
-            _STANDBY_BUS.push({"event": "asr", "status": "wake", "text": "board", "source": "board"})
+            _STANDBY_BUS.push(
+                {"event": "asr", "status": "wake", "text": "board", "source": "board"}
+            )
             return
         if action == "confirm":
             game_id = _board_cursor_game(games)
@@ -912,7 +951,9 @@ def _supervise_board_input() -> None:
 def _start_board_input_supervisor() -> None:
     # 派发线程常驻（派发内部自己检查开关），监督线程负责读取器生死。
     threading.Thread(target=_board_dispatch_loop, name="board-input-dispatch", daemon=True).start()
-    threading.Thread(target=_supervise_board_input, name="board-input-supervisor", daemon=True).start()
+    threading.Thread(
+        target=_supervise_board_input, name="board-input-supervisor", daemon=True
+    ).start()
 
 
 def _game_select_phrases() -> dict[str, list[str]]:
@@ -985,7 +1026,9 @@ def _round_adjudicate_fn(game_id: str, arm_throw: dict | None = None):
             on_log,
             is_cancelled,
             on_event,
-            resolve_adjudication_timeout(require_game(get_games(), game_id), _ROUND_TIMEOUT_FALLBACK_SECONDS),
+            resolve_adjudication_timeout(
+                require_game(get_games(), game_id), _ROUND_TIMEOUT_FALLBACK_SECONDS
+            ),
             COMPONENTS,
             defaults=get_arena_config(),
             arm_throw=arm_throw,
@@ -1029,11 +1072,17 @@ def _round_robot_fn(game_id: str, arm_throw: dict | None = None):
             return {"status": "failed", "reason": exc.message}
         try:
             if command == "grasp_cup":
-                return provider.grasp_cup(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout)
+                return provider.grasp_cup(
+                    on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout
+                )
             if command == "shake_dice":
-                return provider.shake_dice(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout)
+                return provider.shake_dice(
+                    on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout
+                )
             if command == "settle_dice":
-                return provider.settle_dice(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout)
+                return provider.settle_dice(
+                    on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout
+                )
             if command == "feedback":
                 return provider.feedback(
                     str(action.get("kind") or ""),
@@ -1042,17 +1091,25 @@ def _round_robot_fn(game_id: str, arm_throw: dict | None = None):
                     timeout_seconds=timeout,
                 )
             if command == "reset_home":
-                return provider.reset_home(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout)
+                return provider.reset_home(
+                    on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout
+                )
             if command == "ensure_home":
                 # 检查式归位（2026-09-25）：地板 provider 无此方法时退化为
                 # 强制归位，"确保在家"永不静默跳过。
                 ensure = getattr(provider, "ensure_home", None)
                 if callable(ensure):
-                    return ensure(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout)
-                return provider.reset_home(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout)
+                    return ensure(
+                        on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout
+                    )
+                return provider.reset_home(
+                    on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout
+                )
             if command == "prepare_throw":
                 _mark_throw_failed()  # Never reuse a previous round's gesture on prep failure.
-                outcome = provider.prepare_throw(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout)
+                outcome = provider.prepare_throw(
+                    on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout
+                )
                 if isinstance(outcome, dict) and outcome.get("status") == "completed":
                     if arm_throw is not None:
                         arm_throw.update(status="pending", gesture=None, reason=None)
@@ -1094,10 +1151,16 @@ def _round_robot_fn(game_id: str, arm_throw: dict | None = None):
                 )
                 if arm_throw is not None:
                     arm_throw["status"] = (
-                        "completed" if isinstance(outcome, dict) and outcome.get("status") == "completed" else "failed"
+                        "completed"
+                        if isinstance(outcome, dict) and outcome.get("status") == "completed"
+                        else "failed"
                     )
-                    arm_throw["reason"] = outcome.get("reason") if isinstance(outcome, dict) else "出拳动作未完成"
-                    arm_throw["gesture"] = outcome.get("gesture") if isinstance(outcome, dict) else None
+                    arm_throw["reason"] = (
+                        outcome.get("reason") if isinstance(outcome, dict) else "出拳动作未完成"
+                    )
+                    arm_throw["gesture"] = (
+                        outcome.get("gesture") if isinstance(outcome, dict) else None
+                    )
                 return outcome
             return {"status": "failed", "reason": f"unknown robot command {command!r}"}
         except Exception as exc:
@@ -1170,7 +1233,9 @@ def _watch_round_arm_reset(round_id: str, game_id: str, generation: int) -> None
             if callable(ensure):
                 outcome = ensure(on_event=lambda event: None, is_cancelled=lambda: False)
             else:
-                outcome = provider.reset_home(on_event=lambda event: None, is_cancelled=lambda: False)
+                outcome = provider.reset_home(
+                    on_event=lambda event: None, is_cancelled=lambda: False
+                )
             if isinstance(outcome, dict) and outcome.get("status") != "completed":
                 print(f"[robot] post-round ensure_home: {outcome.get('reason')}", flush=True)
         except Exception as exc:
@@ -1232,97 +1297,6 @@ def _home_arm_on_boot() -> None:
         print(f"[robot] boot reset_home failed: {exc!r}", flush=True)
 
 
-# 单例：可停的巡检线程（测试里反复重启不会泄漏旧线程）。
-_home_patrol_thread: threading.Thread | None = None
-_home_patrol_stop = threading.Event()
-
-
-def _run_home_patrol() -> None:
-    """Idle-pose patrol（用户 2026-09-24 提议）：桌面空闲时盯臂是否离家。
-
-    事件驱动归位（终态 watcher / 失败页 / 开机）只覆盖程序知道的离开
-    时刻；巡检补的是程序不知道的位移——现场有人掰了臂、归位失败残留、
-    断电重启后臂被摆到别处。开关与周期热读全局 config：
-    ``robot_home_patrol``（默认 true）/``robot_home_patrol_seconds``（默认 30）。
-
-    巡检纪律：只在「无 running 回合且无活跃裁决 job」时动作——游戏内的
-    姿态是游戏的事（rps 出拳保持、人工摇骰都算）；query_pose 不复活死
-    常驻（skipped = 跳过本轮，复活只属于事件路径的 reset_home）；发现
-    离家才走 reset_home（可复活）。一切失败只打日志。
-    """
-    global _home_patrol_thread, _home_patrol_stop
-    _home_patrol_stop.set()
-    if _home_patrol_thread is not None:
-        _home_patrol_thread.join(timeout=2.0)
-    _home_patrol_stop = threading.Event()
-    stop = _home_patrol_stop
-
-    def _robot_provider_or_none():
-        robot_games = [game for game in _enabled_game_manifests() if _manifest_uses_robot(game)]
-        if not robot_games:
-            return None
-        provider_id = _game_provider_id(str(robot_games[0].get("id") or ""), "robot_arm", "")
-        if not provider_id:
-            return None
-        return COMPONENTS.require(provider_id, expected_type="robot")
-
-    def patrol() -> None:
-        while not stop.is_set():
-            try:
-                arena = get_arena_config()
-                if not bool(arena.get("robot_home_patrol", True)):
-                    time.sleep(5.0)
-                    continue
-                period = max(0.05, float(arena.get("robot_home_patrol_seconds", 30) or 30))
-            except Exception as exc:
-                print(f"[robot] patrol config error: {exc!r}", flush=True)
-                period = 30.0
-            # 分片睡眠：关开关后最多 5s 内退出（长周期不能拖住停机）。
-            slept = 0.0
-            while slept < period and not stop.is_set():
-                time.sleep(min(5.0, period - slept))
-                slept += min(5.0, period - slept)
-            if stop.is_set():
-                return
-            try:
-                # 游戏内（含活跃裁决 job）的姿态是游戏的事，一律不巡检。
-                with rounds_lock:
-                    game_live = any(r.status == "running" for r in rounds.values())
-                job_live = False
-                if active_job_id:
-                    job = jobs.get(active_job_id)
-                    # 终态（success/error/cancelled）都带 finished_at；
-                    # holding 视为活跃——裁决收尾期同样别碰臂。
-                    job_live = bool(job) and job.finished_at is None
-                if game_live or job_live:
-                    continue
-                provider = _robot_provider_or_none()
-                if provider is None:
-                    continue
-                outcome = provider.query_pose(on_event=lambda event: None, is_cancelled=lambda: False)
-                # 只有探针明确报"离家"才动臂：skipped（死常驻/无姿态反馈）
-                # 与 failed（CAN/worker 瞬断）都不知道状态，一律不猜。
-                if not isinstance(outcome, dict) or outcome.get("status") != "completed":
-                    continue
-                if outcome.get("at_home"):
-                    continue
-                reason = "pose not at home"
-                if outcome.get("delta_deg"):
-                    reason = f"max delta {max(abs(d) for d in outcome['delta_deg']):.1f} deg"
-                print(f"[robot] patrol: arm off home ({reason}); homing", flush=True)
-                outcome = provider.reset_home(on_event=lambda event: None, is_cancelled=lambda: False)
-                if isinstance(outcome, dict) and outcome.get("status") != "completed":
-                    print(
-                        f"[robot] patrol reset_home: {outcome.get('reason')}",
-                        flush=True,
-                    )
-            except Exception as exc:
-                print(f"[robot] patrol error: {exc!r}", flush=True)
-
-    _home_patrol_thread = threading.Thread(target=patrol, name="arm-home-patrol", daemon=True)
-    _home_patrol_thread.start()
-
-
 def create_round(game_id: str, *, shared: bool = False, event_sink=None) -> GameRound:
     manifest = require_game(get_games(), game_id)
     if not isinstance(manifest.get("state_machine"), dict):
@@ -1334,7 +1308,9 @@ def create_round(game_id: str, *, shared: bool = False, event_sink=None) -> Game
     # the global ASR breaker applied.  Engine and ASR bridge read it as-is.
     manifest = with_global_defaults(manifest, get_arena_config())
     if "participants" not in manifest:
-        raise InvalidRequestError(f"game {game_id} declares no participants and the arena config provides none")
+        raise InvalidRequestError(
+            f"game {game_id} declares no participants and the arena config provides none"
+        )
     with rounds_lock:
         for existing in list(rounds.values()):
             if existing.status == "running":
@@ -1360,7 +1336,9 @@ def create_round(game_id: str, *, shared: bool = False, event_sink=None) -> Game
         )
         round_.shared = shared
         if shared:
-            round_.input_dispatch = lambda intent, payload: _shared_round_intent(round_, intent, payload)
+            round_.input_dispatch = lambda intent, payload: _shared_round_intent(
+                round_, intent, payload
+            )
         rounds[round_.id] = round_
     round_.start()
     if uses_robot:
@@ -1394,7 +1372,9 @@ def create_round(game_id: str, *, shared: bool = False, event_sink=None) -> Game
     # adjudication starts the runtime lazily and reports the real error there.
     # The arena config decides whether the stream also outlives this game.
     try:
-        VISION_STREAM.start_for_round(round_, arena=get_arena_config(), on_event=round_.emit_observation)
+        VISION_STREAM.start_for_round(
+            round_, arena=get_arena_config(), on_event=round_.emit_observation
+        )
     except Exception as exc:
         print(f"[vision] failed to start streaming for round {round_.id[:8]}: {exc!r}", flush=True)
     return round_
@@ -1409,7 +1389,9 @@ _AUDIO_LOCK = threading.Lock()
 
 def _produce_shared_audio(round_, directive, emit):
     if directive.get("mode") == "audio":
-        path = resolve_game_audio_path(round_.game_id, str(directive.get("audio") or ""), root=_GAMES_ROOT)
+        path = resolve_game_audio_path(
+            round_.game_id, str(directive.get("audio") or ""), root=_GAMES_ROOT
+        )
         emit(path.read_bytes())
         return
     dispatcher = _tts_dispatcher()
@@ -1504,7 +1486,8 @@ def _get_session():
                 on_hall=_shared_hall_asr,
                 board_source=_board_input_source,
                 legacy_running=lambda: any(
-                    r.status == "running" and not getattr(r, "shared", False) for r in rounds.values()
+                    r.status == "running" and not getattr(r, "shared", False)
+                    for r in rounds.values()
                 ),
             )
         return _SESSION
@@ -1578,7 +1561,9 @@ def create_adjudication_job(game_id: str) -> ComponentJob:
                 on_log,
                 is_cancelled,
                 on_event,
-                resolve_adjudication_timeout(require_game(get_games(), game_id), JOB_TIMEOUT_SECONDS),
+                resolve_adjudication_timeout(
+                    require_game(get_games(), game_id), JOB_TIMEOUT_SECONDS
+                ),
                 COMPONENTS,
                 defaults=get_arena_config(),
             )
@@ -1649,7 +1634,9 @@ class Handler(BaseHTTPRequestHandler):
             while not session.closed:
                 previous = snapshot["revision"]
                 snapshot = session.wait_for_update(previous)
-                self.send_sse_snapshot(snapshot, "update" if snapshot["revision"] != previous else "heartbeat")
+                self.send_sse_snapshot(
+                    snapshot, "update" if snapshot["revision"] != previous else "heartbeat"
+                )
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass
         finally:
@@ -1683,7 +1670,9 @@ class Handler(BaseHTTPRequestHandler):
                     for event in events:
                         cursor = int(event.get("sequence", 0))
                         payload = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
-                        self.wfile.write(f"id: {cursor}\nevent: bus\ndata: {payload}\n\n".encode("utf-8"))
+                        self.wfile.write(
+                            f"id: {cursor}\nevent: bus\ndata: {payload}\n\n".encode("utf-8")
+                        )
                     self.wfile.flush()
                     continue
                 bus.wait_for_push(timeout=15.0)
@@ -1703,7 +1692,11 @@ class Handler(BaseHTTPRequestHandler):
             "error": snapshot["error"],
             "cancelled": snapshot["cancelled"],
             "result": snapshot["result"],
-            "events": [event for event in snapshot["events"] if int(event.get("sequence", 0)) > after_sequence],
+            "events": [
+                event
+                for event in snapshot["events"]
+                if int(event.get("sequence", 0)) > after_sequence
+            ],
             "event_sequence": snapshot["event_sequence"],
             "revision": snapshot["revision"],
             "started_at": snapshot["started_at"],
@@ -1761,7 +1754,11 @@ class Handler(BaseHTTPRequestHandler):
             "observations": snapshot.get("observations", []),
             "error": snapshot["error"],
             "result": snapshot["result"],
-            "events": [event for event in snapshot["events"] if int(event.get("sequence", 0)) > after_sequence],
+            "events": [
+                event
+                for event in snapshot["events"]
+                if int(event.get("sequence", 0)) > after_sequence
+            ],
             "event_sequence": snapshot["event_sequence"],
             "revision": snapshot["revision"],
         }
@@ -1868,10 +1865,14 @@ class Handler(BaseHTTPRequestHandler):
         frame: bytes | None = None
         if directive.get("mode") == "audio":
             try:
-                audio_path = resolve_game_audio_path(game_id, str(directive.get("audio") or ""), root=_GAMES_ROOT)
+                audio_path = resolve_game_audio_path(
+                    game_id, str(directive.get("audio") or ""), root=_GAMES_ROOT
+                )
                 frame = encode_audio_frame(audio_path.read_bytes())
             except FileNotFoundError as exc:
-                self.send_error_json(DiceArenaError(f"audio file not found: {exc}", "AUDIO_FILE_NOT_FOUND", 404))
+                self.send_error_json(
+                    DiceArenaError(f"audio file not found: {exc}", "AUDIO_FILE_NOT_FOUND", 404)
+                )
                 return
             except (OSError, ValueError) as exc:
                 self.send_error_json(DiceArenaError(str(exc), "AUDIO_CONFIG_ERROR", 400))
@@ -1889,9 +1890,13 @@ class Handler(BaseHTTPRequestHandler):
                     "voice": str(directive.get("voice") or "default"),
                     "speed": directive.get("speed", 1.0),
                 }
-                provider = dispatcher.provider(speech_payload, game_id=game_id, provider_id=speech_provider_id)
+                provider = dispatcher.provider(
+                    speech_payload, game_id=game_id, provider_id=speech_provider_id
+                )
                 if not callable(getattr(provider, "stream", None)):
-                    raise InvalidRequestError(f"TTS provider {provider.id} does not implement stream()")
+                    raise InvalidRequestError(
+                        f"TTS provider {provider.id} does not implement stream()"
+                    )
             except DiceArenaError as exc:
                 self.send_error_json(exc)
                 return
@@ -1965,7 +1970,9 @@ class Handler(BaseHTTPRequestHandler):
                     "configured": False,
                 }
             )
-            adjudicator_id = _selected_provider_id(vision_game_id, "vision_adjudicator", "vision_yolov8_objdetect")
+            adjudicator_id = _selected_provider_id(
+                vision_game_id, "vision_adjudicator", "vision_yolov8_objdetect"
+            )
             adjudicator_health = _provider_health(adjudicator_id, "vision", "adjudicator")
             adjudicator_health = {
                 **adjudicator_health,
@@ -1991,7 +1998,11 @@ class Handler(BaseHTTPRequestHandler):
                     "tts_remote_provider": remote_id,
                     "tts_remote": {**remote_health, "configured": bool(remote_id)},
                     "board_input": _board_input_status(),
-                    "shared_audio": _SHARED_AUDIO.health() if _SHARED_AUDIO else {"worker_running": False},
+                    # The running round, for `dice-arena events ROUND_ID`; null between rounds.
+                    "active_round": _active_round_summary(),
+                    "shared_audio": _SHARED_AUDIO.health()
+                    if _SHARED_AUDIO
+                    else {"worker_running": False},
                     "camera": "config.json",
                 }
             )
@@ -2000,7 +2011,10 @@ class Handler(BaseHTTPRequestHandler):
             requested = parse_qs(parsed_url.query).get("provider", [""])[0]
             provider_id = requested or _selected_tts_id("dice")
             health = _provider_health(provider_id, "tts")
-            self.send_json(health, HTTPStatus.OK if health.get("ok") is not False else HTTPStatus.SERVICE_UNAVAILABLE)
+            self.send_json(
+                health,
+                HTTPStatus.OK if health.get("ok") is not False else HTTPStatus.SERVICE_UNAVAILABLE,
+            )
             return
         if path == "/api/components":
             self.send_json({"components": COMPONENTS.all(include_health=True)})
@@ -2050,7 +2064,8 @@ class Handler(BaseHTTPRequestHandler):
                         (
                             e
                             for e in reversed(snap["events"])
-                            if e.get("event") == "speech" and e.get("state_version") == snap.get("state_version")
+                            if e.get("event") == "speech"
+                            and e.get("state_version") == snap.get("state_version")
                         ),
                         None,
                     )
@@ -2108,9 +2123,12 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 command = self.read_json()
                 if command.get("action") == "intent" and (
-                    not isinstance(command.get("state"), str) or not isinstance(command.get("state_version"), int)
+                    not isinstance(command.get("state"), str)
+                    or not isinstance(command.get("state_version"), int)
                 ):
-                    raise InvalidRequestError("state and state_version are required for a session intent")
+                    raise InvalidRequestError(
+                        "state and state_version are required for a session intent"
+                    )
                 self.send_json(_get_session().submit(command))
             except DiceArenaError as exc:
                 self.send_error_json(exc)
@@ -2121,7 +2139,9 @@ class Handler(BaseHTTPRequestHandler):
                 dispatcher = _tts_dispatcher()
                 provider = dispatcher.provider(payload)
                 if not callable(getattr(provider, "stream", None)):
-                    raise InvalidRequestError(f"TTS provider {provider.id} does not implement stream()")
+                    raise InvalidRequestError(
+                        f"TTS provider {provider.id} does not implement stream()"
+                    )
             except DiceArenaError as exc:
                 self.send_error_json(exc)
                 return
@@ -2244,7 +2264,9 @@ class Handler(BaseHTTPRequestHandler):
                 {
                     "listening": started,
                     "wake_phrases": standby["wake_phrases"] if started else [],
-                    "games": [{"id": game_id, "phrases": words} for game_id, words in game_phrases.items()]
+                    "games": [
+                        {"id": game_id, "phrases": words} for game_id, words in game_phrases.items()
+                    ]
                     if started
                     else [],
                     "cursor": cursor,
@@ -2285,7 +2307,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(
                 {
                     "listening": started,
-                    "games": [{"id": game_id, "phrases": words} for game_id, words in game_phrases.items()]
+                    "games": [
+                        {"id": game_id, "phrases": words} for game_id, words in game_phrases.items()
+                    ]
                     if started
                     else [],
                     "confirm_phrases": confirm_phrases if started else [],
@@ -2467,8 +2491,6 @@ def main() -> None:
     # 归位不变量的开机档：开始服务前把臂拉回 home。失败只打日志，避免
     # 没接臂的部署永久无法启动；成功则第一局复用已经热好的常驻控制器。
     _home_arm_on_boot()
-    # 空闲姿态巡检：桌面不在游戏里时盯臂是否离家（robot_home_patrol 开关）。
-    _run_home_patrol()
     shutdown_requested = threading.Event()
 
     def request_shutdown(signum: int, _frame: Any) -> None:

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """FAST FK must preserve the model pose, Jacobian and constrained IK solution."""
 
 import unittest
@@ -19,9 +21,19 @@ class FastIKTests(unittest.TestCase):
         start = np.array([0.94984, -1.35877, -2.07918, 1.57910, 0.07915, -0.46152, -0.71604])
         tcp = np.eye(4)
         tcp[:3, 3] = [0.1, 0.02, 0.03]
-        old = np.array(vertical_targets(start, tcp, 0.05, [15, -13, 5], single_target=True, fast_fk=True)[0])
+        old = np.array(
+            vertical_targets(start, tcp, 0.05, [15, -13, 5], single_target=True, fast_fk=True)[0]
+        )
         new = np.array(
-            vertical_targets(start, tcp, 0.05, [15, -13, 5], single_target=True, fast_fk=True, minimize_travel=True)[0]
+            vertical_targets(
+                start,
+                tcp,
+                0.05,
+                [15, -13, 5],
+                single_target=True,
+                fast_fk=True,
+                minimize_travel=True,
+            )[0]
         )
         target = kin.forward(start)[0] @ tcp
         target[2, 3] += 0.05
@@ -33,8 +45,13 @@ class FastIKTests(unittest.TestCase):
         from cup_grasp_demo.flow.green_cup_planning import minimize_joint_travel
 
         start = np.radians([25, -80, -100, 70, 0, -13, 5])
-        with patch("cup_grasp_demo.flow.green_cup_planning.minimize", return_value=SimpleNamespace(success=False)):
-            np.testing.assert_array_equal(minimize_joint_travel(start, start, Kinematics().forward(start)[0]), start)
+        with patch(
+            "cup_grasp_demo.flow.green_cup_planning.minimize",
+            return_value=SimpleNamespace(success=False),
+        ):
+            np.testing.assert_array_equal(
+                minimize_joint_travel(start, start, Kinematics().forward(start)[0]), start
+            )
 
     def test_dogbox_reachable_targets_preserve_pose_and_joint_limits(self):
         kin = Kinematics()
@@ -45,7 +62,8 @@ class FastIKTests(unittest.TestCase):
             pose = kin.forward(q)[0]
             self.assertLessEqual(np.linalg.norm(pose[:3, 3] - target[:3, 3]), 0.0015)
             self.assertLessEqual(
-                np.linalg.norm(Rotation.from_matrix(target[:3, :3] @ pose[:3, :3].T).as_rotvec()), np.radians(1)
+                np.linalg.norm(Rotation.from_matrix(target[:3, :3] @ pose[:3, :3].T).as_rotvec()),
+                np.radians(1),
             )
             self.assertTrue(np.all(q >= kin.lower + np.radians(1)))
             self.assertTrue(np.all(q <= kin.upper - np.radians(1)))
@@ -55,11 +73,17 @@ class FastIKTests(unittest.TestCase):
         vectors = list(Rotation.random(1000, random_state=rng).as_rotvec())
         axis = np.array([1.0, -2.0, 3.0])
         axis /= np.linalg.norm(axis)
-        vectors += [axis * a for a in [0.0, 1e-12, 1e-8, 1e-4, np.pi - 1e-3, np.pi - 1e-5, np.pi, np.pi + 1e-6]]
+        vectors += [
+            axis * a
+            for a in [0.0, 1e-12, 1e-8, 1e-4, np.pi - 1e-3, np.pi - 1e-5, np.pi, np.pi + 1e-6]
+        ]
         for vector in vectors:
             matrix = Rotation.from_rotvec(vector).as_matrix()
             np.testing.assert_allclose(
-                proper_rotation_vector(matrix), Rotation.from_matrix(matrix).as_rotvec(), atol=1e-10, rtol=1e-10
+                proper_rotation_vector(matrix),
+                Rotation.from_matrix(matrix).as_rotvec(),
+                atol=1e-10,
+                rtol=1e-10,
             )
 
     def test_older_rotation_api_falls_back_to_checked_conversion(self):
@@ -78,8 +102,12 @@ class FastIKTests(unittest.TestCase):
         tcp[:3, 3] = [0.10, 0.02, 0.03]
         for distance in (0.05, -0.05):
             slow = vertical_targets(seed, tcp, distance, [0, -13, 5], single_target=True)
-            fast = vertical_targets(seed, tcp, distance, [0, -13, 5], single_target=True, fast_fk=True)
-            np.testing.assert_allclose(kin.forward(fast[-1])[0] @ tcp, kin.forward(slow[-1])[0] @ tcp, atol=1e-6)
+            fast = vertical_targets(
+                seed, tcp, distance, [0, -13, 5], single_target=True, fast_fk=True
+            )
+            np.testing.assert_allclose(
+                kin.forward(fast[-1])[0] @ tcp, kin.forward(slow[-1])[0] @ tcp, atol=1e-6
+            )
 
     def test_random_joint_poses_and_jacobians_match(self):
         kin = Kinematics()

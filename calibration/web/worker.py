@@ -1,3 +1,5 @@
+# Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+# SPDX-License-Identifier: Apache-2.0
 """One process per web job. Legacy module adapters exist only in this process."""
 
 import importlib
@@ -10,7 +12,13 @@ from pathlib import Path
 
 from calibration.web.common import CODE, HARDWARE, MOTION, digest, event, read, resolve, write
 from calibration.web.quality import evaluate
-from calibration.web.runtime import BrowserAutoView, BrowserPreview, LiveCamera, confirm_hold, confirm_stationary
+from calibration.web.runtime import (
+    BrowserAutoView,
+    BrowserPreview,
+    LiveCamera,
+    confirm_hold,
+    confirm_stationary,
+)
 from calibration.workflow import Workflow
 
 sys.path.insert(0, str(CODE / "calibration"))
@@ -32,7 +40,13 @@ def reconcile_home(job, config, proof):
     ):
         raise ValueError("缺少新鲜静止反馈，不能确认 HOME")
     error = math.degrees(max(abs(a - b) for a, b in zip(q, load_home(home))))
-    evidence = dict(proof, home_file=str(home), home_sha256=digest(home), joint_error_deg=error, at_home=error <= 0.8)
+    evidence = dict(
+        proof,
+        home_file=str(home),
+        home_sha256=digest(home),
+        joint_error_deg=error,
+        at_home=error <= 0.8,
+    )
     event(job / "home_check.json", **evidence)
     path = resolve(config["state_file"])
     state = read(path, {})
@@ -52,7 +66,7 @@ class BrowserWorkflow(Workflow):
 
     def return_to_home(self):
         from home_start import load_home, return_home
-        from sensors import NeroFeedback
+        from sensors import ArmFeedback
         import math
 
         self.save(home_required=True, home_return=None, home_check=None)
@@ -68,14 +82,16 @@ class BrowserWorkflow(Workflow):
         home = resolve(self.c["home"])
         target = load_home(home)
         motion = self.c["motion"]
-        return_home(home, self.c["channel"], motion["speed_percent"], motion["speed_deg_s"], motion["acc_deg_s2"])
-        arm = NeroFeedback(self.c["channel"])
+        return_home(home, motion["speed_percent"], motion["speed_deg_s"], motion["acc_deg_s2"])
+        arm = ArmFeedback()
         try:
             proof = confirm_stationary(arm)
             error = math.degrees(max(abs(a - b) for a, b in zip(proof["joints_rad"], target)))
             if error > 0.8:
                 raise RuntimeError("未确认 HOME 到位；结果已保留，请重新回 HOME")
-            evidence = dict(proof, home_file=str(home), home_sha256=digest(home), joint_error_deg=error)
+            evidence = dict(
+                proof, home_file=str(home), home_sha256=digest(home), joint_error_deg=error
+            )
             event(self.job / "home_return.json", status="completed", **evidence)
             self.save(home_required=False, home_return=evidence)
             event(
@@ -154,7 +170,13 @@ class BrowserWorkflow(Workflow):
         if self.state.get("hand_home_required"):
             values["home_required"] = True
         # Legacy save stringifies artifact paths; keep Web motion evidence typed.
-        for key in ("home_required", "home_return", "home_check", "hand_home_required", "hand_home"):
+        for key in (
+            "home_required",
+            "home_return",
+            "home_check",
+            "hand_home_required",
+            "hand_home",
+        ):
             if key in values:
                 self.state[key] = values.pop(key)
         if "teaching_dataset" in values:
@@ -188,7 +210,9 @@ class BrowserWorkflow(Workflow):
                 args[i] = path
         event(self.job / "stage.json", script=script)
         print("步骤:", script, *args, flush=True)
-        module = "calibration.tools." + Path(script).stem if "/tools/" in script else Path(script).stem
+        module = (
+            "calibration.tools." + Path(script).stem if "/tools/" in script else Path(script).stem
+        )
         try:
             code = importlib.import_module(module).main([str(a) for a in args])
         except SystemExit as exc:
@@ -203,7 +227,7 @@ def install_adapters(job, request, config, on_motion_ready=None):
     import preview
     from core import distance, inverse, matrix
 
-    base_camera, base_arm = sensors.RealSenseCamera, sensors.NeroFeedback
+    base_camera, base_arm = sensors.RealSenseCamera, sensors.ArmFeedback
     cameras = []
     stop_evidence = []
     motion_armed = False
@@ -221,7 +245,11 @@ def install_adapters(job, request, config, on_motion_ready=None):
         state.update(home_required=True, hand_home_required=True, hand_home=None)
         write(path, state)
         actual = original_home(arm, *args, **kwargs)
-        event(job / "progress.json", phase="HAND_HOME", message="机械臂已到 HOME，正在将灵巧手六路归零")
+        event(
+            job / "progress.json",
+            phase="HAND_HOME",
+            message="机械臂已到 HOME，正在将灵巧手六路归零",
+        )
         proof = reset_hand(arm, job)
         event(job / "progress.json", phase="HAND_COMMAND_SENT", message="灵巧手归零指令已发送")
         state = read(path, {})
@@ -255,7 +283,7 @@ def install_adapters(job, request, config, on_motion_ready=None):
                 super().close()
 
     sensors.RealSenseCamera = camera_factory
-    sensors.NeroFeedback = WebArm
+    sensors.ArmFeedback = WebArm
     preview.CollectionPreview = lambda: BrowserPreview(job)
 
     original_capture = calibrate.capture_sample
@@ -281,7 +309,11 @@ def install_adapters(job, request, config, on_motion_ready=None):
         for old in previous:
             arm_change = distance(matrix(old["T_base_flange"]), matrix(sample["T_base_flange"]))
             board_change = distance(matrix(old["T_camera_board"]), matrix(sample["T_camera_board"]))
-            if (arm_change[0] > 0.01 or arm_change[1] > 5) and board_change[0] < 0.0008 and board_change[1] < 0.3:
+            if (
+                (arm_change[0] > 0.01 or arm_change[1] > 5)
+                and board_change[0] < 0.0008
+                and board_change[1] < 0.3
+            ):
                 raise ValueError("检测到的板没有随末端移动；请遮挡桌面固定板并检查末端板")
         previous.append(sample)
         return sample, image, vis
@@ -298,7 +330,11 @@ def install_adapters(job, request, config, on_motion_ready=None):
         try:
             sample, image, vis = validate_capture(*args, **kwargs, frame_observer=archive.record)
             sample["frame_archive"] = str(path)
-            archive.finish("capture_validated", sample=sample, note="是否用于求解以数据集中的 sample_*.json 为准")
+            archive.finish(
+                "capture_validated",
+                sample=sample,
+                note="是否用于求解以数据集中的 sample_*.json 为准",
+            )
             return sample, image, vis
         except BaseException as exc:
             archive.finish("rejected", error=str(exc) or type(exc).__name__)
@@ -328,13 +364,13 @@ def inspect_devices(job, config, base_arm, camera_factory):
     board = read(resolve(config["hand_board"]))
     camera = camera_factory(config["serial"], image_profile=board.get("image_profile"))
     detector = sensors.CharucoDetector(board)
-    arm = base_arm(config["channel"])
+    arm = base_arm()
     try:
         while True:
             joints = arm.read_joints()
             image = camera.capture()
             try:
-                _, quality, _ = detector.detect(image, camera.K, camera.D)
+                _, quality, _ = detector.detect(image, camera.camera_matrix, camera.dist_coeffs)
                 event(job / "detection.json", detected=True, quality=quality)
             except ValueError as exc:
                 event(job / "detection.json", detected=False, reason=str(exc))
@@ -376,7 +412,9 @@ def main():
         # locks until cleanup completes; a replacement server cannot race it.
         while not finished.wait(0.25):
             heartbeat = read(job / "heartbeat.json", {})
-            expired = time.monotonic() - heartbeat.get("monotonic", 0) > request.get("heartbeat_timeout", 10)
+            expired = time.monotonic() - heartbeat.get("monotonic", 0) > request.get(
+                "heartbeat_timeout", 10
+            )
             if expired or (job / "cancel.json").exists():
                 if expired:
                     event(job / "cancel.json", reason="控制页面或服务心跳丢失")
@@ -399,14 +437,24 @@ def main():
             framework.pin(motion=action in MOTION)
             device_open = True
         base_arm, camera_factory, cameras, stop_evidence = install_adapters(
-            job, request, config, on_motion_ready=lambda: w.save(home_required=True, home_return=None, home_check=None)
+            job,
+            request,
+            config,
+            on_motion_ready=lambda: w.save(home_required=True, home_return=None, home_check=None),
         )
         if request.get("source_path"):
             if digest(request["source_path"]) != request["source_sha256"]:
                 raise ValueError("源标定文件已改变，请重新检查和确认")
         w.prepare_source()
         # Make selected paths unambiguous to worker adapters and legacy workflow.
-        for key in ("plan", "registration", "result", "dataset", "teaching_dataset", "teaching_calibration"):
+        for key in (
+            "plan",
+            "registration",
+            "result",
+            "dataset",
+            "teaching_dataset",
+            "teaching_calibration",
+        ):
             if w.state.get(key):
                 w.c[key] = w.state[key]
         config.update(w.c)
@@ -441,7 +489,7 @@ def main():
         if action in HARDWARE and base_arm is not None and device_open:
             arm = None
             try:
-                arm = base_arm(config["channel"])
+                arm = base_arm()
                 proof = confirm_stationary(arm)
                 event(job / "stop.json", **proof)
                 if action in MOTION or action == "inspect":
@@ -460,7 +508,11 @@ def main():
             except Exception as exc:
                 cleanup_errors.append(str(exc))
         if cleanup_errors:
-            outcome.update(status="failed", error="设备释放异常：" + "; ".join(cleanup_errors), needs_device_check=True)
+            outcome.update(
+                status="failed",
+                error="设备释放异常：" + "; ".join(cleanup_errors),
+                needs_device_check=True,
+            )
         event(job / "outcome.json", **outcome)
 
 

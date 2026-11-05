@@ -1,3 +1,5 @@
+// Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
+// SPDX-License-Identifier: Apache-2.0
 #include "yolov8_detector.h"
 
 #include <algorithm>
@@ -32,15 +34,18 @@ float iou(const Detection& a, const Detection& b) {
     return denom > 0.0f ? inter / denom : 0.0f;
 }
 
-std::vector<Detection> nms_class_aware(std::vector<Detection> candidates, float iou_threshold, int max_detections) {
+std::vector<Detection> nms_class_aware(std::vector<Detection> candidates, float iou_threshold,
+                                       int max_detections) {
     std::sort(candidates.begin(), candidates.end(),
-        [](const Detection& a, const Detection& b) { return a.confidence > b.confidence; });
+              [](const Detection& a, const Detection& b) { return a.confidence > b.confidence; });
     std::vector<Detection> kept;
-    kept.reserve(std::min<std::size_t>(candidates.size(), static_cast<std::size_t>(max_detections)));
+    kept.reserve(
+            std::min<std::size_t>(candidates.size(), static_cast<std::size_t>(max_detections)));
     for (const auto& candidate : candidates) {
         bool suppressed = false;
         for (const auto& selected : kept) {
-            if (candidate.class_id == selected.class_id && iou(candidate, selected) > iou_threshold) {
+            if (candidate.class_id == selected.class_id &&
+                iou(candidate, selected) > iou_threshold) {
                 suppressed = true;
                 break;
             }
@@ -68,7 +73,8 @@ struct Yolov8Detector::Impl {
 Yolov8Detector::Yolov8Detector() = default;
 Yolov8Detector::~Yolov8Detector() = default;
 
-bool Yolov8Detector::init(const std::string& model_path, int intra_threads, const std::string& ep_affinity) {
+bool Yolov8Detector::init(const std::string& model_path, int intra_threads,
+                          const std::string& ep_affinity) {
     try {
         impl_ = std::make_unique<Impl>();
         Ort::SessionOptions options;
@@ -123,20 +129,24 @@ bool Yolov8Detector::init(const std::string& model_path, int intra_threads, cons
     }
 }
 
-std::vector<Detection> Yolov8Detector::infer(const float* data, std::size_t count, float conf_threshold, float scale,
-    int pad_x, int pad_y, int image_width, int image_height, float iou_threshold, int max_detections) {
+std::vector<Detection> Yolov8Detector::infer(const float* data, std::size_t count,
+                                             float conf_threshold, float scale, int pad_x,
+                                             int pad_y, int image_width, int image_height,
+                                             float iou_threshold, int max_detections) {
     if (!impl_ || !impl_->session) throw std::runtime_error("detector is not initialized");
     if (!data || count != static_cast<std::size_t>(3 * kModelWidth * kModelHeight))
         throw std::runtime_error("unexpected input tensor size; expected 3*640*640 floats");
 
     Ort::MemoryInfo memory_info("Cpu", OrtAllocatorType::OrtDeviceAllocator, 0, OrtMemTypeDefault);
     const std::array<int64_t, 4> input_shape{1, 3, kModelHeight, kModelWidth};
-    Ort::Value input = Ort::Value::CreateTensor<float>(
-        memory_info, const_cast<float*>(data), count, input_shape.data(), input_shape.size());
+    Ort::Value input = Ort::Value::CreateTensor<float>(memory_info, const_cast<float*>(data), count,
+                                                       input_shape.data(), input_shape.size());
     const char* input_names[] = {input_name_.c_str()};
     const char* output_names[] = {output_name_.c_str()};
-    auto outputs = impl_->session->Run(Ort::RunOptions{nullptr}, input_names, &input, 1, output_names, 1);
-    if (outputs.empty() || !outputs[0].IsTensor()) throw std::runtime_error("YOLOv8 output is not a tensor");
+    auto outputs =
+            impl_->session->Run(Ort::RunOptions{nullptr}, input_names, &input, 1, output_names, 1);
+    if (outputs.empty() || !outputs[0].IsTensor())
+        throw std::runtime_error("YOLOv8 output is not a tensor");
 
     auto output_info = outputs[0].GetTensorTypeAndShapeInfo();
     const std::vector<int64_t> shape = output_info.GetShape();
@@ -167,7 +177,8 @@ std::vector<Detection> Yolov8Detector::infer(const float* data, std::size_t coun
     static int debug_frames = 0;
     if (debug_frames < 3) {
         std::cerr << "YOLOv8 output debug: layout=" << (channels_first ? "[1,C,N]" : "[1,N,C]")
-                    << " channels=" << channels << " predictions=" << predictions << " classes=" << num_classes << "\n";
+                  << " channels=" << channels << " predictions=" << predictions
+                  << " classes=" << num_classes << "\n";
         ++debug_frames;
     }
 
@@ -195,8 +206,8 @@ std::vector<Detection> Yolov8Detector::infer(const float* data, std::size_t coun
         const float cy = at(p, 1);
         const float w = at(p, 2);
         const float h = at(p, 3);
-        if (!std::isfinite(cx) || !std::isfinite(cy) || !std::isfinite(w) || !std::isfinite(h) || w <= 0.0f ||
-            h <= 0.0f)
+        if (!std::isfinite(cx) || !std::isfinite(cy) || !std::isfinite(w) || !std::isfinite(h) ||
+            w <= 0.0f || h <= 0.0f)
             continue;
         Detection d;
         d.x1 = (cx - 0.5f * w - static_cast<float>(pad_x)) * scale;
