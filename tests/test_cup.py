@@ -14,6 +14,8 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 SDK = ROOT.parents[2]
+# The installed Mock configuration; tests replace its @...@ paths.
+MOCK = ROOT / "config/mock.install.json.in"
 sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(SDK / "components/control/manipulation/bindings/python"))
 from cup_shake.policy import CupPolicy  # noqa: E402 - source-tree test paths
@@ -79,18 +81,6 @@ class SiteConfigurationTests(unittest.TestCase):
             "def validate(config):\n    return config['green_cup']\n",
             encoding="utf-8",
         )
-        gestures = self.source / "configs/actions/gestures/result_feedback.json"
-        gestures.parent.mkdir(parents=True)
-        gestures.write_text(
-            json.dumps(
-                dict(
-                    gestures={
-                        name: dict(hand_0_100=[0] * 6) for name in ("yeah", "thumbs-up", "tie")
-                    }
-                )
-            ),
-            encoding="utf-8",
-        )
         (self.root / "green_cup.json").write_text(
             json.dumps(
                 dict(green_cup=dict(open_targets_0_100=[0] * 6, grip_targets_0_100=[10] * 6))
@@ -123,19 +113,18 @@ class SiteConfigurationTests(unittest.TestCase):
         self.assertIn(str(self.destination), result.stderr)
         self.assertNotIn("Traceback", result.stderr)
 
-    def test_new_configuration_keeps_relative_paths_and_targets(self):
+    def test_new_configuration_keeps_relative_paths_and_no_hand_copy(self):
         result = self.configure()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(self.marker.is_file())
         config = json.loads(self.destination.read_text())
-        self.assertEqual(
-            config["open_positions"], [1] * 6
-        )  # hand_0_100 0 is open; framework 1 is open.
-        self.assertEqual(config["grip_positions"], [0.9] * 6)
-        self.assertEqual(config["duration_s"], 0.5)
-        for key in ("executable", "device_plan", "policy_library"):
+        self.assertEqual(config["schema_version"], 3)
+        for key in ("executable", "device_plan", "policy_library", "state_file"):
             self.assertFalse(Path(config[key]).is_absolute())
         self.assertEqual(config["planner"]["config"], "green_cup.json")
+        # Hand poses are read from green_cup.json when the application connects, never copied.
+        for key in ("open_positions", "grip_positions", "duration_s", "gestures"):
+            self.assertNotIn(key, config)
 
     def test_existing_configuration_preserved_before_loading_dependencies(self):
         original = b'{"grip_confirmation": "operator", "site_parameter": 42}\n'
@@ -208,6 +197,15 @@ class PolicyTests(unittest.TestCase):
             self.complete(name)
         self.assertEqual(self.policy.state, "ready")
 
+    def test_abandoned_phase_keeps_the_state(self):
+        self.complete("home")
+        self.policy.step("approach", 0)
+        self.policy.abandon("approach")
+        self.assertEqual((self.policy.state, self.policy.active), ("ready", ""))
+        self.complete("approach")  # The same phase may begin again.
+        with self.assertRaises(RuntimeError):
+            self.policy.abandon("grip")  # Only the active phase can be abandoned.
+
     def test_fault_never_recovers_implicitly(self):
         self.policy.step("failure", 2)
         self.assertEqual(self.policy.state, "fault")
@@ -215,15 +213,23 @@ class PolicyTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.complete(name)
 
-    def test_configuration_of_the_former_hand_scale_is_refused(self):
+    def test_older_configuration_and_misplaced_hand_poses_are_refused(self):
         from cup_shake.runtime import CupApplication
 
         with tempfile.TemporaryDirectory(prefix="dice schema ") as temporary:
-            config = json.loads((ROOT / "config/mock.json").read_text(encoding="utf-8"))
-            config["schema_version"] = 1
+            config = json.loads(MOCK.read_text(encoding="utf-8"))
             path = Path(temporary) / "cup_application.json"
-            path.write_text(json.dumps(config), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "schema_version 2"):
+            for change, message in (
+                (dict(schema_version=2), "schema_version 3"),
+                # A green cup planner reads its hand poses from green_cup.json.
+                (dict(planner=dict(type="green_cup")), "remove duration_s, gestures"),
+            ):
+                path.write_text(json.dumps(dict(config, **change)), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, message):
+                    CupApplication(path)
+            fixture = {k: v for k, v in config.items() if k != "grip_positions"}
+            path.write_text(json.dumps(fixture), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "fixture planner needs"):
                 CupApplication(path)
 
     def test_visual_paths_resolve_from_application_configuration(self):
@@ -245,11 +251,13 @@ class PolicyTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get("MANIPULATION_DEVICE"), "device executable not supplied")
     def test_mock_full_application_and_cancel_latch(self):
         with tempfile.TemporaryDirectory(prefix="cup-application-") as temporary:
-            config = json.loads((ROOT / "config/mock.json").read_text())
+            config = json.loads(MOCK.read_text())
+            state_file = Path(temporary) / "runtime/task_state.json"
             config.update(
                 executable=os.environ["MANIPULATION_DEVICE"],
                 device_plan=str(SDK / "components/control/manipulation/examples/mock_device.yaml"),
                 policy_library=os.environ["CUP_TASK_LIBRARY"],
+                state_file=str(state_file),
             )
             filename = Path(temporary) / "app.json"
             filename.write_text(json.dumps(config))
@@ -264,6 +272,15 @@ class PolicyTests(unittest.TestCase):
             app = CupApplication(Path(temporary) / "loop.json", allow_motion=True)
             # Open-loop hand: the cycle completes on unverified hand moves, grip stays unverified.
             try:
+                # An unmeasured hand is opened before the first grasp, even at HOME.
+                self.assertFalse(app.command("query_pose")["at_home"])
+                events = []
+                self.assertEqual(
+                    app.command("grasp_cup", on_event=events.append)["status"], "completed"
+                )
+                self.assertIn("home", [event.get("phase") for event in events])
+                for command in ("shake_dice", "settle_dice"):
+                    self.assertEqual(app.command(command)["status"], "completed")
                 for command in ("grasp_cup", "shake_dice", "settle_dice"):
                     result = app.command(command)
                     self.assertEqual(result["status"], "completed", result)
@@ -284,13 +301,34 @@ class PolicyTests(unittest.TestCase):
                     self.assertEqual(
                         (result["status"], result["at_home"]), ("completed", True), result
                     )
+                # Cancelled before anything moved: nothing to inspect, the task stays idle.
                 result = app.command("grasp_cup", is_cancelled=lambda: True)
-                self.assertEqual(result["status"], "failed")
-                self.assertEqual(app.policy.state, "fault")
+                self.assertEqual((result["status"], app.policy.state), ("failed", "ready"))
+                self.assertFalse(state_file.exists())
+                # Cancelled once the arm moves: the task latches and the state is recorded.
+                calls = iter([False] * 6 + [True] * 1000)
+                result = app.command("grasp_cup", is_cancelled=lambda: next(calls))
+                self.assertEqual((result["status"], app.policy.state), ("failed", "fault"))
                 self.assertEqual(app.command("grasp_cup")["status"], "failed")
                 self.assertEqual(
                     app.command("reset_home")["status"], "failed"
                 )  # Never after a fault.
+            finally:
+                app.close()
+            # The record outlives the process until the operator resets it.
+            self.assertEqual(json.loads(state_file.read_text())["state"], "fault")
+            app = CupApplication(filename, allow_motion=True)
+            try:
+                result = app.command("reset_home")
+                self.assertEqual(result["status"], "failed")
+                self.assertIn("dice-arena reset", result["reason"])
+            finally:
+                app.close()
+            self.assertEqual(CupApplication(filename).reset()["state"], "fault")
+            self.assertFalse(state_file.exists())
+            app = CupApplication(filename, allow_motion=True)
+            try:
+                self.assertEqual(app.command("reset_home")["status"], "completed")
             finally:
                 app.close()
 

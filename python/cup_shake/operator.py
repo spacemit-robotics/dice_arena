@@ -3,10 +3,9 @@
 """Site preparation and explicit application operations, separate from device drivers."""
 
 from pathlib import Path
-from spacemit_manipulation.operator_support import Context, argument_parser, run
 
 
-CUP_COMMANDS = ("mock", "configure", "inspect", "cycle", "home")
+CUP_COMMANDS = ("mock", "configure", "inspect", "cycle", "home", "reset")
 
 
 def add_commands(commands):
@@ -16,8 +15,11 @@ def add_commands(commands):
     cycle = commands.add_parser(
         "cycle", help="execute one grab/shake/place cycle on the real device"
     )
+    commands.add_parser("home", help="the arm to HOME with the hand opening")
     commands.add_parser(
-        "home", help="the original home action: the arm to HOME with the hand opening"
+        "reset",
+        help="after inspecting the arm, hand and cup, forget the task state that blocks motion; "
+        "no motion",
     )
     cycle.add_argument(
         "--operator", help="name recorded with the grip confirmation (default: the login user)"
@@ -56,17 +58,3 @@ def execute(context, args):
             if args.operator:
                 arguments += ["--operator", args.operator]
         context.module("cup_shake", *arguments)
-
-
-def main():
-    parser = argument_parser(__doc__)
-    parser.add_argument(
-        "--source", help="algorithm root (default: installed dice_arena/algorithms)"
-    )
-    add_commands(parser.add_subparsers(dest="operation", required=True))
-    args = parser.parse_args()
-    execute(Context(args), args)
-
-
-if __name__ == "__main__":
-    raise SystemExit(run(main))

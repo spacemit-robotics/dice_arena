@@ -37,6 +37,12 @@ int cup_task_step(void* pointer, const char* phase, int action) {
             task.error = "operator inspection required";
             return 0;
         }
+        if (action == 3) {  // Abandon a begun phase that sent nothing: the state stays.
+            if (task.active != phase) return Reject(task, "no such active phase to abandon");
+            task.active.clear();
+            task.error.clear();
+            return 0;
+        }
         if (task.state == "fault") return Reject(task, "fault latched; no automatic recovery/home");
         const std::string name = phase;
         const std::map<std::string, std::pair<std::string, std::string>> transitions = {

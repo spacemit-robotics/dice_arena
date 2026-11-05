@@ -5,7 +5,7 @@ Workflow/SDKClient.
 
 Camera acquisition, inference, IK, geometry, path checks and the FAST motion profiles are the
 algorithms' own; the arm and hand move only through the manipulation framework. Each phase is
-delivered as the original FAST executor delivered it: synchronized trapezoid profiles at the
+delivered as the FAST executor defines it: synchronized trapezoid profiles at the
 configured phase speeds of the controller's live joint limits, the joint-shake recipe as streamed
 blended commands, and the placement as a controller-planned point move. The algorithms' own
 worker, recovery loop and startup claim are not invoked; pyAgxArm cannot be imported here.
@@ -19,6 +19,7 @@ import importlib.abc
 import math
 import os
 from pathlib import Path
+import shutil
 import sys
 import time
 import uuid
@@ -27,12 +28,29 @@ import numpy as np
 from .planners import file_hash
 
 KNOT_HZ = 100  # Profile knots; the device interpolates between them.
-STREAM_STEP_RAD = math.radians(0.5)  # Original stream step, which sets the command rate.
-COMMAND_STEP_RAD = math.radians(1)  # Original per-command step limit for transitions.
+STREAM_STEP_RAD = math.radians(0.5)  # Stream step, which sets the command rate.
+COMMAND_STEP_RAD = math.radians(1)  # Per-command step limit for transitions.
 SHAKE_SETTLE_S = 2.0  # Longest wait for the arm to reach the shake centre.
-ENDPOINT_RESEND_S = 0.05  # Original controller-endpoint re-send interval (LOWER).
-FINGER_MAX_SPEED_S = 0.01  # Shortest Revo2 execution time: the original max-speed mode.
+ENDPOINT_RESEND_S = 0.05  # Controller-endpoint re-send interval (LOWER).
+FINGER_MAX_SPEED_S = 0.01  # Shortest Revo2 execution time: the max-speed mode.
 GEOMETRY_FORMAT = 1
+# Capture data kept under the session directory: each process start makes a session, and each grasp
+# a run of about 7 MB. Older ones are removed, so a long demonstration never fills the disk.
+KEEP_SESSIONS = 3
+KEEP_RUNS = 20
+
+
+def prune(directory, keep, current=None):
+    """Remove all but the newest `keep` subdirectories (by modification time), never `current`."""
+    if not directory.is_dir():
+        return
+    entries = sorted(
+        (entry for entry in directory.iterdir() if entry.is_dir() and entry != current),
+        key=lambda entry: entry.stat().st_mtime,
+        reverse=True,
+    )
+    for entry in entries[keep - (1 if current is not None else 0) :]:
+        shutil.rmtree(entry, ignore_errors=True)
 
 
 def save_geometry(path, cache):
@@ -129,8 +147,10 @@ class GreenCupPlanner:
         self.workflow = object.__new__(pipeline.Workflow)
         work = self.workflow
         work.cfg, work.g = self.cfg, self.g
-        work.root = Path(config["session_directory"]).resolve() / uuid.uuid4().hex
+        sessions = Path(config["session_directory"]).resolve()
+        work.root = sessions / uuid.uuid4().hex
         work.root.mkdir(parents=True, exist_ok=False)
+        prune(sessions, KEEP_SESSIONS, current=work.root)
         work.tcp = np.asarray(
             pipeline.read_json(self.cfg["tcp_candidate"])["T_flange_contact_candidate"]
         )
@@ -149,7 +169,7 @@ class GreenCupPlanner:
         self.home = np.radians(pipeline.read_json(self.cfg["home"])["joints_deg"]).tolist()
         work.home = self.home
         work.table()
-        # FAST settings, as the original Workflow applies them (green_pipeline.Workflow.__init__).
+        # FAST settings, as green_pipeline.Workflow.__init__ applies them.
         work._joint_recipe = pipeline.read_json(root / self.g["joint_test_config"])
         pipeline.joint_trajectory(work._joint_recipe)
         self.profile = importlib.import_module("cup_grasp_demo.flow.joint_profile")
@@ -191,9 +211,8 @@ class GreenCupPlanner:
 
     @contextlib.contextmanager
     def geometry(self):
-        """The original FAST run loads the arm/hand collision geometry once
-        (cached_screen_geometry); every planner call and background task shares this planner's cache
-        of it."""
+        """The arm/hand collision geometry is loaded once (cached_screen_geometry); every planner
+        call and background task shares this planner's cache of it."""
         token = self.core._screen_cache.set(self.screen_cache)
         try:
             yield
@@ -231,8 +250,8 @@ class GreenCupPlanner:
             ).PreparedRoutes()
 
     def warm_up(self):
-        """Start the camera, model and collision geometry in the background (the original parallel
-        startup and HOME-phase geometry preparation). VisionResources creates no arm SDK owner."""
+        """Start the camera, model and collision geometry in the background, in parallel.
+        VisionResources creates no arm SDK owner."""
         if self.workflow._vision is None:
             runtime = importlib.import_module("cup_grasp_demo.flow.green_runtime")
             self.workflow._vision = runtime.VisionResources(
@@ -248,7 +267,7 @@ class GreenCupPlanner:
         self.geometry_ready.result(timeout=self.cfg["timeout_s"])
 
     def load_geometry(self):
-        """The collision geometry the original computes once per process (about 5 s on K3), stored
+        """The collision geometry, computed once (about 5 s on K3) and stored
         under SITE/runtime/geometry keyed by the content of every file it is computed from."""
         hand = importlib.import_module("cup_grasp_demo.hand_geometry")
         sources = [
@@ -276,9 +295,8 @@ class GreenCupPlanner:
                     old.unlink()
 
     def start_following(self, grasp):
-        """While the arm approaches, solve the lift endpoint from the planned grasp pose (the
-        original prepare_following overlap); LIFT reuses it when the hand closed there
-        (lift_seed_close)."""
+        """While the arm approaches, solve the lift endpoint from the planned grasp pose; LIFT
+        reuses it when the hand closed there (lift_seed_close)."""
         start = list(grasp)
 
         def solve():
@@ -290,8 +308,7 @@ class GreenCupPlanner:
         self.following = self.pool.submit(solve)
 
     def start_shake(self, limits):
-        """Plan and table-check the shake around the lift endpoint while the cup is lifted (the
-        original start_shake_prepare)."""
+        """Plan and table-check the shake around the lift endpoint while the cup is lifted."""
         work, centre = self.workflow, list(self.lift_end)
         work.held = self.held
 
@@ -302,7 +319,7 @@ class GreenCupPlanner:
         self.shake_future = self.pool.submit(plan)
 
     def unchanged(self):
-        """Files are re-hashed only when their metadata changed (the original cached digests)."""
+        """Files are re-hashed only when their metadata changed."""
         for path, (signature, digest) in self.fingerprints.items():
             current = stamp(path)
             if current != signature:
@@ -317,7 +334,7 @@ class GreenCupPlanner:
         warm."""
         self.warm_up()
         vision = self.workflow._vision
-        vision.camera_future.result(timeout=15)  # The original VisionResources.capture bounds.
+        vision.camera_future.result(timeout=15)  # The VisionResources.capture bounds.
         vision.model_future.result(timeout=30)
         self.geometry_ready.result(timeout=self.cfg["timeout_s"])
 
@@ -327,6 +344,20 @@ class GreenCupPlanner:
         with self.geometry():
             self.workflow.capture()
             self.workflow.plan()
+        prune(self.workflow.root / "runs", KEEP_RUNS)
+
+    def hand_poses(self):
+        """Open and grip hand positions (0 closed, 1 open) and the finger duration: the green cup
+        configuration is their only source. It keeps the hand's own scale (0 open, 100 closed)."""
+
+        def framework(values):
+            return [round(1 - value / 100, 4) for value in values]
+
+        return dict(
+            open=framework(self.g["open_targets_0_100"]),
+            grip=framework(self.g["grip_targets_0_100"]),
+            duration_s=float(self.g.get("fast_finger_duration_s", self.g["finger_duration_s"])),
+        )
 
     def speed_percent(self, phase):
         """FAST speed: fast_phase_speed_percent per phase, otherwise fast_speed_percent."""
@@ -380,7 +411,7 @@ class GreenCupPlanner:
                 )
                 times.append(elapsed + duration * i / count)
             elapsed += duration
-        # The original sample period is min(20 ms, 0.5 deg / peak speed).
+        # The sample period is min(20 ms, 0.5 deg / peak speed).
         rate = min(500.0, max(50.0, peak / STREAM_STEP_RAD))
         # FAST completion: hand over once the last target is sent; the arm settles meanwhile.
         return dict(
@@ -413,8 +444,7 @@ class GreenCupPlanner:
             if max(abs(a - b) for a, b in zip(current["joints_rad"], centre)) <= tolerance:
                 break
             if not current["moving"] or time.monotonic() > deadline:
-                # Settled elsewhere: re-read and re-check the shake from the real pose (original
-                # recovery).
+                # Settled elsewhere: re-read and re-check the shake from the real pose.
                 centre = list(current["joints_rad"])
                 plan, _ = work.build_shake(dict(success=True, limits=limits, q_after_rad=centre))
                 break
@@ -427,7 +457,7 @@ class GreenCupPlanner:
             self.profile.command_values(plan, plan["duration_s"] * i / count)
             for i in range(count + 1)
         ]
-        # The first command is sent one tick after the arm's position, as the original streamer did.
+        # The first command is sent one tick after the arm's position.
         times = [0.0] + [1 / rate + plan["duration_s"] * i / count for i in range(count + 1)]
         commands[-1] = list(start)
         return dict(
@@ -442,7 +472,7 @@ class GreenCupPlanner:
         )
 
     def gesture(self, name, state):
-        """A result-feedback gesture, or the original "home" action, as scripts/result_feedback.py
+        """A result-feedback gesture, or the "home" action, as scripts/result_feedback.py
         runs it (feedback_execution): the arm to the recipe pose at the recipe speed on the
         configured profile, checked against the HOME table scene, with the hand targets sent on
         schedule from the first arm command (together), after it (arm_then_hand) or before it
@@ -490,14 +520,12 @@ class GreenCupPlanner:
             (first + i * interval, [1 - value / 100 for value in pose], execution)
             for i, pose in enumerate(poses)
         ]
-        motion["hold_s"] = (
-            wait - execution
-        )  # The original waits the whole finger time after the last target.
+        motion["hold_s"] = wait - execution  # Waits the whole finger time after the last target.
         motion["hand_open"] = all(value == 0 for value in poses[-1])
         return motion
 
     def motions(self, phase, state):
-        """The deliveries of one phase, in order, as the original FAST executor issued them."""
+        """The deliveries of one phase, in order, as the FAST executor issues them."""
         with self.geometry():
             return self._motions(phase, state)
 
@@ -591,7 +619,7 @@ class GreenCupPlanner:
         return [stage["target_q_rad"] for stage in route["stages"]]
 
     def verify_lower(self, state):
-        """Placement arrival as the original checks it; returns a note when only recorded."""
+        """Placement arrival check; returns a note when only recorded."""
         actual = self.workflow.kin.forward(state["joints_rad"])[0] @ self.workflow.tcp
         target = self.workflow.kin.forward(self.lower_target)[0] @ self.workflow.tcp
         error_mm = float(self.np.linalg.norm(actual[:3, 3] - target[:3, 3])) * 1000

@@ -28,7 +28,8 @@ void cup_task_destroy(void* task);
  *
  * @param task Task handle.
  * @param phase Phase name.
- * @param action 0 begins the phase, 1 commits its success, 2 latches a failure.
+ * @param action 0 begins the phase, 1 commits its success, 2 latches a failure, 3 abandons the
+ *        begun phase when nothing was sent to the device (the state is unchanged).
  * @return 0 when accepted; -1 when rejected (see cup_task_error()). A latched task rejects every
  *         later phase; there is no automatic recovery or homing.
  */

@@ -80,7 +80,14 @@ configure_file(tools/command.in ${CMAKE_CURRENT_BINARY_DIR}/${COMMAND_NAME} @ONL
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/${COMMAND_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(BUILD_TESTING)
-    set(MANIPULATION_DEVICE "" CACHE FILEPATH "Device executable for full Mock integration tests")
+    # The full Mock integration test runs against the installed manipulation component.
+    find_program(MANIPULATION_DEVICE manipulation-device
+        HINTS "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}"
+        DOC "Device executable for the full Mock integration test")
+    set(cup_test_device "")
+    if(MANIPULATION_DEVICE)
+        set(cup_test_device "${MANIPULATION_DEVICE}")
+    endif()
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME dice_arena_resources
         COMMAND ${Python3_EXECUTABLE} -m unittest discover
@@ -90,7 +97,7 @@ if(BUILD_TESTING)
     set_tests_properties(dice_arena_cup_contract PROPERTIES TIMEOUT 30)
     set_property(TEST dice_arena_cup_contract PROPERTY ENVIRONMENT
         "CUP_TASK_LIBRARY=$<TARGET_FILE:cup_task>"
-        "MANIPULATION_DEVICE=${MANIPULATION_DEVICE}"
+        "MANIPULATION_DEVICE=${cup_test_device}"
         "PYTHONDONTWRITEBYTECODE=1")
     add_test(NAME dice_arena_calibration
         COMMAND ${Python3_EXECUTABLE} -m pytest -q -p no:cacheprovider

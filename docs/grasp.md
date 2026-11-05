@@ -43,6 +43,8 @@ bash calibrate.sh apply
 
 结果保存在 `SITE/calibration/`，现场算法配置为 `SITE/green_cup.json`。
 
+标定网页也可以在后台运行：`bash calibration_web_service.sh start` 启动，`status` 查询，`stop` 停止。
+
 ## 2. 更新桌面
 
 相机、基座或外参变化后，重新采集并登记桌面：
@@ -77,4 +79,10 @@ dice-arena cycle
 dice-arena home
 ```
 
-可能持杯或故障锁定时拒绝执行。后台标定服务用 `bash calibration_web_service.sh stop` 停止。
+可能持杯或故障锁定时拒绝执行。故障锁定会记录在 `SITE/runtime/task_state.json`，重启后仍然有效。现场操作者检查机械臂、灵巧手和杯子并处理后，清除记录：
+
+```bash
+dice-arena reset
+```
+
+该命令不连接设备、不运动，只删除记录；之后重新启动 `dice-arena cycle` 或 `dice-arena serve`。

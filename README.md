@@ -44,7 +44,7 @@ mm --with-deps
 
 资源源站为 `https://archive.spacemit.com/ros2/manipulation/`，本应用的资源位于其中的 `dice_arena/` 目录。
 清单 `runtime_assets.json` 记录每个文件的源站路径、本地路径、大小和 SHA-256，下载时逐个校验。
-使用内网镜像时追加 `--base-url <镜像地址>`；已下载的资源可用 `python3 tools/check_assets.py --verify` 复核。
+使用内网镜像时追加 `--base-url <镜像地址>`，镜像地址对应源站根目录 `https://archive.spacemit.com/ros2/manipulation/`，其下保持相同的 `dice_arena/` 目录结构；已下载的资源可用 `python3 tools/check_assets.py --verify` 复核。
 `mm` 提示安装声明的系统依赖。骰子识别程序在 K3 上编译；随附 MediaMTX 适用于 Linux RISC-V 64 位。
 
 ## 配置设备
@@ -102,8 +102,8 @@ dice-arena configure
 ```
 
 配置保存到 `SITE/cup_application.json`，已有文件不覆盖。
-HOME、TCP、杯体尺寸和手型须匹配当前安装。`open_positions`、`grip_positions` 按设备配置的通道顺序给出
-归一化位置，`0` 为闭合、`1` 为张开。
+HOME、TCP、杯体尺寸和手型须匹配当前安装。抓取和张开手型、手指动作时长取自 `SITE/green_cup.json`
+（`grip_targets_0_100`、`open_targets_0_100`、`fast_finger_duration_s`，灵巧手刻度 `0` 张开、`100` 闭合）。
 
 ### 单次抓杯、摇杯和放杯
 
@@ -115,7 +115,8 @@ dice-arena cycle
 
 `cycle` 执行一次抓杯、摇杯和放杯。默认闭手后直接抬杯，不检测是否抓稳。
 需要回 HOME 时，先排除持物和路径障碍，再执行 `dice-arena home`；该命令同时张手。
-故障或持杯取消后不自动归位、张手或恢复，由现场操作者处理。
+故障或持杯取消后不自动归位、张手或恢复。任务状态记录在 `SITE/runtime/task_state.json`，重启后仍拒绝运动；
+现场操作者检查机械臂、灵巧手和杯子并处理后，执行 `dice-arena reset` 清除记录。
 
 ### 启动游戏
 
@@ -133,7 +134,8 @@ dice-arena serve
 | --- | --- |
 | `SITE/nero/device.yaml` | 设备驱动、连接、关节限位与末端通道 |
 | `SITE/green_cup.json` | 相机、外参、桌面、HOME、TCP、杯体与动作配方 |
-| `SITE/cup_application.json` | 设备配置引用、规划器、手型与持物确认方式 |
+| `SITE/cup_application.json` | 设备配置引用、规划器与持物确认方式 |
+| `SITE/runtime/` | 需要人工处理的任务状态 `task_state.json`、抓杯采集数据（只保留最近 3 次启动、每次最近 20 次抓杯） |
 | `SITE/dice_arena/config.json` | 游戏、语音与视频设置，首次启动游戏时生成 |
 
 重新安装不覆盖现场配置和标定结果。
