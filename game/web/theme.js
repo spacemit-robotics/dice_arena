@@ -35,7 +35,6 @@
   function updateHallCards() {
     const descriptions = {
       dice: '与机械臂同台摇骰，让 AI 识别点数、揭晓胜负。',
-      rps: '石头、剪刀、布，与 AI 轻松过招。',
     };
     for (const [id, copy] of Object.entries(descriptions)) {
       const node = document.querySelector(`[data-game="${id}"] .game-copy small`);
@@ -80,8 +79,8 @@
 
   window.ArenaTheme = {
     get current() { return THEME; },
-    resolveMeta(phase, fallback, gameId) {
-      const title = gameId === 'rps' && phase === 'rules' ? '听口令，一起出拳。' : titles[phase];
+    resolveMeta(phase, fallback) {
+      const title = titles[phase];
       return title ? [title, fallback[1]] : fallback;
     },
     renderPhase,

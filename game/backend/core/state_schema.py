@@ -37,8 +37,6 @@ ROBOT_COMMANDS = {
     "shake_dice",
     "settle_dice",
     "feedback",
-    "throw_gesture",
-    "prepare_throw",
     "reset_home",
     "ensure_home",
 }
@@ -168,28 +166,13 @@ def _validate_robot_action(action: Mapping[str, Any], field: str) -> None:
         "grasp_cup",
         "shake_dice",
         "settle_dice",
-        "throw_gesture",
         "reset_home",
         "ensure_home",
-        "prepare_throw",
     }:
         allowed.add("timeout_seconds")
         if "timeout_seconds" in action:
             # The robot provider accepts at most 180 s, queueing included.
             _require_number(action["timeout_seconds"], f"{field}.timeout_seconds", low=0, high=180)
-    if command == "throw_gesture":
-        # 出拳时机参数：进入状态起延迟 N 秒再派发（与口令音频/回执解耦）。
-        allowed.update(("delay_seconds", "prepared"))
-        if "prepared" in action and type(action["prepared"]) is not bool:
-            raise _error(field, "prepared must be boolean")
-        if "delay_seconds" in action:
-            _require_number(
-                action["delay_seconds"],
-                f"{field}.delay_seconds",
-                low=0,
-                high=30,
-                low_inclusive=True,
-            )
     extra = set(action) - allowed
     if extra:
         raise _error(field, f"robot {command} accepts no extra keys: {sorted(extra)}")

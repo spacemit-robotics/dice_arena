@@ -98,15 +98,6 @@ class SpacemitRobotProvider(RobotProvider):
         del is_cancelled
         return self._command("gesture:" + kind, on_event, _runs_to_completion, timeout_seconds)
 
-    def prepare_throw(self, *, on_event, is_cancelled, timeout_seconds=None):
-        return dict(status="failed", reason="RPS choreography is not part of the cup application")
-
-    def throw_gesture(
-        self, gesture=None, *, prepared=False, on_event, is_cancelled, timeout_seconds=None
-    ):
-        del gesture, prepared
-        return dict(status="failed", reason="RPS choreography is not part of the cup application")
-
     def reset_home(self, *, on_event, is_cancelled, timeout_seconds=None):
         # The arm to HOME with the hand opening. Refused while the cup may be held or after a fault:
         # those need the operator, never an automatic recovery.

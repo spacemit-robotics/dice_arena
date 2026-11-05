@@ -285,7 +285,7 @@ def with_global_defaults(
 
     Per field the game manifest wins; the arena fills only what it leaves
     out.  Display is a global presentation policy shared by all games. Dice
-    and RPS in display mode generate their source-frame role mapping internally.
+    in display mode generates its source-frame role mapping internally.
     The ASR section is another exception: it carries no switch of its own,
     so the arena breaker is written in as the effective ``enabled`` value.
     Returns a fresh dict — the source manifest and the games registry are
@@ -301,9 +301,9 @@ def with_global_defaults(
             providers.update(game_providers)
         merged["providers"] = providers
     display = arena.get("display")
-    if isinstance(display, Mapping) and merged.get("id") in ("dice", "rps"):
-        # Both detectors use the same source coordinates: blue/player LEFT,
-        # red/robot RIGHT. Screen rotation must never swap their ownership.
+    if isinstance(display, Mapping) and merged.get("id") == "dice":
+        # The detector uses fixed source coordinates: player LEFT,
+        # robot RIGHT. Screen rotation must never swap their ownership.
         # Keep this protocol field generated, not a second editable setting.
         merged["participants"] = {"player": "LEFT", "agent": "RIGHT"}
     elif "participants" not in merged and isinstance(arena.get("participants"), Mapping):

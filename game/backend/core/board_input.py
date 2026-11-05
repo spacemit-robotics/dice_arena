@@ -40,22 +40,17 @@ KEY_ACTIONS: dict[int, str] = {
 # riscv64/x86_64 均为 24 字节；32 位平台不同，但本项目只跑 64 位板子。
 _INPUT_EVENT = struct.Struct("qqHHi")
 
-# 局内意图表：{game_id: {state: {动作名: intent}}}，与 dice.js / rps.js 的
+# 局内意图表：{game_id: {state: {动作名: intent}}}，与 games/<游戏>.js 的
 # onKey 逐字对齐（改前端键位必须同步这里，契约测试会钉基本形状）。
 # analysis_failed 是失败页（页面相位仍渲染 analysis 视图）；shaking/stop_call
-# 刻意无键——机械臂摇物理上不应被打断；game_start/shake_countdown/rehome/
-# preparing/play 同样无键。
+# 刻意无键——机械臂摇物理上不应被打断；game_start/shake_countdown/rehome
+# 同样无键。
 INTENT_TABLE: dict[str, dict[str, dict[str, str]]] = {
     "dice": {
         "rules": {"confirm": "confirm", "down": "repeat", "back": "back"},
         "ready": {"confirm": "start_shake", "back": "back"},
         "arm_failed": {"back": "back", "down": "retry"},
         "analysis_failed": {"confirm": "new_round", "down": "retry", "back": "back"},
-        "result": {"confirm": "new_round", "back": "back"},
-    },
-    "rps": {
-        "rules": {"confirm": "confirm", "down": "repeat", "back": "back"},
-        "analysis_failed": {"confirm": "new_round", "back": "back"},
         "result": {"confirm": "new_round", "back": "back"},
     },
 }

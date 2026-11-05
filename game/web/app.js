@@ -4,7 +4,6 @@
 // 游戏流程由后端权威状态机驱动：前端通过 RoundClient 创建对局、提交意图、
 // 订阅事件流并渲染；台词以后端下发的 speech 指令播放，await 指令播完回执。
 import { register as registerDice } from './games/dice.js';
-import { register as registerRps } from './games/rps.js';
 import { createSessionClient } from './shared-session.js';
 import { refreshDisplayManifest } from './display-layout.js';
 
@@ -27,7 +26,7 @@ const views = [...document.querySelectorAll('[data-view]')];
 // camera composition during a game. Reparenting the existing SVG keeps one
 // accessible mascot in the DOM and makes its position follow the video frame
 // instead of the viewport. Game modules toggle .dice-video when entering and
-// leaving, so a small observer is enough for both dice and RPS.
+// leaving, so a small observer is enough for every game.
 function bindBuddyToLiveVideo() {
   const panel = $('analysisStreamPanel');
   const home = document.querySelector('.buddy-panel');
@@ -55,7 +54,7 @@ const SELECT_META = ['挑个游戏，开玩吧！', '选好游戏，再按下绿
 let currentPhaseMeta = SELECT_META;
 function renderThemeHeading() {
   const phase = state.phase;
-  const resolved = window.ArenaTheme.resolveMeta(phase, currentPhaseMeta, activeGame?.id);
+  const resolved = window.ArenaTheme.resolveMeta(phase, currentPhaseMeta);
   $('phaseTitle').textContent = resolved[0];
   renderPhaseCopy(phase, resolved[1]);
   window.ArenaTheme.renderPhase(state.phase, activeGame?.id, state.selectedGame);
@@ -1248,12 +1247,6 @@ function renderGameList() {
     name.textContent = game.name;
     const desc = document.createElement('small');
     desc.textContent = game.description || '';
-    if (game.id === 'rps') {
-      const category = document.createElement('span');
-      category.className = 'arena-only game-category';
-      category.textContent = '加赛体验';
-      copy.append(category);
-    }
     copy.append(name, desc);
 
     button.append(icon, copy);
@@ -1397,7 +1390,6 @@ const engine = {
 };
 
 registerGame(registerDice(engine));
-registerGame(registerRps(engine));
 bindBuddyToLiveVideo();
 
 $('startGame').addEventListener('click', enterSelectedGame);

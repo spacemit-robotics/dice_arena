@@ -223,21 +223,21 @@ class ControlSessionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             flow = self.fake_flow()
             output = io.StringIO()
-            action = Mock(return_value=dict(name="rock"))
+            action = Mock(return_value=dict(name="win"))
             server = control.ControlSession(
                 flow,
                 Path(directory) / "state.json",
                 io.StringIO(
-                    "action rock\nnext\nhome\naction rock\nuntil home\n"
+                    "action win\nnext\nhome\naction win\nuntil home\n"
                     '{"id":"finish","command":"advance","until":"RETURN_HOME"}\nq\n'
                 ),
                 output,
                 io.StringIO(),
-                actions=("home", "rock"),
+                actions=("home", "win"),
                 run_action=action,
             )
             self.assertEqual(server.serve(), 0)
-            action.assert_called_once_with("rock")
+            action.assert_called_once_with("win")
             reports = events(output)
             self.assertEqual(
                 [e["code"] for e in reports if e["event"] == "rejected"],
