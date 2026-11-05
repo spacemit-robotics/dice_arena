@@ -1,44 +1,45 @@
 # MOSS-TTS-Nano runtime
 
-此目录只保存 SpaceMIT EP 的 MOSS-TTS-Nano 底层 runtime、模型和运行库。
-它不是用户 CLI，也不提供 Demo、交互输入或 `aplay` 播放入口。
+本目录是语音组件 `tts_moss_nano` 使用的 MOSS-TTS-Nano 推理 runtime，在 SpacemiT EP 上运行。
+它只提供推理代码和模型目录，不是独立的命令行工具，也不直接播放音频。
+组件的使用、配置和管理见 [tts_moss_nano 语音组件](../../backend/components/tts_moss_nano/README.md)。
 
-Dice Arena 的生产功能包位于 `backend/components/tts_moss_nano/`：
+## 目录内容
 
-```text
-backend/components/tts_moss_nano/
-├── manifest.json      # provider 与生命周期声明
-├── config.json        # 组件参数单一来源
-├── settings.py        # 配置解析与校验
-├── provider.py        # TtsProvider 适配器
-├── daemon.py          # 内部 HTTP bridge
-├── launcher.py        # start/stop 生命周期 hook
-└── scripts/           # componentctl 使用的薄包装
-```
+| 路径 | 内容 | 来源 |
+| --- | --- | --- |
+| `src/` | 推理代码 `OnnxTtsRuntime` 与文本规范化 | 随源码提供 |
+| `models/MOSS-TTS-Nano-100M-ONNX-xslim-dynq/` | 语音生成模型 | 由 `python3 tools/download_assets.py` 下载，目录中的清单文件随源码提供 |
+| `models/MOSS-Audio-Tokenizer-Nano-ONNX/` | 音频编解码模型 | 同上 |
+| `voice/`、`assets/` | 参考音频 | 由 `python3 tools/download_assets.py` 下载 |
+| `licenses/` | MOSS-TTS-Nano 与 SpacemiT EP 的许可 | 随源码提供 |
+| `SHA256SUMS` | 模型文件摘要 | 随源码提供 |
 
-管理命令：
+- 运行依赖 `python3-spacemit-ort`、`spacemit-onnxruntime`、`python3-sentencepiece` 和 `python3-soundfile`，由 `mm` 按 `package.xml` 提示安装。
+- 由 `dice-arena` 启动时，合成输出写入 `SITE/dice_arena/moss-tts-outputs/`，不写入安装目录。
+
+## 管理命令
+
+在 SDK 根目录执行 `source build/envsetup.sh` 后：
 
 ```bash
-python3 backend/componentctl.py selected tts --game dice
-python3 backend/componentctl.py start tts_moss_nano
-python3 backend/componentctl.py health tts_moss_nano
-python3 backend/componentctl.py stop tts_moss_nano
+dice-arena component start tts_moss_nano
+dice-arena component health tts_moss_nano
+dice-arena component stop tts_moss_nano
 ```
+
+`dice-arena serve` 启动游戏前会自动启动语音服务，通常无需手动执行 `start`。
 
 ## 配置
 
-`backend/components/tts_moss_nano/config.json` 是运行参数的单一来源：
+运行参数只来自 `game/backend/components/tts_moss_nano/config.json`，字段说明见 [tts_moss_nano 参数](../../backend/components/tts_moss_nano/parameters.md)：
 
-- `runtime.root` 相对项目根目录；
-- `runtime.model_dir` 相对 MOSS runtime 根目录；
-- `runtime.base_url` 是 provider 访问的本地 HTTP 地址；
-- `voice.mode` 为 `builtin` 或 `clone`；clone 模式需要 `voice.reference_audio`；
-- `generation`、`startup`、`limits` 和 `execution_provider` 控制生成及启动参数。
+- `runtime.root` 相对 `game/`，`runtime.model_dir` 相对 `runtime.root`；
+- `voice.mode` 为 `builtin` 或 `clone`，`clone` 模式需要 `voice.reference_audio`；
+- `generation`、`startup`、`limits` 和 `execution_provider` 控制生成、启动和 EP 线程。
 
-环境变量可以覆盖配置，provider 与 daemon 使用同一 `settings.py` 解析优先级。
-daemon 是内部 HTTP 进程，不解析用户命令行参数。MOSS 当前只接受 `speed=1.0`，
-网页请求中的 provider 选择也不会覆盖后端游戏 manifest 的选择。
+使用限制：
 
-模型、Python wheels、SpaceMIT 库、参考音频和输出文件属于板端资产，默认被 Git
-忽略。runtime API 变更时只需调整该功能包和底层交付，不需要修改
-`backend/server.py` 或 `web/app.js`。
+- 只支持 `speed=1.0`。
+- 游戏使用的语音组件由游戏 manifest 和全局配置决定，网页请求不能更改。
+- 更换模型变体见 [MODEL_VARIANTS.md](MODEL_VARIANTS.md)。
