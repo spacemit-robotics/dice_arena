@@ -5,7 +5,7 @@
 ## 生效方式
 
 - 在源码中修改后，在应用目录执行 `mm`，安装到 `share/dice_arena/game/backend/components/tts_moss_nano/config.json`。
-- 语音服务进程在 `dice-arena serve` 退出后保留并被下次启动复用，因此修改后须停止语音服务再重启 `dice-arena serve`，步骤见 [README](README.md) 的「修改配置后重启」。
+- 语音服务在 `dice-arena serve` 退出后保留，供下次启动复用；因此修改后须先停止语音服务，再重新启动 `dice-arena serve`，步骤见 [README](README.md) 的「修改配置后重启」。
 
 ## runtime（本地服务）
 
@@ -43,7 +43,7 @@
 | `startup.start_timeout_seconds` | `300` | 等待服务就绪的最长时间，超时则停止启动中的进程 |
 | `limits.request_timeout_seconds` | `120` | 单次合成请求超时 |
 
-## execution_provider（SpaceMIT EP）
+## execution_provider（SpacemiT EP）
 
 | 字段 | 当前值 | 说明 |
 | --- | --- | --- |

@@ -6,7 +6,7 @@
 
 ## 生效方式
 
-在源码中修改后，从 SDK 根目录执行 `source build/envsetup.sh`，再安装：
+在源码中修改后，从 SDK 根目录执行 `source build/envsetup.sh`，再重新安装：
 
 ```bash
 cd application/native/dice_arena
@@ -128,18 +128,18 @@ mm
 
 | 命令 | 动作 |
 | --- | --- |
-| `grasp_cup` | 识别杯子、抓取并抬起，不摇动；开始时不在 HOME 则先回 HOME 并张手 |
+| `grasp_cup` | 识别杯子、抓取并抬起，不摇动；开始时不在 HOME，则先返回 HOME 并张开手部 |
 | `shake_dice` | 摇动已抬起的杯子，摇动结束即完成 |
-| `settle_dice` | 放回杯子、张手并回 HOME |
-| `feedback` | 按裁决结果做手势并保持，至下一次回 HOME：`win` 为 V 手势，`lose` 为竖拇指，`draw` 为开合手势 |
-| `reset_home` | 回 HOME 并张手；可能持杯时拒绝执行 |
-| `ensure_home` | 已在 HOME 且手张开时不动作，否则同 `reset_home` |
+| `settle_dice` | 放回杯子、张开手部并返回 HOME |
+| `feedback` | 按裁决结果做手势并保持到下一次返回 HOME：`win` 为 V 手势，`lose` 为竖拇指，`draw` 为开合手势 |
+| `reset_home` | 返回 HOME 并张开手部；可能持杯时拒绝执行 |
+| `ensure_home` | 已在 HOME 且手部张开时不动作，否则同 `reset_home` |
 
 - 动作在后台执行，不能声明 `await`；状态计时照常进行。命令串行执行，后发命令等待前一条完成。
 - `timeout_seconds` 可选，`feedback` 除外；范围 (0, 180] 秒，缺省 120，包含排队等待。
 - `feedback` 须声明 `select_by: "winner_role"`，`cases` 把 `PLAYER`、`AGENT`、`TIE` 映射到 `win`、`lose`、`draw`（机械臂视角）。
 - 命令结束后，按命令完成时所在状态的 `on_event` 路由 `robot.<command>.completed` 或 `robot.<command>.failed`；未声明的路由被忽略。
-- 动作发出后失败（含超时和回合取消）时，抓杯任务进入故障锁定，此后的机械臂命令均被拒绝，`arm_failed` 中的重试与归位也不执行；动作发出前的失败（如未识别到杯子）不锁定，可重试。故障处理见 [游戏服务与排障](../../../../docs/real_robot.md)。
+- 动作发出后失败（含超时和回合取消）时，抓杯任务进入故障锁定，此后的机械臂命令均被拒绝，`arm_failed` 中的重试与归位也不执行。动作发出前失败（如未识别到杯子）不锁定，可以重试。故障处理见 [游戏服务与排障](../../../../docs/real_robot.md)。
 - `feedback`、`reset_home`、`ensure_home` 不因回合结束而中断。
 - 进入游戏时机械臂组件在后台连接设备，不运动；回合结束（退出、取消或出错）后执行一次 `ensure_home`。
 
@@ -163,4 +163,4 @@ mm
 
 - 抓杯与 `game_start` 过场、`shake_countdown` 倒计时同时进行；`shaking` 下发的 `shake_dice` 在抓杯完成后执行。
 - 「停」的播放与放杯同时进行，放杯完成后开始裁决。
-- `result` 中「再来一局」先经 `rehome` 回 HOME，再进入 `ready`。
+- `result` 中「再来一局」先经 `rehome` 返回 HOME，再进入 `ready`。

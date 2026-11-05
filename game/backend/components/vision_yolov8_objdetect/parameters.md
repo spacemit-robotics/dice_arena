@@ -18,7 +18,7 @@
 | --- | --- | --- |
 | `schema_version` | `1` | 固定为 `1` |
 | `runtime.binary` | `vision/yolov8_objdetect/bin/yolov8_camera` | 识别程序，相对 `game/`；`mm` 在 K3 上编译安装，缺失时 `dice-arena serve` 拒绝启动 |
-| `runtime.working_dir` | `vision/yolov8_objdetect` | 未设置 `DICE_RUNTIME_DIR` 时的进程工作目录；`dice-arena serve` 下工作目录为 `SITE/dice_arena/vision/`，OpenCL 缓存写在此处 |
+| `runtime.working_dir` | `vision/yolov8_objdetect` | 不经 `dice-arena` 运行时的进程工作目录；由 `dice-arena serve` 运行时为 `SITE/dice_arena/vision/`。OpenCL 缓存写在工作目录 |
 | `runtime.mode` | `resident` | `resident` 与 `prewarm_camera: true` 同时设置时，识别进程跨回合常驻复用；`per_request` 时每次裁决结束后停止 |
 | `runtime.prewarm_camera` | `true` | 常驻模式下保持摄像头与推流 |
 | `runtime.terminate_grace_seconds` | `5` | 代码不读取；停止识别进程时先发送 SIGTERM，2 秒未退出则强制结束 |
@@ -43,7 +43,7 @@
 | `width`、`height`、`fps` | `1280`、`720`、`24` | `1280`、`720`、`25` | MJPEG 采集模式，须为相机支持的模式 |
 | `focus`、`zoom` | `-1`、`180` | `0`、`150` | UVC 对焦与变焦值，`-1` 表示不设置；设置对焦时同时关闭自动对焦。控制设置失败时摄像头打开失败，相机不支持的控制须设为 `-1` |
 | `show_debug_text` | `false` | `true` | 在推流画面上叠加调试文字 |
-| `intra_threads` | `2` | `2` | SpaceMIT EP 推理线程数 |
+| `intra_threads` | `2` | `2` | SpacemiT EP 推理线程数 |
 | `ep_affinity` | `14;15` | `14;15` | EP 推理线程绑定的核，分号分隔，核数须等于 `intra_threads` |
 | `queue_depth` | `2` | `2` | 帧队列深度，限制在 1～8 |
 | `rtsp.enabled` | `true` | `false` | 向 MediaMTX 推送 H.264 |

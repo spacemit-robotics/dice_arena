@@ -12,10 +12,10 @@
 | `SITE/dice_arena/config.json` | 现场配置，游戏运行时读取的唯一副本 |
 | `game/backend/config.json` | 安装默认值，`mm` 安装到 `share/dice_arena/game/backend/config.json` |
 
-- `dice-arena serve` 启动时，若现场配置不存在，则从安装默认值复制一份；启动时打印 `game configuration: <路径>`。
-- 后端通过环境变量 `DICE_ARENA_CONFIG` 读取现场配置。重新安装不覆盖现场配置；修改安装默认值只影响新生成的现场配置。
+- `dice-arena serve` 启动时，若现场配置不存在，则从安装默认值复制一份，并打印 `game configuration: <路径>`。
+- 重新安装不覆盖现场配置；修改安装默认值只影响新生成的现场配置。
 - 直接编辑现场配置，保存后自动重载。内容无效时保留上一份有效配置，服务输出 `[arena] keep last good config: ...`。
-- `providers.tts_local` 在服务启动时确定，修改后需重启 `dice-arena serve`；其余字段的生效时机见字段说明。
+- `providers.tts_local` 在服务启动时确定，修改后须重新启动 `dice-arena serve`；其余字段的生效时机见字段说明。
 - 恢复默认值时，停止 `dice-arena serve`，删除现场配置后重新启动：
 
 ```bash
@@ -31,15 +31,15 @@ dice-arena serve
 | --- | --- | --- |
 | `schema_version` | `1` | 固定为 `1` |
 | `games_enabled` | `{"dice": true}` | 按游戏 id 启停，优先于游戏 manifest 的 `enabled`；未列出的游戏使用 manifest 的值。停用的游戏不在网页列表显示，也不能进入。刷新网页后生效 |
-| `providers.tts_local` | `tts_moss_nano` | 本地语音合成组件，台词 `mode: tts_local` 使用。所有启用游戏只能引用同一个本地语音组件，否则服务拒绝启动。修改后重启 `dice-arena serve` |
+| `providers.tts_local` | `tts_moss_nano` | 本地语音合成组件，供 `mode: tts_local` 的台词使用。所有启用的游戏只能引用同一个本地语音组件，否则服务拒绝启动。修改后须重新启动 `dice-arena serve` |
 | `providers.vision_adjudicator` | `vision_yolov8_objdetect` | 视觉裁决组件，下一次裁决生效 |
-| `providers.robot_arm` | `robot_arm_spacemit` | 机械臂组件，读取 `SITE/cup_application.json`（由 `dice-arena configure` 生成）。未配置或组件不可用时机械臂命令返回失败，按状态机的失败路由处理 |
+| `providers.robot_arm` | `robot_arm_spacemit` | 机械臂组件，读取 `SITE/cup_application.json`（由 `dice-arena configure` 生成）。未配置或组件不可用时，机械臂命令返回失败，按状态机的失败路由处理 |
 | `providers.tts_remote`、`providers.asr` | 未配置 | 远程语音合成与语音识别槽位；SDK 未包含对应组件 |
 | `voice` | `default` | 默认音色；`default` 表示使用语音组件配置的音色 |
 | `speed` | `1.0` | 默认语速；`tts_moss_nano` 仅支持 `1.0` |
-| `video.webrtc_base_url` | `http://127.0.0.1:8889` | 浏览器播放实时画面的 WebRTC 地址（主机与 MediaMTX 端口），格式为 `http(s)://主机:端口`，不含路径和查询。从其他设备访问网页时改为 K3 的局域网地址。下一次进入游戏生效，不重建识别进程 |
+| `video.webrtc_base_url` | `http://127.0.0.1:8889` | 浏览器播放实时画面的 WebRTC 地址（主机与 MediaMTX 端口），格式为 `http(s)://主机:端口`，不含路径和查询参数。从其他设备访问网页时，改为 K3 的局域网地址。下一次进入游戏时生效，不重建识别进程 |
 | `asr_enabled` | `false` | 语音输入总开关。为 `true` 且配置 `providers.asr` 时，服务启动前预热语音识别组件，预热失败则拒绝启动 |
-| `vision_always_on` | `false` | 识别视频流的生命周期。进入游戏时总是启动摄像头与推流（不推理）；`false` 时回合结束（退出、取消或出错）后停止，`true` 时保持到服务退出。每个回合开始时读取 |
+| `vision_always_on` | `false` | 识别视频流的生命周期。进入游戏时总是启动摄像头与推流（不推理）；`false` 时在回合结束（退出、取消或出错）后停止，`true` 时保持到服务退出。每个回合开始时读取 |
 | `standby.enabled` | `true` | 启用待机页 |
 | `standby.idle_seconds` | `120` | 游戏列表页空闲多少秒进入待机，范围 5～3600。共享会话中，停在 `rules`、`ready`、`result`、`analysis_failed`、`arm_failed` 且无播报的回合空闲同样时长后结束，返回游戏列表 |
 | `standby.boot_standby` | `true` | 打开网页时先显示待机页；`false` 时显示游戏列表 |

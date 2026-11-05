@@ -1,6 +1,6 @@
 # YOLOv8 骰子识别程序
 
-`yolov8_camera` 是视觉裁决组件 `vision_yolov8_objdetect` 使用的识别程序，负责摄像头采集、OpenCL 预处理、SpaceMIT EP 上的 YOLOv8 推理、稳定观测、稳定帧快照和 RTSP 推流。
+`yolov8_camera` 是视觉裁决组件 `vision_yolov8_objdetect` 使用的识别程序，负责摄像头采集、OpenCL 预处理、SpacemiT EP 上的 YOLOv8 推理、稳定观测、稳定帧快照和 RTSP 推流。
 分组、数量校验、胜负规则和失败诊断由 Python 组件完成。参数见 [vision_yolov8_objdetect 参数](../../backend/components/vision_yolov8_objdetect/parameters.md)，游戏侧参数见 [摇骰子游戏参数](../../backend/games/dice/parameters.md)。
 
 ## 数据流
@@ -10,7 +10,7 @@ USB 摄像头（MJPEG）
   -> GStreamer 解码（优先硬件解码 spacemitdec，失败时回退 jpegdec）
   -> NV12 最新帧队列
   -> OpenCL：NV12 转 RGB、缩放、letterbox、归一化
-  -> SpaceMIT ONNX Runtime EP 推理
+  -> SpacemiT ONNX Runtime EP 推理
   -> 检测事件、稳定观测与快照
   -> H.264 编码（优先 spacemith264enc，失败时回退 x264enc）
   -> RTSP 推送到 MediaMTX -> 浏览器 WebRTC 播放
@@ -26,7 +26,7 @@ mm
 ls "$PREFIX/share/dice_arena/game/vision/yolov8_objdetect/bin/yolov8_camera"
 ```
 
-- 依赖 OpenCV（存在时使用 `/opt/opencv-spacemit/lib/cmake/opencv4`）、OpenCL、GStreamer（`gstreamer-1.0`、`gstreamer-video-1.0`、`gstreamer-app-1.0`）和 SpaceMIT ONNX Runtime 与 EP 开发文件。
+- 依赖 OpenCV（存在时使用 `/opt/opencv-spacemit/lib/cmake/opencv4`）、OpenCL、GStreamer（`gstreamer-1.0`、`gstreamer-video-1.0`、`gstreamer-app-1.0`）和 SpacemiT ONNX Runtime 与 EP 开发文件。
 - 未找到 `spacemit_ort_env.h` 时 CMake 输出 `dice recognition not built: SpacemiT ONNX Runtime development files not found`，不构建识别程序，`dice-arena serve` 拒绝启动。
 - 安装位置为 `share/dice_arena/game/vision/yolov8_objdetect/bin/yolov8_camera`；`$PREFIX` 为安装目录，`source build/envsetup.sh` 后为 SDK 的 `output/staging`。
 
@@ -108,7 +108,8 @@ gst-inspect-1.0 spacemitdec
 
 ## 诊断
 
-诊断命令直接访问摄像头，执行前先停止 `dice-arena serve`。以下命令在任意可写目录执行（OpenCL 缓存写入当前目录）：
+诊断命令直接访问摄像头，执行前先停止 `dice-arena serve`。以下命令在任意可写目录执行（OpenCL 缓存写入当前目录）。
+`DEVICE` 取 `adjudicator_config.json` 中 `camera` 对应的设备，示例为默认配置的相机：
 
 ```bash
 GAME="$PREFIX/share/dice_arena/game"
