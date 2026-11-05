@@ -106,7 +106,9 @@ def _validate_manifest(manifest_path: Path, manifest: Any) -> dict[str, Any]:
     elif role not in {"", None}:
         raise ValueError("role is currently supported only for vision providers")
     capabilities = manifest.get("capabilities", [])
-    if not isinstance(capabilities, list) or not all(isinstance(item, str) and item for item in capabilities):
+    if not isinstance(capabilities, list) or not all(
+        isinstance(item, str) and item for item in capabilities
+    ):
         raise ValueError("capabilities must be a string array")
     if len(capabilities) != len(set(capabilities)):
         raise ValueError("capabilities must not contain duplicates")
@@ -123,7 +125,9 @@ def _validate_manifest(manifest_path: Path, manifest: Any) -> dict[str, Any]:
     ):
         raise ValueError("entry must name a Python module inside the provider package and a class")
     if manifest_path.parent.name != component_id:
-        raise ValueError(f"directory name {manifest_path.parent.name!r} must match id {component_id!r}")
+        raise ValueError(
+            f"directory name {manifest_path.parent.name!r} must match id {component_id!r}"
+        )
     config_file = manifest.get("config")
     if provider_type == "tts" and config_file is None:
         raise ValueError("TTS provider manifest must declare a component-local config")
@@ -142,7 +146,11 @@ def _validate_manifest(manifest_path: Path, manifest: Any) -> dict[str, Any]:
     for action, command in lifecycle.items():
         if action not in {"start", "stop"}:
             raise ValueError(f"unsupported lifecycle action: {action}")
-        if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
+        if (
+            not isinstance(command, list)
+            or not command
+            or not all(isinstance(item, str) and item for item in command)
+        ):
             raise ValueError(f"lifecycle.{action} must be a non-empty string array")
     return manifest
 
@@ -161,7 +169,9 @@ class ComponentRegistry:
         if canonical != component_id and component_id not in self._migration_logged:
             self._migration_logged.add(component_id)
             if self._migration_logger is not None:
-                self._migration_logger(f"[components] migration alias {component_id} -> {canonical}")
+                self._migration_logger(
+                    f"[components] migration alias {component_id} -> {canonical}"
+                )
         return canonical
 
     def register(self, component: Component, manifest: dict[str, Any] | None = None) -> None:
@@ -177,11 +187,19 @@ class ComponentRegistry:
             manifest_type = str(manifest.get("type") or "")
             manifest_role = str(manifest.get("role") or "")
             if manifest_id and manifest_id != component.id:
-                raise ValueError(f"manifest id {manifest_id!r} does not match component id {component.id!r}")
+                raise ValueError(
+                    f"manifest id {manifest_id!r} does not match component id {component.id!r}"
+                )
             if manifest_type and manifest_type != component.type:
-                raise ValueError(f"manifest type {manifest_type!r} does not match component type {component.type!r}")
+                raise ValueError(
+                    f"manifest type {manifest_type!r} does not match component type "
+                    f"{component.type!r}"
+                )
             if manifest_role != component.role:
-                raise ValueError(f"manifest role {manifest_role!r} does not match component role {component.role!r}")
+                raise ValueError(
+                    f"manifest role {manifest_role!r} does not match component role "
+                    f"{component.role!r}"
+                )
         self._components[component.id] = component
         if manifest is not None:
             self._manifests[component.id] = dict(manifest)
@@ -247,7 +265,12 @@ class ComponentRegistry:
                 try:
                     item["health"] = component.health()
                 except Exception as exc:  # health must not take down /api/health
-                    item["health"] = {"id": component.id, "type": component.type, "ok": False, "error": str(exc)}
+                    item["health"] = {
+                        "id": component.id,
+                        "type": component.type,
+                        "ok": False,
+                        "error": str(exc),
+                    }
             result.append(item)
         return result
 
@@ -307,7 +330,10 @@ def build_registry(*, log: bool = True) -> ComponentRegistry:
             )
             component_id = manifest["id"]
             if component_id in COMPONENT_ID_ALIASES:
-                report(f"[components] skip legacy package {component_id}; use {COMPONENT_ID_ALIASES[component_id]}")
+                report(
+                    f"[components] skip legacy package {component_id}; use "
+                    f"{COMPONENT_ID_ALIASES[component_id]}"
+                )
                 continue
             if manifest.get("enabled", True) is False:
                 report(f"[components] disabled {component_id}")
@@ -319,15 +345,25 @@ def build_registry(*, log: bool = True) -> ComponentRegistry:
             )
             instance = provider_class(manifest=manifest) if accepts_manifest else provider_class()
             if instance.id != component_id:
-                raise ValueError(f"entry id {instance.id!r} does not match manifest id {component_id!r}")
+                raise ValueError(
+                    f"entry id {instance.id!r} does not match manifest id {component_id!r}"
+                )
             if instance.type != manifest["type"]:
-                raise ValueError(f"entry type {instance.type!r} does not match manifest type {manifest['type']!r}")
+                raise ValueError(
+                    f"entry type {instance.type!r} does not match manifest type "
+                    f"{manifest['type']!r}"
+                )
             manifest_role = str(manifest.get("role") or "")
             if instance.role != manifest_role:
-                raise ValueError(f"entry role {instance.role!r} does not match manifest role {manifest_role!r}")
+                raise ValueError(
+                    f"entry role {instance.role!r} does not match manifest role {manifest_role!r}"
+                )
             registry.register(instance, manifest)
             type_label = f"{instance.type}/{instance.role}" if instance.role else instance.type
-            report(f"[components] registered {instance.id} ({type_label}) from {manifest_path.parent.name}")
+            report(
+                f"[components] registered {instance.id} ({type_label}) from "
+                f"{manifest_path.parent.name}"
+            )
         except Exception as exc:
             report(f"[components] skip {manifest_path}: {exc}")
     return registry

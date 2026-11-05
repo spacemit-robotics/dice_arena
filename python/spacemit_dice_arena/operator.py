@@ -1,6 +1,7 @@
 # Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 # SPDX-License-Identifier: Apache-2.0
-"""Dice Arena game commands. The game, its models and the video server are installed with the SDK."""
+"""Dice Arena game commands. The game, its models and the video server are installed with the
+SDK."""
 
 import getpass
 import json
@@ -40,19 +41,24 @@ def serve(context, args):
     if not application.is_file():
         raise FileNotFoundError(f"{application} not found; generate it with `dice-arena configure`")
     if not (game / "vision/yolov8_objdetect/bin/yolov8_camera").is_file():
-        raise FileNotFoundError("dice recognition (yolov8_camera) is not built; build dice_arena with mm on the K3")
+        raise FileNotFoundError(
+            "dice recognition (yolov8_camera) is not built; build dice_arena with mm on the K3"
+        )
     if not (context.data("dice_arena") / "mediamtx/mediamtx").is_file():
-        raise FileNotFoundError("MediaMTX runtime resource is missing; prepare the files in runtime_assets.json")
+        raise FileNotFoundError(
+            "MediaMTX runtime resource is missing; prepare the files in runtime_assets.json"
+        )
     # TTS daemon pid/log and other runtime files stay in the site, out of the installation.
     runtime = context.local("dice_arena")
     runtime.mkdir(parents=True, exist_ok=True)
     busy = [port for port in (*VIDEO_PORTS, args.port) if port_in_use(port)]
     if busy:
-        raise RuntimeError(
-            f"ports {busy} are in use: stop the other game or video service first"
-        )
+        raise RuntimeError(f"ports {busy} are in use: stop the other game or video service first")
     if port_in_use(TTS_PORT) and not own_tts_daemon(runtime, game):
-        raise RuntimeError(f"port {TTS_PORT} is held by another MOSS-TTS daemon (another installation); stop it first")
+        raise RuntimeError(
+            f"port {TTS_PORT} is held by another MOSS-TTS daemon (another installation); stop it "
+            "first"
+        )
     # The operator's game configuration lives in the site, created from the installed default once,
     # so reinstalling keeps it (the game reloads it on change).
     config = runtime / "config.json"
@@ -61,7 +67,9 @@ def serve(context, args):
     print(f"game configuration: {config}", flush=True)
     environment = context.environment()
     environment.update(
-        SPACEMIT_CUP_APPLICATION=str(application), DICE_RUNTIME_DIR=str(runtime), DICE_ARENA_CONFIG=str(config)
+        SPACEMIT_CUP_APPLICATION=str(application),
+        DICE_RUNTIME_DIR=str(runtime),
+        DICE_ARENA_CONFIG=str(config),
     )
     mediamtx = context.data("dice_arena") / "mediamtx"
     with (runtime / "mediamtx.log").open("ab") as log:
@@ -73,17 +81,33 @@ def serve(context, args):
         )
     try:
         # The voice before the game, as the original start script did: every TTS provider the game
-        # references is started (the local MOSS-TTS daemon loads its models, then stays running for the
-        # next serve); remote-only ones have nothing to start. One that fails leaves a warning.
+        # references is started (the local MOSS-TTS daemon loads its models, then stays running for
+        # the next serve); remote-only ones have nothing to start. One that fails leaves a warning.
         control = [sys.executable, str(game / "backend/componentctl.py"), "--game", "dice"]
         referenced = subprocess.run(
-            control + ["referenced", "tts"], cwd=game, env=environment, capture_output=True, text=True, check=False
+            control + ["referenced", "tts"],
+            cwd=game,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         for provider in referenced.stdout.split():
-            if subprocess.run(control + ["start", provider], cwd=game, env=environment, check=False).returncode:
-                print(f"warning: TTS provider {provider} is unavailable", file=sys.stderr, flush=True)
+            if subprocess.run(
+                control + ["start", provider], cwd=game, env=environment, check=False
+            ).returncode:
+                print(
+                    f"warning: TTS provider {provider} is unavailable", file=sys.stderr, flush=True
+                )
         server = subprocess.Popen(
-            [sys.executable, str(game / "backend/server.py"), "--host", args.host, "--port", str(args.port)],
+            [
+                sys.executable,
+                str(game / "backend/server.py"),
+                "--host",
+                args.host,
+                "--port",
+                str(args.port),
+            ],
             cwd=game,
             env=environment,
         )
@@ -104,11 +128,17 @@ def serve(context, args):
 
 def main():
     parser = argument_parser(__doc__)
-    parser.add_argument("--source", help="grasp algorithm root (default: installed application resources)")
+    parser.add_argument(
+        "--source", help="grasp algorithm root (default: installed application resources)"
+    )
     commands = parser.add_subparsers(dest="operation", required=True)
-    serve_command = commands.add_parser("serve", help="start the video server and the game; Ctrl+C stops both")
+    serve_command = commands.add_parser(
+        "serve", help="start the video server and the game; Ctrl+C stops both"
+    )
     serve_command.add_argument(
-        "--host", default="0.0.0.0", help="listen address (default: every interface, as the original)"
+        "--host",
+        default="0.0.0.0",
+        help="listen address (default: every interface, as the original)",
     )
     serve_command.add_argument("--port", type=int, default=8080)
     for name in ("status", "events"):
@@ -116,7 +146,9 @@ def main():
         command.add_argument("--url", default="http://127.0.0.1:8080")
         if name == "events":
             command.add_argument("round_id")
-    ack = commands.add_parser("ack-grip", help="publish only the current operation human grip declaration")
+    ack = commands.add_parser(
+        "ack-grip", help="publish only the current operation human grip declaration"
+    )
     ack.add_argument("token")
     ack.add_argument("output")
     ack.add_argument(
@@ -124,7 +156,9 @@ def main():
         default=getpass.getuser(),
         help="name recorded with the grip confirmation (default: the login user)",
     )
-    commands.add_parser("check", help="exercise the game's robot provider with the Mock cup application")
+    commands.add_parser(
+        "check", help="exercise the game's robot provider with the Mock cup application"
+    )
     add_commands(commands)
     args = parser.parse_args()
     context = Context(args)
@@ -147,7 +181,12 @@ def main():
                     print(line.decode("utf-8"), end="", flush=True)
     elif args.operation == "ack-grip":
         context.module(
-            "spacemit_manipulation.workbench", "ack-grip", args.token, args.output, "--operator", args.operator
+            "spacemit_manipulation.workbench",
+            "ack-grip",
+            args.token,
+            args.output,
+            "--operator",
+            args.operator,
         )
     else:
         context.script(

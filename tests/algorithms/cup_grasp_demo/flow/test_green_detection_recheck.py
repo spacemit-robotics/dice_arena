@@ -42,21 +42,36 @@ class DetectionRecheckTests(unittest.TestCase):
         )
         self.w.tcp = np.eye(4)
         self.image = np.full((8, 8, 3), 100, dtype=np.uint8)
-        self.geo = dict(rim_center_camera_m=[0, 0, 0.8], table_normal_camera=[0, 0, 1], height_m=0.065, radius_m=0.0375)
+        self.geo = dict(
+            rim_center_camera_m=[0, 0, 0.8],
+            table_normal_camera=[0, 0, 1],
+            height_m=0.065,
+            radius_m=0.0375,
+        )
         # A previous valid target must become unusable on any new failed capture.
         (self.root / "green_scene.json").write_text(json.dumps(dict(valid=True)))
         stack = ExitStack()
         self.addCleanup(stack.close)
         stack.enter_context(patch.object(flow.common, "new_run", return_value=self.run))
         stack.enter_context(patch.object(flow.common, "capture_rgbd"))
-        stack.enter_context(patch.object(flow, "load_batch", return_value=({}, np.ones((8, 8)), self.image, None)))
-        stack.enter_context(patch.object(flow.common, "camera_transform", return_value=(np.eye(4), True)))
+        stack.enter_context(
+            patch.object(flow, "load_batch", return_value=({}, np.ones((8, 8)), self.image, None))
+        )
+        stack.enter_context(
+            patch.object(flow.common, "camera_transform", return_value=(np.eye(4), True))
+        )
         stack.enter_context(patch.object(flow.cv2, "imwrite"))
-        stack.enter_context(patch.object(self.w, "bridge", side_effect=AssertionError("No hardware")))
+        stack.enter_context(
+            patch.object(self.w, "bridge", side_effect=AssertionError("No hardware"))
+        )
         self.infer = stack.enter_context(patch.object(flow, "infer"))
-        self.locate = stack.enter_context(patch("vision.geometry.circle_rim.detect_stereo", side_effect=self.geometry))
+        self.locate = stack.enter_context(
+            patch("vision.geometry.circle_rim.detect_stereo", side_effect=self.geometry)
+        )
 
-    def geometry(self, run, depth, image, meta, opts, tolerance, instances, diagnostic, fixed_table=None):
+    def geometry(
+        self, run, depth, image, meta, opts, tolerance, instances, diagnostic, fixed_table=None
+    ):
         if len(instances) != 1:
             raise ValueError(MISSING)
         diagnostic["valid"] = True
@@ -76,7 +91,10 @@ class DetectionRecheckTests(unittest.TestCase):
                 self.run = self.root / str(count)
                 self.run.mkdir()
                 with patch.object(flow.common, "new_run", return_value=self.run):
-                    self.infer.side_effect = [self.prediction(count), self.prediction(1, "CPUExecutionProvider")]
+                    self.infer.side_effect = [
+                        self.prediction(count),
+                        self.prediction(1, "CPUExecutionProvider"),
+                    ]
                     self.w._capture_once()
                 initial, cpu = self.infer.call_args_list[-2:]
                 self.assertIs(initial.args[0], cpu.args[0])
@@ -88,10 +106,15 @@ class DetectionRecheckTests(unittest.TestCase):
                 self.assertEqual(report["reason"], MISSING)
                 self.assertEqual(len(report["input_sha256"]), 64)
                 self.assertTrue(self.read("green_scene.json")["valid"])
-                self.assertEqual(self.read("green_scene.json")["model"]["providers"], ["CPUExecutionProvider"])
+                self.assertEqual(
+                    self.read("green_scene.json")["model"]["providers"], ["CPUExecutionProvider"]
+                )
 
     def test_nonfinite_or_invalid_scores_rechecked_before_geometry(self):
-        self.infer.side_effect = [YOLOOutputError("Nonfinite YOLO outputs"), self.prediction(1, "CPUExecutionProvider")]
+        self.infer.side_effect = [
+            YOLOOutputError("Nonfinite YOLO outputs"),
+            self.prediction(1, "CPUExecutionProvider"),
+        ]
         self.w._capture_once()
         self.assertEqual(self.locate.call_count, 1)
         self.assertIn("Nonfinite", self.read("yolo_seg.json", True)["error"])
@@ -101,14 +124,22 @@ class DetectionRecheckTests(unittest.TestCase):
         for color in ("green", "gray"):
             self.run = self.root / color
             self.run.mkdir()
-            with self.subTest(color=color), patch.object(flow.common, "new_run", return_value=self.run):
+            with (
+                self.subTest(color=color),
+                patch.object(flow.common, "new_run", return_value=self.run),
+            ):
                 self.infer.reset_mock()
                 self.infer.side_effect = [self.prediction(0), self.prediction(1)]
-                self.locate.side_effect = [WorkspaceCupSelectionError(color), ValueError("bad stereo edges")]
+                self.locate.side_effect = [
+                    WorkspaceCupSelectionError(color),
+                    ValueError("bad stereo edges"),
+                ]
                 with self.assertRaisesRegex(ValueError, "bad stereo edges"):
                     self.w._capture_once()
                 self.assertEqual(self.infer.call_count, 2)
-                self.assertIn(color + " workspace", self.read("yolo_cpu_recheck.json", True)["reason"])
+                self.assertIn(
+                    color + " workspace", self.read("yolo_cpu_recheck.json", True)["reason"]
+                )
                 self.assertFalse(self.read("green_scene.json")["valid"])
 
     def test_new_table_colors_keep_one_fresh_frame_retry_only(self):
@@ -147,7 +178,10 @@ class DetectionRecheckTests(unittest.TestCase):
                 self.assertFalse(self.read("green_scene.json")["valid"])
 
     def test_bad_cpu_predictions_still_stop_and_recheck_only_once(self):
-        self.infer.side_effect = [YOLOOutputError("Nonfinite YOLO outputs"), self.prediction(0, "CPUExecutionProvider")]
+        self.infer.side_effect = [
+            YOLOOutputError("Nonfinite YOLO outputs"),
+            self.prediction(0, "CPUExecutionProvider"),
+        ]
         with self.assertRaisesRegex(ValueError, MISSING):
             self.w._capture_once()
         self.assertEqual(self.infer.call_count, 2)

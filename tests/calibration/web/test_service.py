@@ -180,7 +180,10 @@ def test_unlock_rate_limit(service):
 def test_window_is_bound_to_new_teaching_camera_and_invalidates_plan(service):
     dataset = service.data / "datasets" / "first"
     dataset.mkdir(parents=True)
-    write(dataset / "manifest.json", {"camera": {"width": 960, "height": 720}, "board": {"type": "charuco"}})
+    write(
+        dataset / "manifest.json",
+        {"camera": {"width": 960, "height": 720}, "board": {"type": "charuco"}},
+    )
     write(service.state_path, {"teaching_dataset": str(dataset), "plan": "old-plan"})
     with pytest.raises(ValueError):
         service.window([0, 0, 961, 720])
@@ -367,10 +370,16 @@ def test_visibility_does_not_invent_bounds_for_invalid_windows(service, box):
 def test_live_window_requires_matching_camera_not_only_resolution(service):
     _, _, camera = visibility_fixture(service)
     job = service.data / "jobs" / "20261012_140000_12345678"
-    write(job / "record.json", {"id": job.name, "action": "inspect", "status": "completed", "started": 1})
+    write(
+        job / "record.json",
+        {"id": job.name, "action": "inspect", "status": "completed", "started": 1},
+    )
 
     def frame(profile):
-        write(job / "frame.json", {"time": time.time(), "width": 960, "height": 720, "camera": profile})
+        write(
+            job / "frame.json",
+            {"time": time.time(), "width": 960, "height": 720, "camera": profile},
+        )
         return service.snapshot()["visibility"]["live_compatible"]
 
     assert frame(camera)

@@ -114,7 +114,9 @@ class VisionStreamManager:
             self._log("game declares no vision_adjudicator slot; no stream started")
             return False
         try:
-            provider = self._components.require(provider_id, expected_type="vision", expected_role="adjudicator")
+            provider = self._components.require(
+                provider_id, expected_type="vision", expected_role="adjudicator"
+            )
         except DiceArenaError as exc:
             self._log(f"vision provider {provider_id} unavailable: {exc.message}")
             return False
@@ -140,7 +142,10 @@ class VisionStreamManager:
                         stop()
                     except Exception as exc:
                         self._log(f"stream stop failed: {exc!r}")
-                self._log(f"stream down for round {str(prev_round_id)[:8]} (superseded by provider switch)")
+                self._log(
+                    f"stream down for round {str(prev_round_id)[:8]} (superseded by provider "
+                    "switch)"
+                )
             try:
                 try:
                     started = bool(start(profile, on_log=self._log, on_event=on_event))
@@ -175,7 +180,8 @@ class VisionStreamManager:
                         name="vision-stream",
                     )
             self._log(
-                f"stream up for round {str(round_.id)[:8]} (provider {provider_id}, vision_always_on={always_on})"
+                f"stream up for round {str(round_.id)[:8]} (provider {provider_id}, "
+                f"vision_always_on={always_on})"
             )
             if not always_on:
                 watcher = self._watcher

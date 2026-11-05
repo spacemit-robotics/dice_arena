@@ -17,7 +17,11 @@ from pathlib import Path
 ROOT = CODE = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "calibration/config/calibration_workflow.json"
 _DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
-SITE = Path(os.environ.get("MANIPULATION_SITE") or _DATA_HOME / "spacemit-manipulation/site").expanduser().absolute()
+SITE = (
+    Path(os.environ.get("MANIPULATION_SITE") or _DATA_HOME / "spacemit-manipulation/site")
+    .expanduser()
+    .absolute()
+)
 SOURCE = ROOT / "algorithms"
 
 

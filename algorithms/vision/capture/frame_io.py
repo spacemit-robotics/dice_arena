@@ -149,14 +149,18 @@ def depth_candidates(depth, image, meta, cfg, fraction):
     table, normal, _, _ = _plane(deproject(depth, red, intr, scale), cfg)
     yy, xx = np.indices(depth.shape)
     zz = depth * scale
-    xyz = np.stack(((xx - intr["cx"]) * zz / intr["fx"], (yy - intr["cy"]) * zz / intr["fy"], zz), axis=-1)
+    xyz = np.stack(
+        ((xx - intr["cx"]) * zz / intr["fx"], (yy - intr["cy"]) * zz / intr["fy"], zz), axis=-1
+    )
     contours, _ = cv2.findContours(red.astype("uint8"), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
         raise ValueError("Red workspace not visible")
     workspace = np.zeros(depth.shape, "uint8")
     cv2.fillConvexPoly(workspace, cv2.convexHull(max(contours, key=cv2.contourArea)), 1)
     altitude = (xyz - table) @ normal
-    foreground = ((altitude > 0.015) & (altitude < 0.30) & (depth > 0) & (workspace > 0)).astype("uint8")
+    foreground = ((altitude > 0.015) & (altitude < 0.30) & (depth > 0) & (workspace > 0)).astype(
+        "uint8"
+    )
     foreground = cv2.morphologyEx(foreground, cv2.MORPH_CLOSE, np.ones((3, 3), "uint8"))
     _, labels, stats, _ = cv2.connectedComponentsWithStats(foreground)
     proposals, rejected = [], []
@@ -190,7 +194,9 @@ def depth_proposals(depth, image, meta, cfg, fraction):
     """Preserve the original single-candidate contract for initial selection."""
     proposals, rejected = depth_candidates(depth, image, meta, cfg, fraction)
     if len(proposals) != 1:
-        raise ValueError(f"Expected exactly one geometric proposal, got {len(proposals)}; {rejected}")
+        raise ValueError(
+            f"Expected exactly one geometric proposal, got {len(proposals)}; {rejected}"
+        )
     return proposals[0]
 
 
@@ -200,7 +206,9 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--calibration", type=Path, required=True)
     parser.add_argument("--orientation-reference", type=Path, required=True)
-    parser.add_argument("--grasp-config", type=Path, default=Path(__file__).with_name("current_grasp.json"))
+    parser.add_argument(
+        "--grasp-config", type=Path, default=Path(__file__).with_name("current_grasp.json")
+    )
     parser.add_argument("--allow-provisional", action="store_true")
     parser.add_argument("--plane-tolerance-mm", type=float, default=3.0)
     parser.add_argument("--finger-photo-fraction", type=float, required=True)
@@ -209,21 +217,27 @@ def main():
         parser.error("Plane tolerance must be in (0, 5] mm")
     args.output.mkdir(parents=True, exist_ok=False)
     profile = json.loads(args.grasp_config.read_text())
-    if profile["definition_id"] != "silver_side_index_height_9_of_11" or profile["preform"] != [0] * 6:
+    if (
+        profile["definition_id"] != "silver_side_index_height_9_of_11"
+        or profile["preform"] != [0] * 6
+    ):
         raise ValueError("This diagnostic supports only the selected open index contact")
     definition = profile["height_definition"]
     fraction = definition["contact_fraction_numerator"] / definition["contact_fraction_denominator"]
     cfg = Config(plane_tolerance_m=args.plane_tolerance_mm / 1000)
     meta, depth, image, frames = load_batch(args.dataset)
     calibration = load_calibration(
-        args.calibration, expected_camera_serial=meta["serial"], allow_provisional=args.allow_provisional
+        args.calibration,
+        expected_camera_serial=meta["serial"],
+        allow_provisional=args.allow_provisional,
     )
     intr = meta["intrinsics"]
     live_k = np.array([[intr["fx"], 0, intr["cx"]], [0, intr["fy"], intr["cy"]], [0, 0, 1.0]])
     calibrated = calibration["camera"]
-    if (intr["width"], intr["height"]) != (calibrated["width"], calibrated["height"]) or not np.allclose(
-        live_k, calibrated["camera_matrix"], atol=1e-4, rtol=0
-    ):
+    if (intr["width"], intr["height"]) != (
+        calibrated["width"],
+        calibrated["height"],
+    ) or not np.allclose(live_k, calibrated["camera_matrix"], atol=1e-4, rtol=0):
         raise ValueError("Calibration intrinsics do not match the recorded RGB-D mode")
     cam = np.array(calibration["T_base_camera"])
     geom, mask, points = depth_proposals(depth, image, meta, cfg, fraction)
@@ -242,11 +256,21 @@ def main():
     pregrasp = contact + profile["pregrasp_surface_gap_m"] * outward
     stages = []
     seed = np.clip(ref_q, *np.array(arm.limits_rad).T)
-    for name, point in [("clearance", pregrasp + 0.14 * normal), ("pregrasp", pregrasp), ("contact", contact)]:
+    for name, point in [
+        ("clearance", pregrasp + 0.14 * normal),
+        ("pregrasp", pregrasp),
+        ("contact", contact),
+    ]:
         flange = np.eye(4)
         flange[:3, :3] = rotation
         flange[:3, 3] = point - rotation @ tcp[:3, 3]
-        ik = arm.ik(flange, seed, max_iterations=600, position_tolerance_m=1e-5, orientation_tolerance_rad=1e-4)
+        ik = arm.ik(
+            flange,
+            seed,
+            max_iterations=600,
+            position_tolerance_m=1e-5,
+            orientation_tolerance_rad=1e-4,
+        )
         screen = check_hand_pose(
             flange,
             support_center_m=support,
@@ -297,13 +321,16 @@ def main():
         for sample in checked.samples_rad:
             fk = np.array(arm.fk(sample))
             minimum_table = min(
-                minimum_table, float(np.min(cloud @ (fk[:3, :3].T @ normal)) + (fk[:3, 3] - support) @ normal)
+                minimum_table,
+                float(np.min(cloud @ (fk[:3, :3].T @ normal)) + (fk[:3, 3] - support) @ normal),
             )
             delta = centers @ fk[:3, :3].T + fk[:3, 3] - support
             heights = delta @ normal
             dr = np.linalg.norm(delta - heights[:, None] * normal, axis=1) - envelope_radius
             dh = np.maximum(-heights, heights - geom["height_m"])
-            signed = np.hypot(np.maximum(dr, 0), np.maximum(dh, 0)) + np.minimum(np.maximum(dr, dh), 0)
+            signed = np.hypot(np.maximum(dr, 0), np.maximum(dh, 0)) + np.minimum(
+                np.maximum(dr, dh), 0
+            )
             minimum_cup_bound = min(minimum_cup_bound, float(np.min(signed - radii)))
         paths.append(
             dict(
@@ -335,7 +362,8 @@ def main():
         outward_base=outward.tolist(),
         stages=stages,
         orientation_source=str(args.orientation_reference),
-        orientation_reference_use="historical orientation/solver seed only, not a new contact sample",
+        orientation_reference_use="historical orientation/solver seed only, not a new contact "
+        "sample",
         sampled_joint_paths=paths,
         cup_envelope_radius_m=envelope_radius,
         trajectory_checked=False,
@@ -367,22 +395,41 @@ def main():
     def project(point):
         return tuple(
             np.rint(
-                [intr["fx"] * point[0] / point[2] + intr["cx"], intr["fy"] * point[1] / point[2] + intr["cy"]]
+                [
+                    intr["fx"] * point[0] / point[2] + intr["cx"],
+                    intr["fy"] * point[1] / point[2] + intr["cy"],
+                ]
             ).astype(int)
         )
 
     basis = np.array(geom["basis_camera"])
     c = np.array(geom["center_camera_m"])
     ring = np.array(
-        [project(c + geom["radius_m"] * basis @ [np.cos(t), np.sin(t)]) for t in np.linspace(0, 2 * np.pi, 80)]
+        [
+            project(c + geom["radius_m"] * basis @ [np.cos(t), np.sin(t)])
+            for t in np.linspace(0, 2 * np.pi, 80)
+        ]
     )
     cv2.polylines(overlay, [ring], True, (0, 220, 255), 1)
     invcam = inverse(cam)
-    for label, point, color in [("contact", contact, (0, 0, 255)), ("pregrasp50", pregrasp, (255, 230, 0))]:
+    for label, point, color in [
+        ("contact", contact, (0, 0, 255)),
+        ("pregrasp50", pregrasp, (255, 230, 0)),
+    ]:
         pixel = project((invcam @ np.r_[point, 1])[:3])
         cv2.circle(overlay, pixel, 4, color, -1)
-        cv2.putText(overlay, label, (pixel[0] + 6, pixel[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
-    cv2.putText(overlay, "9/11H  MODEL PREVIEW ONLY", (15, 465), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 1)
+        cv2.putText(
+            overlay, label, (pixel[0] + 6, pixel[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1
+        )
+    cv2.putText(
+        overlay,
+        "9/11H  MODEL PREVIEW ONLY",
+        (15, 465),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.55,
+        (0, 0, 255),
+        1,
+    )
     cv2.imwrite(str(args.output / "preview.png"), overlay)
     np.savez_compressed(args.output / "geometry_inputs.npz", depth=depth, mask=mask)
     print(

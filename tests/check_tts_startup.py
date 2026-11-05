@@ -44,12 +44,15 @@ def check(game, daemon):
             backend.codec_meta = {"codec_config": {"sample_rate": 48000, "channels": 2}}
             backend.sessions = {
                 "decode": SimpleNamespace(
-                    get_inputs=lambda: [SimpleNamespace(name="past_key_0", shape=[None, "capacity"])]
+                    get_inputs=lambda: [
+                        SimpleNamespace(name="past_key_0", shape=[None, "capacity"])
+                    ]
                 )
             }
             backend.warmup.side_effect = AssertionError("duplicate warmup")
             backend.synthesize.return_value = dict(
-                waveform=np.ones((64, 2), dtype=np.float32), chunk_results=[dict(stop_reason="audio_end")]
+                waveform=np.ones((64, 2), dtype=np.float32),
+                chunk_results=[dict(stop_reason="audio_end")],
             )
             backend.resolve_prompt_audio_codes.return_value = [[1] * 16]
             return backend
@@ -73,7 +76,10 @@ def check(game, daemon):
                     pass
                 else:
                     raise AssertionError("runtime became usable before synthesis validation")
-                return dict(waveform=np.ones((64, 2), dtype=np.float32), chunk_results=[dict(stop_reason="audio_end")])
+                return dict(
+                    waveform=np.ones((64, 2), dtype=np.float32),
+                    chunk_results=[dict(stop_reason="audio_end")],
+                )
 
             backend.synthesize.side_effect = synthesize
             runtime._initialize()
@@ -103,7 +109,9 @@ def check(game, daemon):
                 (np.full((2, 2), np.nan), "audio_end"),
                 (np.ones((2, 2)), "max_frames"),
             ):
-                backend.synthesize.return_value = dict(waveform=waveform, chunk_results=[dict(stop_reason=reason)])
+                backend.synthesize.return_value = dict(
+                    waveform=waveform, chunk_results=[dict(stop_reason=reason)]
+                )
                 failed = make_runtime()
                 failed._initialize()
                 assert not failed.ready and not failed.starting and failed.error
@@ -149,7 +157,9 @@ def check(game, daemon):
                     health.side_effect = KeyboardInterrupt()
                 else:
                     health.return_value = (
-                        {"error": "broken model", "starting": False} if scenario in ("failed", "kill") else None
+                        {"error": "broken model", "starting": False}
+                        if scenario in ("failed", "kill")
+                        else None
                     )
                 try:
                     launcher._finish_start(process, settings, pid_file, log_file)

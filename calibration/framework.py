@@ -38,7 +38,9 @@ MOVE_TIMEOUT_S = 120
 class _NoVendorSdk(importlib.abc.MetaPathFinder):
     def find_spec(self, name, path=None, target=None):
         if name.partition(".")[0] == "pyAgxArm":
-            raise ImportError("标定程序只经 manipulation 框架访问机械臂和灵巧手，禁止直接导入 pyAgxArm")
+            raise ImportError(
+                "标定程序只经 manipulation 框架访问机械臂和灵巧手，禁止直接导入 pyAgxArm"
+            )
         return None
 
 
@@ -59,11 +61,14 @@ def _context():
         sys.path.append(modules)
     from spacemit_manipulation.operator_support import Context, default_site
 
-    return Context(SimpleNamespace(prefix=prefix, site=os.environ.get("MANIPULATION_SITE") or default_site()))
+    return Context(
+        SimpleNamespace(prefix=prefix, site=os.environ.get("MANIPULATION_SITE") or default_site())
+    )
 
 
 def _plan(context):
-    """Routes, HOME and the TCP are the Nero's: refuse any other current device before touching it."""
+    """Routes, HOME and the TCP are the Nero's: refuse any other current device before touching
+    it."""
     return context.plan_for("nero", os.environ.get("MANIPULATION_DEVICE"))
 
 
@@ -74,7 +79,9 @@ def robot_model(context=None):
 
     model_file = context.model(_plan(context))
     model = json.loads(model_file.read_text())
-    return UrdfKinematics(model_file.parent / model["urdf"], model["base"], model["tip"], model["joints"])
+    return UrdfKinematics(
+        model_file.parent / model["urdf"], model["base"], model["tip"], model["joints"]
+    )
 
 
 class Device:
@@ -88,7 +95,9 @@ class Device:
         self.kinematics = robot_model(context)
         self.motion, self.users, self.pinned = motion, 0, False
         try:
-            self.client = DeviceClient(context.binary("manipulation-device"), plan, allow_motion=motion)
+            self.client = DeviceClient(
+                context.binary("manipulation-device"), plan, allow_motion=motion
+            )
         except RuntimeError as exc:
             raise RuntimeError(f"无法打开机械臂（{plan}）：{exc}") from exc
 
@@ -97,10 +106,13 @@ class Device:
 
     def flange(self, joints_rad):
         # Measured joints may sit just past the URDF limits (the controller allows them).
-        return np.asarray(self.kinematics.forward(joints_rad, check_limits=False), dtype=float).reshape(4, 4)
+        return np.asarray(
+            self.kinematics.forward(joints_rad, check_limits=False), dtype=float
+        ).reshape(4, 4)
 
     def move(self, target_rad, speed_percent):
-        """Verified point move. Ctrl+C/SIGTERM cancel it (the device holds), then reach the caller."""
+        """Verified point move. Ctrl+C/SIGTERM cancel it (the device holds), then reach the
+        caller."""
         scale = min(int(speed_percent), MAX_SPEED_PERCENT) / 100
         self._command(
             lambda cancelled: self.client.move_arm(
@@ -129,7 +141,11 @@ class Device:
         """Hand command; without hand feedback the result is `unverified` (sent, not measured)."""
         return self._command(
             lambda cancelled: self.client.move_effector(
-                list(positions), duration_s, allow_unverified=True, timeout=duration_s + 10, is_cancelled=cancelled
+                list(positions),
+                duration_s,
+                allow_unverified=True,
+                timeout=duration_s + 10,
+                is_cancelled=cancelled,
             ),
             "灵巧手指令",
         )
@@ -147,13 +163,20 @@ class Device:
         previous = {}
         if threading.current_thread() is threading.main_thread():
             for number in (signal.SIGINT, signal.SIGTERM):
-                previous[number] = signal.signal(number, lambda signum, _frame: received.append(signum))
+                previous[number] = signal.signal(
+                    number, lambda signum, _frame: received.append(signum)
+                )
         try:
             return call(lambda: bool(received))
         except DeviceCommandError as exc:
-            result = exc.result if isinstance(exc.result, dict) else {"status": "failed", "reason": str(exc.result)}
+            result = (
+                exc.result
+                if isinstance(exc.result, dict)
+                else {"status": "failed", "reason": str(exc.result)}
+            )
             error = RuntimeError(
-                f"{label}未完成：{result.get('status')} {result.get('detail') or result.get('reason') or ''}".strip()
+                f"{label}未完成：{result.get('status')} "
+                f"{result.get('detail') or result.get('reason') or ''}".strip()
             )
             if not received:
                 raise error from exc
@@ -161,7 +184,9 @@ class Device:
             for number, handler in previous.items():
                 signal.signal(number, handler)
             for number in received[:1]:
-                signal.raise_signal(number)  # The caller's own handler decides (worker cancel, Ctrl+C).
+                signal.raise_signal(
+                    number
+                )  # The caller's own handler decides (worker cancel, Ctrl+C).
         raise RuntimeError(f"{label}已取消")
 
     def close(self):

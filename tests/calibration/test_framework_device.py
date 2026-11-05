@@ -37,11 +37,19 @@ NERO_LIMITS = [
     (-1.570797, 1.570797),
 ]  # pyAgxArm preset
 JOINTS = [
-    {"name": f"joint{i + 1}", "minimum_rad": low, "maximum_rad": high} for i, (low, high) in enumerate(NERO_LIMITS)
+    {"name": f"joint{i + 1}", "minimum_rad": low, "maximum_rad": high}
+    for i, (low, high) in enumerate(NERO_LIMITS)
 ]
 HAND = {
     "device_id": "hand_main",
-    "channels": ["thumb_tip", "thumb_base", "index_finger", "middle_finger", "ring_finger", "pinky_finger"],
+    "channels": [
+        "thumb_tip",
+        "thumb_base",
+        "index_finger",
+        "middle_finger",
+        "ring_finger",
+        "pinky_finger",
+    ],
     "feedback": "none",
 }
 
@@ -64,7 +72,9 @@ def mock_device(site):
         "effector": HAND,
         "arm": {"device_id": "arm_main", "resource_id": "mock_calibration", "joints": JOINTS},
     }
-    (site / "device.yaml").write_text(json.dumps({"schema_version": 3, "device": device, "steps": []}))
+    (site / "device.yaml").write_text(
+        json.dumps({"schema_version": 3, "device": device, "steps": []})
+    )
 
 
 def test_vendor_sdk_cannot_be_imported_beside_the_framework():
@@ -98,10 +108,20 @@ def test_moves_hold_and_hand_go_through_one_session(site):
     framework.pin(motion=True)
     arm, reader = ArmFeedback(motion=True), ArmFeedback()
     assert arm.device is reader.device
-    target = [0.1, -1.7449, 0.2, 0.3, 0.1, -0.2, 0.2]  # joint2 near -100°, where the taught path goes
+    target = [
+        0.1,
+        -1.7449,
+        0.2,
+        0.3,
+        0.1,
+        -0.2,
+        0.2,
+    ]  # joint2 near -100°, where the taught path goes
     arm.move(target)
     assert np.allclose(reader.read_joints()["joints_rad"], target)
-    assert np.allclose(reader.read(), np.asarray(arm.device.kinematics.forward(target, False)).reshape(4, 4))
+    assert np.allclose(
+        reader.read(), np.asarray(arm.device.kinematics.forward(target, False)).reshape(4, 4)
+    )
     arm.hold()
     assert arm.move_hand([0.0] * 6, 1.0)["status"] == "unverified"
     arm.close(), reader.close()
@@ -123,7 +143,12 @@ def fake_nero(site, tmp_path, mode):
     device = {
         "driver": "agx_nero_revo2",
         "model": "nero",
-        "arm": {"device_id": "arm_main", "resource_id": f"agx_{channel}", "joints": JOINTS, "timeout_s": 20},
+        "arm": {
+            "device_id": "arm_main",
+            "resource_id": f"agx_{channel}",
+            "joints": JOINTS,
+            "timeout_s": 20,
+        },
         "options": {
             "channel": channel,
             "worker": str(worker),
@@ -131,7 +156,9 @@ def fake_nero(site, tmp_path, mode):
             "python": os.path.realpath(sys.executable),
         },
     }
-    (site / "device.yaml").write_text(json.dumps({"schema_version": 3, "device": device, "steps": []}))
+    (site / "device.yaml").write_text(
+        json.dumps({"schema_version": 3, "device": device, "steps": []})
+    )
     return channel, sdk
 
 
@@ -152,7 +179,10 @@ def test_taught_route_is_one_continuous_stream(site, tmp_path):
         assert np.allclose(arm.read_joints()["joints_rad"], route[-1])
     finally:
         arm.close()
-    events = [json.loads(line) for line in (sdk / "pyAgxArm/recovery-events.jsonl").read_text().splitlines()]
+    events = [
+        json.loads(line)
+        for line in (sdk / "pyAgxArm/recovery-events.jsonl").read_text().splitlines()
+    ]
     operations = [event["op"] for event in events]
     # One js stream, no stop at the middle point and no switch to the point (j) mode to settle.
     assert operations.count("move_js") > 20 and "move_j" not in operations
@@ -175,8 +205,13 @@ def test_ctrl_c_cancels_a_stalled_move_and_the_arm_holds(site, tmp_path):
         assert arm.read_joints()["joints_rad"] == [0.0] * 7
     finally:
         arm.close()
-    events = [json.loads(line) for line in (sdk / "pyAgxArm/recovery-events.jsonl").read_text().splitlines()]
+    events = [
+        json.loads(line)
+        for line in (sdk / "pyAgxArm/recovery-events.jsonl").read_text().splitlines()
+    ]
     moves = [event for event in events if event["op"] == "move_j"]
-    assert moves[0]["target"] == [0.2] * 7 and moves[-1]["target"] == [0.0] * 7  # Commanded, then held.
+    assert (
+        moves[0]["target"] == [0.2] * 7 and moves[-1]["target"] == [0.0] * 7
+    )  # Commanded, then held.
     assert {"op": "set_speed_percent", "percent": 10} in events
     assert signal.getsignal(signal.SIGINT) is signal.default_int_handler

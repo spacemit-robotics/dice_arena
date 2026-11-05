@@ -184,7 +184,9 @@ class RtspStreamer:
             # stdout is devnull'd: the VPU encoder library chats on stdout and
             # must never reach this process' JSON-lines stdout; stderr passes
             # through so real GStreamer errors stay visible.
-            self._proc = subprocess.Popen(self.command(), stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=None)
+            self._proc = subprocess.Popen(
+                self.command(), stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=None
+            )
             self._stdin = self._proc.stdin
             self._spawned += 1
             self._unavailable_reported = False

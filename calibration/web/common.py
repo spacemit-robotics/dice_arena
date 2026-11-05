@@ -13,7 +13,18 @@ from pathlib import Path
 from calibration.apply_result import atomic_bytes
 from calibration.paths import CODE, CONFIG, ROOT, SITE, resolve as _resolve  # noqa: F401
 
-ACTIONS = {"first", "plan", "auto", "solve", "register", "restore", "apply", "table", "inspect", "home"}
+ACTIONS = {
+    "first",
+    "plan",
+    "auto",
+    "solve",
+    "register",
+    "restore",
+    "apply",
+    "table",
+    "inspect",
+    "home",
+}
 HARDWARE = {"first", "auto", "register", "restore", "apply", "table", "inspect", "home"}
 MOTION = {"auto", "restore", "home"}
 
@@ -26,7 +37,9 @@ def read(path, default=None):
 
 
 def write(path, data):
-    atomic_bytes(path, (json.dumps(data, ensure_ascii=False, allow_nan=False, indent=2) + "\n").encode())
+    atomic_bytes(
+        path, (json.dumps(data, ensure_ascii=False, allow_nan=False, indent=2) + "\n").encode()
+    )
 
 
 def resolve(value):
@@ -48,7 +61,9 @@ def pin_record(pin):
 def check_pin(pin, record):
     if not record or not isinstance(pin, str) or len(pin) > 20:
         return False
-    hashed = hashlib.pbkdf2_hmac("sha256", pin.encode(), bytes.fromhex(record["salt"]), 200000).hex()
+    hashed = hashlib.pbkdf2_hmac(
+        "sha256", pin.encode(), bytes.fromhex(record["salt"]), 200000
+    ).hex()
     return secrets.compare_digest(hashed, record["hash"])
 
 

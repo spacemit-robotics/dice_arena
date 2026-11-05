@@ -57,8 +57,15 @@ class AutoCollectionTests(unittest.TestCase):
             "dist_coeffs": [0] * 5,
         }
         self.board = {"squares_x": 4, "squares_y": 5, "square_length_m": 0.02}
-        self.manifest = {"camera": self.camera, "board": self.board, "T_flange_tcp": np.eye(4).tolist()}
-        self.calibration = {"T_base_camera": np.eye(4).tolist(), "T_tcp_board": self.pose(0.5).tolist()}
+        self.manifest = {
+            "camera": self.camera,
+            "board": self.board,
+            "T_flange_tcp": np.eye(4).tolist(),
+        }
+        self.calibration = {
+            "T_base_camera": np.eye(4).tolist(),
+            "T_tcp_board": self.pose(0.5).tolist(),
+        }
 
     @staticmethod
     def pose(z):
@@ -99,7 +106,16 @@ class AutoCollectionTests(unittest.TestCase):
     def test_joint_path_checks_interpolated_board_visibility(self):
         start = [0.0] * 7
         target = [0.04] + [0.0] * 6
-        path = check_path(start, [target], FakeModel(), self.manifest, self.calibration, [300, 220, 600, 470], 1.0, 5.0)
+        path = check_path(
+            start,
+            [target],
+            FakeModel(),
+            self.manifest,
+            self.calibration,
+            [300, 220, 600, 470],
+            1.0,
+            5.0,
+        )
         self.assertGreater(len(path), 2)
         self.assertEqual(path[-1]["capture_sample_index"], 0)
         with self.assertRaisesRegex(ValueError, "Board leaves drawn window"):
@@ -136,13 +152,20 @@ class AutoCollectionTests(unittest.TestCase):
 
     def test_board_window_is_checked_after_the_move_settles(self):
         arm, order = Mock(), []
-        arm.state.return_value = {"enabled": True, "fault": False, "moving": False, "position_mode": True}
+        arm.state.return_value = {
+            "enabled": True,
+            "fault": False,
+            "moving": False,
+            "position_mode": True,
+        }
         arm.speed_deg_s, arm.acc_deg_s2 = 20.0, 15.0
         arm.move_path.side_effect = lambda path, v, a: order.append(("move", path, v, a)) and None
         with patch("auto_collect.live_board", side_effect=lambda *a: order.append("board")):
             move_and_watch(arm, None, None, None, None, None, 0, [0.0] * 7)
             move_and_watch(arm, None, None, None, None, None, 0, [0.0] * 7, watch_board=False)
-        self.assertEqual(order, [("move", [[0.0] * 7], 20.0, 15.0), "board", ("move", [[0.0] * 7], 20.0, 15.0)])
+        self.assertEqual(
+            order, [("move", [[0.0] * 7], 20.0, 15.0), "board", ("move", [[0.0] * 7], 20.0, 15.0)]
+        )
         arm.move.assert_not_called()  # Settling never switches to the point (j) mode.
 
     def test_requested_fast_calibration_settings_are_accepted(self):
@@ -206,13 +229,17 @@ class AutoCollectionTests(unittest.TestCase):
             frame["T_camera_board"] = None
             trace.write_text(json.dumps(frame) + "\n")
             with self.assertRaisesRegex(ValueError, "not detected"):
-                taught_route(dataset, samples, self.manifest, self.calibration, [300, 220, 500, 460], 5.0)
+                taught_route(
+                    dataset, samples, self.manifest, self.calibration, [300, 220, 500, 460], 5.0
+                )
             frame["T_camera_board"] = self.pose(0.5).tolist()
             frame["time_unix_s"] = 1.1
             trace.write_text(json.dumps(frame) + "\n")
             samples[1]["time_unix_s"] = 5.0
             with self.assertRaisesRegex(ValueError, "Unrecorded arm movement"):
-                taught_route(dataset, samples, self.manifest, self.calibration, [300, 220, 500, 460], 5.0)
+                taught_route(
+                    dataset, samples, self.manifest, self.calibration, [300, 220, 500, 460], 5.0
+                )
 
     def test_capture_only_route_keeps_samples_without_transition_detection(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -268,7 +295,12 @@ class AutoCollectionTests(unittest.TestCase):
 
     def test_replay_requires_can_position_mode_and_never_switches_it(self):
         arm = Mock()
-        arm.state.return_value = {"enabled": True, "fault": False, "moving": False, "position_mode": True}
+        arm.state.return_value = {
+            "enabled": True,
+            "fault": False,
+            "moving": False,
+            "position_mode": True,
+        }
         ensure_can_control(arm)
         for change, message in (
             ({"position_mode": False}, "CAN"),
@@ -276,7 +308,13 @@ class AutoCollectionTests(unittest.TestCase):
             ({"enabled": False}, "enabled"),
             ({"fault": True}, "enabled"),
         ):
-            arm.state.return_value = {"enabled": True, "fault": False, "moving": False, "position_mode": True, **change}
+            arm.state.return_value = {
+                "enabled": True,
+                "fault": False,
+                "moving": False,
+                "position_mode": True,
+                **change,
+            }
             with self.assertRaisesRegex(RuntimeError, message):
                 ensure_can_control(arm)
         arm.move.assert_not_called()
@@ -289,7 +327,9 @@ class AutoCollectionTests(unittest.TestCase):
         ) as capture:
             self.assertEqual(capture_after_settling(Mock(), Mock(), Mock(), None), accepted)
             self.assertEqual(capture.call_count, 2)
-        with patch("auto_collect.capture_sample", side_effect=ValueError("Board missing")) as capture:
+        with patch(
+            "auto_collect.capture_sample", side_effect=ValueError("Board missing")
+        ) as capture:
             with self.assertRaisesRegex(ValueError, "Board missing"):
                 capture_after_settling(Mock(), Mock(), Mock(), None)
             capture.assert_called_once()
@@ -314,7 +354,9 @@ class AutoCollectionTests(unittest.TestCase):
         calibration_path = root / "calibration.json"
         calibration_path.write_text(json.dumps(calibration))
         (source / "board_window.json").write_text(
-            json.dumps({"window_xyxy": [300, 220, 640, 470], "camera": self.camera, "board": self.board})
+            json.dumps(
+                {"window_xyxy": [300, 220, 640, 470], "camera": self.camera, "board": self.board}
+            )
         )
         frames = []
         for i in range(8):
@@ -337,7 +379,9 @@ class AutoCollectionTests(unittest.TestCase):
                         "image_height": 480,
                     }
                 )
-        (source / "teaching_frames.jsonl").write_text("".join(json.dumps(row) + "\n" for row in frames))
+        (source / "teaching_frames.jsonl").write_text(
+            "".join(json.dumps(row) + "\n" for row in frames)
+        )
         return source, calibration_path
 
     def test_plan_then_mock_run_writes_all_samples_without_hardware(self):
@@ -353,7 +397,9 @@ class AutoCollectionTests(unittest.TestCase):
             with patch("auto_collect.load_model", return_value=FakeModel()):
                 plan = make_plan(source, calibration, plan_path, margin_px=5.0)
             self.assertEqual(plan["path_source"], "per_frame_teaching_trace")
-            self.assertEqual(sum(w["capture_sample_index"] is not None for w in plan["waypoints"]), 8)
+            self.assertEqual(
+                sum(w["capture_sample_index"] is not None for w in plan["waypoints"]), 8
+            )
             camera, arm, detector = Mock(), Mock(), Mock()
             camera.info = self.camera
             arm.read_joints.return_value = {"joints_rad": [0.0] * 7}
@@ -379,7 +425,9 @@ class AutoCollectionTests(unittest.TestCase):
             self.assertFalse((output / "AUTO_INCOMPLETE.json").exists())
             collected_manifest = json.loads((output / "manifest.json").read_text())
             self.assertEqual(collected_manifest["opencv_version"], cv2.__version__)
-            self.assertEqual(collected_manifest["source_opencv_version"], "teaching-runtime-version")
+            self.assertEqual(
+                collected_manifest["source_opencv_version"], "teaching-runtime-version"
+            )
             self.assertEqual(source_manifest_path.read_bytes(), source_manifest_bytes)
             arm.close.assert_called_once()
             camera.close.assert_called_once()
@@ -401,10 +449,17 @@ class AutoCollectionTests(unittest.TestCase):
             plan_path, output = root / "plan.json", root / "automatic"
             with patch("auto_collect.load_model", return_value=FakeModel()):
                 plan = make_plan(
-                    source, calibration, plan_path, margin_px=5.0, allow_provisional=True, capture_only_visibility=True
+                    source,
+                    calibration,
+                    plan_path,
+                    margin_px=5.0,
+                    allow_provisional=True,
+                    capture_only_visibility=True,
                 )
             self.assertEqual(plan["visibility_policy"], "capture_only")
-            self.assertEqual(sum(w["capture_sample_index"] is not None for w in plan["waypoints"]), 8)
+            self.assertEqual(
+                sum(w["capture_sample_index"] is not None for w in plan["waypoints"]), 8
+            )
             camera, arm, detector = Mock(), Mock(), Mock()
             camera.info = self.camera
             arm.read_joints.return_value = {"joints_rad": [0.07] + [0.0] * 6}
@@ -432,7 +487,9 @@ class AutoCollectionTests(unittest.TestCase):
             self.assertEqual(view_factory.return_value.status.call_count, 8)
             self.assertEqual(view_factory.return_value.update.call_count, 9)
             view_factory.return_value.close.assert_called_once()
-            self.assertTrue(all(call.kwargs["watch_board"] is False for call in move.call_args_list))
+            self.assertTrue(
+                all(call.kwargs["watch_board"] is False for call in move.call_args_list)
+            )
             self.assertEqual(len(list(output.glob("sample_*.json"))), 8)
 
     def test_home_start_precedes_capture_and_failure_aborts_sampling(self):
@@ -521,7 +578,9 @@ class AutoCollectionTests(unittest.TestCase):
                     run_plan(root / "plan.json", root / "automatic", 10, fps=6)
             self.assertEqual(open_camera.call_args.kwargs["image_profile"]["fps"], 6)
             camera.close.assert_called_once()
-            self.assertEqual(json.loads((source / "manifest.json").read_text())["camera"]["fps"], 15)
+            self.assertEqual(
+                json.loads((source / "manifest.json").read_text())["camera"]["fps"], 15
+            )
 
     def test_old_dataset_reports_all_missing_replay_inputs(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -533,7 +592,9 @@ class AutoCollectionTests(unittest.TestCase):
             sample = json.loads(sample_path.read_text())
             del sample["frame_joint_observations"]
             sample_path.write_text(json.dumps(sample))
-            with self.assertRaisesRegex(ValueError, "Teaching dataset cannot be replayed") as caught:
+            with self.assertRaisesRegex(
+                ValueError, "Teaching dataset cannot be replayed"
+            ) as caught:
                 inputs(source, calibration)
             self.assertIn("board_window.json", str(caught.exception))
             self.assertIn("teaching_frames.jsonl", str(caught.exception))

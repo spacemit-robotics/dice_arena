@@ -9,7 +9,9 @@ from cup_grasp_demo.flow import green_hand_execution as m
 
 
 class HandCANTests(unittest.TestCase):
-    def run_case(self, mode, switch=True, fault=0, read_feedback=True, joints=None, hand_tolerance=None):
+    def run_case(
+        self, mode, switch=True, fault=0, read_feedback=True, joints=None, hand_tolerance=None
+    ):
         state = SimpleNamespace(arm_status=fault, ctrl_mode=mode, motion_status=0)
         robot = Mock()
         robot.get_joints_enable_status_list.return_value = [True] * 7
@@ -39,7 +41,14 @@ class HandCANTests(unittest.TestCase):
             patch.object(m.time, "monotonic", side_effect=[0, 3]),
         ):
             try:
-                m.execute(dict(target_0_100=[0] * 6, start_q_rad=[0] * 7), cfg, robot, Mock(), demo, result)
+                m.execute(
+                    dict(target_0_100=[0] * 6, start_q_rad=[0] * 7),
+                    cfg,
+                    robot,
+                    Mock(),
+                    demo,
+                    result,
+                )
             except (RuntimeError, TimeoutError):
                 send.assert_not_called()
                 raise

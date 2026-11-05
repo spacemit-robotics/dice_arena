@@ -56,7 +56,9 @@ __kernel void yuv420_to_yolo(read_only image2d_t yimg, read_only image2d_t uimg,
 }
 )CLC";
 
-int even_at_least_two(int value) { return std::max(2, value & ~1); }
+int even_at_least_two(int value) {
+    return std::max(2, value & ~1);
+}
 
 struct LetterboxGeometry {
     float scale = 1.0f;
@@ -70,8 +72,8 @@ LetterboxGeometry calculate_geometry(int src_width, int src_height, int dst_widt
     if (src_width <= 0 || src_height <= 0 || dst_width <= 0 || dst_height <= 0) {
         throw std::runtime_error("invalid preprocess dimensions");
     }
-    const float scale =
-        std::max(src_width / static_cast<float>(dst_width), src_height / static_cast<float>(dst_height));
+    const float scale = std::max(src_width / static_cast<float>(dst_width),
+                                 src_height / static_cast<float>(dst_height));
     const int resized_width = even_at_least_two(static_cast<int>(std::lround(src_width / scale)));
     const int resized_height = even_at_least_two(static_cast<int>(std::lround(src_height / scale)));
     if (resized_width > dst_width || resized_height > dst_height) {
@@ -133,7 +135,8 @@ struct OpenClPreprocessor::Impl {
         size_t size = 0;
         check(clGetPlatformInfo(id, param, 0, nullptr, &size), "clGetPlatformInfo size");
         std::string result(size, '\0');
-        check(clGetPlatformInfo(id, param, result.size(), result.data(), nullptr), "clGetPlatformInfo");
+        check(clGetPlatformInfo(id, param, result.size(), result.data(), nullptr),
+              "clGetPlatformInfo");
         if (!result.empty() && result.back() == '\0') result.pop_back();
         return result;
     }
@@ -173,12 +176,14 @@ struct OpenClPreprocessor::Impl {
         cl_uint device_count = 0;
         for (cl_platform_id candidate : platforms) {
             device_count = 0;
-            if (clGetDeviceIDs(candidate, CL_DEVICE_TYPE_GPU, 0, nullptr, &device_count) == CL_SUCCESS &&
+            if (clGetDeviceIDs(candidate, CL_DEVICE_TYPE_GPU, 0, nullptr, &device_count) ==
+                        CL_SUCCESS &&
                 device_count > 0) {
                 platform = candidate;
                 std::vector<cl_device_id> devices(device_count);
-                check(clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, device_count, devices.data(), nullptr),
-                    "clGetDeviceIDs GPU");
+                check(clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, device_count, devices.data(),
+                                     nullptr),
+                      "clGetDeviceIDs GPU");
                 device = devices.front();
                 break;
             }
@@ -186,8 +191,10 @@ struct OpenClPreprocessor::Impl {
         if (!device) throw std::runtime_error("no OpenCL GPU device found");
 
         char name[256] = {};
-        check(clGetDeviceInfo(device, CL_DEVICE_NAME, sizeof(name), name, nullptr), "clGetDeviceInfo name");
-        std::cout << "OpenCL GPU: " << name << " (platform: " << info_string(platform, CL_PLATFORM_NAME) << ")\n";
+        check(clGetDeviceInfo(device, CL_DEVICE_NAME, sizeof(name), name, nullptr),
+              "clGetDeviceInfo name");
+        std::cout << "OpenCL GPU: " << name
+                  << " (platform: " << info_string(platform, CL_PLATFORM_NAME) << ")\n";
 
         cl_int error = CL_SUCCESS;
         context = clCreateContext(nullptr, 1, &device, nullptr, nullptr, &error);
@@ -203,7 +210,8 @@ struct OpenClPreprocessor::Impl {
             size_t log_size = 0;
             clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 0, nullptr, &log_size);
             std::string log(log_size, '\0');
-            clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, log.size(), log.data(), nullptr);
+            clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, log.size(), log.data(),
+                                  nullptr);
             throw std::runtime_error("clBuildProgram: " + std::to_string(error) + "\n" + log);
         }
         kernel = clCreateKernel(program, "yuv420_to_yolo", &error);
@@ -234,21 +242,24 @@ struct OpenClPreprocessor::Impl {
             check(error, "clCreateBuffer V");
 
             const cl_image_format format{CL_R, CL_UNORM_INT8};
-            auto create_image = [&](cl_mem buffer, int image_width, int image_height, const char* what) {
+            auto create_image = [&](cl_mem buffer, int image_width, int image_height,
+                                    const char* what) {
                 cl_image_desc desc{};
                 desc.image_type = CL_MEM_OBJECT_IMAGE2D;
                 desc.image_width = static_cast<size_t>(image_width);
                 desc.image_height = static_cast<size_t>(image_height);
                 desc.image_row_pitch = static_cast<size_t>(image_width);
                 desc.buffer = buffer;
-                cl_mem image = clCreateImage(context, CL_MEM_READ_ONLY, &format, &desc, nullptr, &error);
+                cl_mem image =
+                        clCreateImage(context, CL_MEM_READ_ONLY, &format, &desc, nullptr, &error);
                 check(error, what);
                 return image;
             };
             y_image = create_image(y_buffer, width, height, "clCreateImage Y");
             u_image = create_image(u_buffer, width / 2, height / 2, "clCreateImage U");
             v_image = create_image(v_buffer, width / 2, height / 2, "clCreateImage V");
-            output_buffer = clCreateBuffer(context, CL_MEM_READ_WRITE, output_size, nullptr, &error);
+            output_buffer =
+                    clCreateBuffer(context, CL_MEM_READ_WRITE, output_size, nullptr, &error);
             check(error, "clCreateBuffer output");
         } catch (...) {
             release_io();
@@ -270,8 +281,8 @@ bool OpenClPreprocessor::init(int out_width, int out_height) {
         impl_->out_h = out_height;
         impl_->init();
         char name[256] = {};
-        Impl::check(
-            clGetDeviceInfo(impl_->device, CL_DEVICE_NAME, sizeof(name), name, nullptr), "clGetDeviceInfo name");
+        Impl::check(clGetDeviceInfo(impl_->device, CL_DEVICE_NAME, sizeof(name), name, nullptr),
+                    "clGetDeviceInfo name");
         device_name_ = name;
         return true;
     } catch (const std::exception& e) {
@@ -297,11 +308,13 @@ OpenClPreprocessor::Result OpenClPreprocessor::preprocess(const cv::Mat& nv12) {
     }
 
     const auto t0 = std::chrono::steady_clock::now();
-    const LetterboxGeometry geometry = calculate_geometry(width, height, impl_->out_w, impl_->out_h);
+    const LetterboxGeometry geometry =
+            calculate_geometry(width, height, impl_->out_w, impl_->out_h);
     impl_->ensure_io(width, height);
 
     for (int row = 0; row < height; ++row) {
-        std::memcpy(impl_->y_host.data() + static_cast<size_t>(row) * width, nv12.ptr(row), static_cast<size_t>(width));
+        std::memcpy(impl_->y_host.data() + static_cast<size_t>(row) * width, nv12.ptr(row),
+                    static_cast<size_t>(width));
     }
     const uint8_t* uv_src = nv12.ptr(height);
     for (int row = 0; row < height / 2; ++row) {
@@ -312,14 +325,14 @@ OpenClPreprocessor::Result OpenClPreprocessor::preprocess(const cv::Mat& nv12) {
         }
     }
 
-    cl_int error = clEnqueueWriteBuffer(
-        impl_->queue, impl_->y_buffer, CL_FALSE, 0, impl_->y_size, impl_->y_host.data(), 0, nullptr, nullptr);
+    cl_int error = clEnqueueWriteBuffer(impl_->queue, impl_->y_buffer, CL_FALSE, 0, impl_->y_size,
+                                        impl_->y_host.data(), 0, nullptr, nullptr);
     Impl::check(error, "clEnqueueWriteBuffer Y");
-    error = clEnqueueWriteBuffer(
-        impl_->queue, impl_->u_buffer, CL_FALSE, 0, impl_->uv_size, impl_->u_host.data(), 0, nullptr, nullptr);
+    error = clEnqueueWriteBuffer(impl_->queue, impl_->u_buffer, CL_FALSE, 0, impl_->uv_size,
+                                 impl_->u_host.data(), 0, nullptr, nullptr);
     Impl::check(error, "clEnqueueWriteBuffer U");
-    error = clEnqueueWriteBuffer(
-        impl_->queue, impl_->v_buffer, CL_FALSE, 0, impl_->uv_size, impl_->v_host.data(), 0, nullptr, nullptr);
+    error = clEnqueueWriteBuffer(impl_->queue, impl_->v_buffer, CL_FALSE, 0, impl_->uv_size,
+                                 impl_->v_host.data(), 0, nullptr, nullptr);
     Impl::check(error, "clEnqueueWriteBuffer V");
 
     auto set_arg = [&](cl_uint index, size_t size, const void* value, const char* what) {
@@ -343,21 +356,24 @@ OpenClPreprocessor::Result OpenClPreprocessor::preprocess(const cv::Mat& nv12) {
     set_arg(13, sizeof(int), &geometry.pad_y, "clSetKernelArg pad y");
 
     const size_t global[] = {static_cast<size_t>(impl_->out_w), static_cast<size_t>(impl_->out_h)};
-    Impl::check(clEnqueueNDRangeKernel(impl_->queue, impl_->kernel, 2, nullptr, global, nullptr, 0, nullptr, nullptr),
-        "clEnqueueNDRangeKernel");
+    Impl::check(clEnqueueNDRangeKernel(impl_->queue, impl_->kernel, 2, nullptr, global, nullptr, 0,
+                                       nullptr, nullptr),
+                "clEnqueueNDRangeKernel");
 
-    auto output = std::make_shared<std::vector<float>>(static_cast<size_t>(3) * impl_->out_w * impl_->out_h);
+    auto output = std::make_shared<std::vector<float>>(static_cast<size_t>(3) * impl_->out_w *
+                                                       impl_->out_h);
     // A blocking read waits for all earlier commands in this in-order queue;
     // an extra clFinish here only adds synchronization overhead.
-    Impl::check(clEnqueueReadBuffer(impl_->queue, impl_->output_buffer, CL_TRUE, 0, impl_->output_size, output->data(),
-                    0, nullptr, nullptr),
-        "clEnqueueReadBuffer output");
+    Impl::check(clEnqueueReadBuffer(impl_->queue, impl_->output_buffer, CL_TRUE, 0,
+                                    impl_->output_size, output->data(), 0, nullptr, nullptr),
+                "clEnqueueReadBuffer output");
 
     Result result;
     result.data = std::move(output);
     result.scale = geometry.scale;
     result.pad_x = geometry.pad_x;
     result.pad_y = geometry.pad_y;
-    result.ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    result.ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0)
+                        .count();
     return result;
 }

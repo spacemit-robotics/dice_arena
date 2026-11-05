@@ -22,7 +22,9 @@ def measured_observation(image, detector, camera_matrix, dist_coeffs, width_m, h
     """Retain the recorded detector/ROI; solve PnP with measured X/Y grid spacing."""
     if not (np.isfinite([width_m, height_m]).all() and 0 < width_m < 1 and 0 < height_m < 1):
         raise ValueError("Board width and height must be positive and below one metre")
-    detector.detect(image, camera_matrix, dist_coeffs)  # Apply the original marker, ROI and quality checks.
+    detector.detect(
+        image, camera_matrix, dist_coeffs
+    )  # Apply the original marker, ROI and quality checks.
     a = image
     if detector.roi is not None:
         x0, y0, x1, y1 = detector.roi
@@ -33,7 +35,9 @@ def measured_observation(image, detector, camera_matrix, dist_coeffs, width_m, h
         for x0, y0, x1, y1 in detector.cfg["image_exclude_rois_xyxy"]:
             a[y0:y1, x0:x1] = 255
     mc, mi, _ = cv2.aruco.detectMarkers(a, detector.dictionary)
-    _, cc, ci = cv2.aruco.interpolateCornersCharuco(mc, mi, a, detector.board, cameraMatrix=camera_matrix, distCoeffs=dist_coeffs)
+    _, cc, ci = cv2.aruco.interpolateCornersCharuco(
+        mc, mi, a, detector.board, cameraMatrix=camera_matrix, distCoeffs=dist_coeffs
+    )
     obj = np.asarray(detector.points[ci.ravel()], dtype=np.float64).copy()
     cfg = detector.cfg
     obj[:, 0] *= width_m / (cfg["squares_x"] * cfg["square_length_m"])
@@ -51,7 +55,12 @@ def measured_observation(image, detector, camera_matrix, dist_coeffs, width_m, h
     rms = float(np.sqrt(np.mean(np.sum((projected - uv) ** 2, axis=1))))
     if not np.isfinite(rms) or rms > cfg.get("max_reprojection_px", 1.0):
         raise ValueError(f"Measured-board reprojection RMS too large: {rms:.3f} px")
-    return transform, {"corners": len(ci), "reprojection_rms_px": rms}, ci.ravel().tolist(), uv.tolist()
+    return (
+        transform,
+        {"corners": len(ci), "reprojection_rms_px": rms},
+        ci.ravel().tolist(),
+        uv.tolist(),
+    )
 
 
 def metrics(result):
@@ -70,14 +79,20 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True, help="New output directory")
-    parser.add_argument("--width-mm", type=float, required=True, help="Grid width without white border")
-    parser.add_argument("--height-mm", type=float, required=True, help="Grid height without white border")
+    parser.add_argument(
+        "--width-mm", type=float, required=True, help="Grid width without white border"
+    )
+    parser.add_argument(
+        "--height-mm", type=float, required=True, help="Grid height without white border"
+    )
     parser.add_argument("--max-position-mm", type=float, default=5.0)
     parser.add_argument("--max-angle-deg", type=float, default=2.0)
     args = parser.parse_args(argv)
     meta, samples = read_dataset(args.dataset)
     if meta.get("opencv_version") != cv2.__version__:
-        raise ValueError("Run with the recorded OpenCV version to preserve board corner conventions")
+        raise ValueError(
+            "Run with the recorded OpenCV version to preserve board corner conventions"
+        )
     args.output.mkdir(parents=True, exist_ok=False)
     detector = CharucoDetector(meta["board"])
     camera_matrix = np.asarray(meta["camera"]["camera_matrix"])
@@ -112,12 +127,20 @@ def main(argv=None):
             "Original flange poses, sample order and holdouts retained; "
             "residual gates recorded in result.thresholds."
         ),
-        "scope": "Offline derived observations; not a resumable capture session or a live board config.",
+        "scope": "Offline derived observations; not a resumable capture session or a live board "
+        "config.",
     }
     baseline = solve(samples, meta["T_flange_tcp"], args.max_position_mm / 1000, args.max_angle_deg)
-    result = solve(observations, meta["T_flange_tcp"], args.max_position_mm / 1000, args.max_angle_deg)
+    result = solve(
+        observations, meta["T_flange_tcp"], args.max_position_mm / 1000, args.max_angle_deg
+    )
     result.update(
-        {"sample_count": len(samples), "camera": meta["camera"], "tcp": meta["tcp"], "board_measurement": measurement}
+        {
+            "sample_count": len(samples),
+            "camera": meta["camera"],
+            "tcp": meta["tcp"],
+            "board_measurement": measurement,
+        }
     )
     delta = distance(np.asarray(baseline["T_base_camera"]), np.asarray(result["T_base_camera"]))
     comparison = {

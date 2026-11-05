@@ -12,10 +12,17 @@ def planar_shake_options(raw):
     """Planar JS budget; shared by the standalone and pipeline entry points."""
     if not isinstance(raw, dict):
         raise ValueError("planar shake options must be an object")
-    extra = {"joint_motion_cost", "joint_acceleration_cap_rad_s2", "limit_utilization", "auto_reduce_frequency"}
+    extra = {
+        "joint_motion_cost",
+        "joint_acceleration_cap_rad_s2",
+        "limit_utilization",
+        "auto_reduce_frequency",
+    }
     result = shake_options({"shake": {k: v for k, v in raw.items() if k not in extra}})
     if "limit_utilization" in raw:
-        result["limit_utilization"] = number(raw["limit_utilization"], "limit_utilization", 0.1, 1.0)
+        result["limit_utilization"] = number(
+            raw["limit_utilization"], "limit_utilization", 0.1, 1.0
+        )
     costs = raw.get("joint_motion_cost", [1, 4, 4, 1, 4, 4, 1])
     if not isinstance(costs, list) or len(costs) != 7:
         raise ValueError("joint_motion_cost requires seven costs")
@@ -34,7 +41,10 @@ def effective_shake_options(cfg):
     """Validate the selected strategy; configurations without one retain legacy behavior."""
     raw = cfg.get("shake")
     if isinstance(raw, dict) and raw.get("strategy") == "planar_js":
-        return dict(strategy="planar_js", **planar_shake_options({k: v for k, v in raw.items() if k != "strategy"}))
+        return dict(
+            strategy="planar_js",
+            **planar_shake_options({k: v for k, v in raw.items() if k != "strategy"}),
+        )
     return shake_options(cfg)
 
 
@@ -120,7 +130,9 @@ def number(value, name, low, high, integer=False):
 
 def closure_targets(opts):
     """Only the thumb base moves first; the second step retains its target."""
-    thumb = number(opts.get("thumb_base_target_0_100", 100), "thumb_base_target_0_100", 0, 100, True)
+    thumb = number(
+        opts.get("thumb_base_target_0_100", 100), "thumb_base_target_0_100", 0, 100, True
+    )
     close = opts.get("close_targets_0_100", [100] * 6)
     if not isinstance(close, (list, tuple)) or len(close) != 6:
         raise ValueError("close_targets_0_100 requires six channels")
@@ -132,7 +144,12 @@ def closure_targets(opts):
 
 def approach_options(opts):
     raw = opts.get("approach", {})
-    if not isinstance(raw, dict) or set(raw) - {"enabled", "start_gap_mm", "step_mm", "speed_percent"}:
+    if not isinstance(raw, dict) or set(raw) - {
+        "enabled",
+        "start_gap_mm",
+        "step_mm",
+        "speed_percent",
+    }:
         raise ValueError("Invalid side_grasp.approach fields")
     enabled = raw.get("enabled", False)
     if not isinstance(enabled, bool):

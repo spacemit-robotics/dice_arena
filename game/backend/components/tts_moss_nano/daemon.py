@@ -256,7 +256,8 @@ class MossRuntime:
                 raise MossRuntimeError(f"reference audio not found: {self.reference_audio}")
             if not (self.model_dir / "browser_poc_manifest.json").is_file():
                 raise MossRuntimeError(
-                    f"MOSS model manifest is missing: {self.model_dir / 'browser_poc_manifest.json'}"
+                    "MOSS model manifest is missing: "
+                    f"{self.model_dir / 'browser_poc_manifest.json'}"
                 )
 
             with self._startup_step("model_load"):
@@ -322,7 +323,9 @@ class MossRuntime:
                 self.starting = False
                 self.error = ""
                 self._startup_phase = "ready"
-                self._startup_timings["total"] = round(time.monotonic() - self._startup_started_at, 3)
+                self._startup_timings["total"] = round(
+                    time.monotonic() - self._startup_started_at, 3
+                )
         except BaseException as exc:
             with self._state_lock:
                 self.ready = False
@@ -330,13 +333,19 @@ class MossRuntime:
                 self.error = f"MOSS runtime initialization failed: {exc}"
             print(f"[tts_moss_nano] {self.error}", flush=True)
 
-    def _capacity_aware_chunk_budget(self, runtime: Any, prompt_audio_codes: list[list[int]]) -> int:
+    def _capacity_aware_chunk_budget(
+        self, runtime: Any, prompt_audio_codes: list[list[int]]
+    ) -> int:
         budget = max(1, self.voice_clone_max_text_tokens)
-        decode_input = next(value for value in runtime.sessions["decode"].get_inputs() if value.name == "past_key_0")
+        decode_input = next(
+            value for value in runtime.sessions["decode"].get_inputs() if value.name == "past_key_0"
+        )
         raw_capacity = decode_input.shape[1] if len(decode_input.shape) > 1 else None
         if not isinstance(raw_capacity, int):
             return budget
-        fixed_prompt_rows = len(runtime.build_voice_clone_request_rows(prompt_audio_codes, [])["inputIds"])
+        fixed_prompt_rows = len(
+            runtime.build_voice_clone_request_rows(prompt_audio_codes, [])["inputIds"]
+        )
         capacity_budget = int(raw_capacity) - fixed_prompt_rows - self.max_new_frames
         if capacity_budget <= 0:
             raise MossRuntimeError(
@@ -419,7 +428,9 @@ class MossRuntime:
                 streaming=on_pcm_chunk is not None,
                 max_new_frames=self.max_new_frames,
                 voice_clone_max_text_tokens=self._chunk_token_budget,
-                first_chunk_text_tokens=(self.first_chunk_text_tokens if on_pcm_chunk is not None else None),
+                first_chunk_text_tokens=(
+                    self.first_chunk_text_tokens if on_pcm_chunk is not None else None
+                ),
                 enable_wetext=False,
                 enable_normalize_tts_text=False,
                 seed=self.seed,
@@ -498,14 +509,17 @@ class MossRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Connection", "close")
             self.end_headers()
 
-            def write_frame(waveform: np.ndarray, sample_rate: int, metadata: dict[str, Any]) -> None:
+            def write_frame(
+                waveform: np.ndarray, sample_rate: int, metadata: dict[str, Any]
+            ) -> None:
                 frame = _wave_bytes(waveform, sample_rate)
                 if not frame:
                     return
                 self.wfile.write(encode_audio_frame(frame))
                 self.wfile.flush()
                 print(
-                    f"[tts_moss_nano] stream chunk kind={metadata.get('kind', 'audio')} bytes={len(frame)}",
+                    f"[tts_moss_nano] stream chunk kind={metadata.get('kind', 'audio')} "
+                    f"bytes={len(frame)}",
                     flush=True,
                 )
 
@@ -527,7 +541,9 @@ class MossRequestHandler(BaseHTTPRequestHandler):
 
         result = self.server.runtime.synthesize(text, voice)
         self.server.runtime._validate_result(result)
-        audio = _wave_bytes(np.asarray(result["waveform"], dtype=np.float32), int(result["sample_rate"]))
+        audio = _wave_bytes(
+            np.asarray(result["waveform"], dtype=np.float32), int(result["sample_rate"])
+        )
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "audio/wav")
         self.send_header("Content-Length", str(len(audio)))

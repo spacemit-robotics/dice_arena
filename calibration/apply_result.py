@@ -15,7 +15,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from calibration.paths import SITE  # noqa: E402
 
-# Installed results stay in the manipulation site directory, beside the application's pipeline config.
+# Installed results stay in the manipulation site directory, beside the application's pipeline
+# config.
 ROOT = SITE
 DEFAULT_CONFIG = ROOT / "green_cup.json"
 DEFAULT_DESTINATION = ROOT / "calibration/handeye_result.json"
@@ -27,7 +28,9 @@ def load_result(path):
         raise ValueError("Calibration result mode must be eye_to_hand")
     matrix = data.get("T_base_camera")
     if not (
-        isinstance(matrix, list) and len(matrix) == 4 and all(isinstance(row, list) and len(row) == 4 for row in matrix)
+        isinstance(matrix, list)
+        and len(matrix) == 4
+        and all(isinstance(row, list) and len(row) == 4 for row in matrix)
     ):
         raise ValueError("Calibration result must contain a 4x4 T_base_camera")
     return data
@@ -36,7 +39,9 @@ def load_result(path):
 def atomic_bytes(path, payload):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(dir=path.parent, prefix=path.name + ".", delete=False) as stream:
+    with tempfile.NamedTemporaryFile(
+        dir=path.parent, prefix=path.name + ".", delete=False
+    ) as stream:
         temporary = Path(stream.name)
         stream.write(payload)
     try:
@@ -76,7 +81,11 @@ def main(argv=None):
     parser.add_argument("--destination", type=Path, default=DEFAULT_DESTINATION)
     args = parser.parse_args(argv)
     try:
-        print(json.dumps(install(args.result, args.config, args.destination), ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                install(args.result, args.config, args.destination), ensure_ascii=False, indent=2
+            )
+        )
     except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
         parser.error(str(exc))
 

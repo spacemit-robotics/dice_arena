@@ -24,13 +24,17 @@ def check_camera_pattern(game):
     """The dice camera is found by model, not by one unit's serial number."""
     from components.vision_yolov8_objdetect.process import resolve_camera_pattern
 
-    configured = json.loads((game / "backend/games/dice/adjudicator_config.json").read_text())["camera"]
+    configured = json.loads((game / "backend/games/dice/adjudicator_config.json").read_text())[
+        "camera"
+    ]
     prefix, _, suffix = configured.partition("*")
     assert suffix and "C920" in prefix, configured
     with tempfile.TemporaryDirectory(prefix="dice camera ") as temporary:
         directory = Path(temporary)
         pattern = str(directory / Path(configured).name)
-        assert resolve_camera_pattern(str(directory / "fixed-video0")) == str(directory / "fixed-video0")
+        assert resolve_camera_pattern(str(directory / "fixed-video0")) == str(
+            directory / "fixed-video0"
+        )
         for count in (0, 2):
             for index in range(count):
                 (directory / Path(configured).name.replace("*", f"SERIAL{index}")).touch()
@@ -49,7 +53,9 @@ def check_camera_pattern(game):
 def check(game):
     game = Path(game).resolve()
     sys.path.insert(0, str(game / "backend"))
-    spec = importlib.util.spec_from_file_location("dice_componentctl", game / "backend/componentctl.py")
+    spec = importlib.util.spec_from_file_location(
+        "dice_componentctl", game / "backend/componentctl.py"
+    )
     control = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(control)
     manifest = json.loads((game / "backend/components/tts_moss_nano/manifest.json").read_text())
@@ -63,10 +69,13 @@ def check(game):
         for action in ("start", "stop"):
             command = control._command_for(manifest, action)
             assert command and os.access(command[0], os.X_OK), f"not executable: {command}"
-            result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=5, check=True)
-            assert result.stdout.splitlines() == [str(game / "backend/components/tts_moss_nano/launcher.py"), action], (
-                result.stdout
+            result = subprocess.run(
+                command, env=environment, capture_output=True, text=True, timeout=5, check=True
             )
+            assert result.stdout.splitlines() == [
+                str(game / "backend/components/tts_moss_nano/launcher.py"),
+                action,
+            ], result.stdout
     for error, expected in (
         (PermissionError(errno.EACCES, "permission denied"), 126),
         (FileNotFoundError(errno.ENOENT, "file not found"), 127),

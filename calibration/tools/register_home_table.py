@@ -31,8 +31,12 @@ def register(config, table_scene):
     # Preserve the user's relative paths and all unrelated configuration fields.
     cfg = json.loads(config.read_text())
     cfg["green_cup"]["installation_requires_calibration"] = False
-    table_payload = (json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode()
-    config_payload = (json.dumps(cfg, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode()
+    table_payload = (
+        json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+    ).encode()
+    config_payload = (
+        json.dumps(cfg, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+    ).encode()
     atomic_bytes(output, table_payload)
     # Leave the gate closed if writing the checked table failed.
     atomic_bytes(config, config_payload)

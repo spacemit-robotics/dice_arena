@@ -28,8 +28,12 @@ DAEMON = PACKAGE_DIR / "daemon.py"
 
 def _paths(settings: MossSettings) -> tuple[Path, Path]:
     runtime_dir = Path(os.environ.get("DICE_RUNTIME_DIR", PROJECT_ROOT / ".runtime"))
-    pid_file = Path(os.environ.get("DICE_MOSS_TTS_PID_FILE", runtime_dir / f"moss-tts-{settings.port}.pid"))
-    log_file = Path(os.environ.get("DICE_MOSS_TTS_LOG_FILE", runtime_dir / f"moss-tts-{settings.port}.log"))
+    pid_file = Path(
+        os.environ.get("DICE_MOSS_TTS_PID_FILE", runtime_dir / f"moss-tts-{settings.port}.pid")
+    )
+    log_file = Path(
+        os.environ.get("DICE_MOSS_TTS_LOG_FILE", runtime_dir / f"moss-tts-{settings.port}.log")
+    )
     return pid_file, log_file
 
 
@@ -90,7 +94,10 @@ def _wait_ready(process, settings: MossSettings, log_file: Path) -> None:
         health = _health(settings)
         if health and bool(health.get("ready")):
             elapsed = time.monotonic() - started
-            print(f"MOSS-TTS bridge ready in {elapsed:.1f}s: pid={process.pid} {settings.base_url}", flush=True)
+            print(
+                f"MOSS-TTS bridge ready in {elapsed:.1f}s: pid={process.pid} {settings.base_url}",
+                flush=True,
+            )
             return
         if health and health.get("error") and not health.get("starting", False):
             raise SystemExit(f"MOSS-TTS initialization failed: {health['error']}; see {log_file}")
@@ -99,7 +106,10 @@ def _wait_ready(process, settings: MossSettings, log_file: Path) -> None:
             print(f"MOSS-TTS {phase} ({time.monotonic() - started:.1f}s)", flush=True)
             last_phase = phase
         time.sleep(min(0.2, max(0, deadline - time.monotonic())))
-    raise SystemExit(f"MOSS-TTS bridge did not become ready within {settings.start_timeout_seconds}s; see {log_file}")
+    raise SystemExit(
+        f"MOSS-TTS bridge did not become ready within {settings.start_timeout_seconds}s; see "
+        f"{log_file}"
+    )
 
 
 def _finish_start(process, settings: MossSettings, pid_file: Path, log_file: Path) -> None:
@@ -126,7 +136,8 @@ def start() -> int:
         raise SystemExit(f"MOSS daemon is missing: {DAEMON}")
     if not settings.root.is_dir():
         raise SystemExit(f"MOSS-TTS root does not exist: {settings.root}")
-    # Python packages and SpaceMIT libraries come from the system; bundled python/ and lib/ are optional.
+    # Python packages and SpaceMIT libraries come from the system; bundled python/ and lib/ are
+    # optional.
     if not (settings.root / "src").is_dir():
         raise SystemExit(f"MOSS-TTS runtime directory is missing: {settings.root / 'src'}")
     model_manifest = settings.model_dir / "browser_poc_manifest.json"
@@ -155,7 +166,9 @@ def start() -> int:
             pid_file.write_text(f"{existing[0]}\n", encoding="utf-8")
             print(f"MOSS-TTS bridge already running: pid={existing[0]} {settings.base_url}")
             return 0
-        raise SystemExit(f"MOSS-TTS bridge process is not healthy; refusing to reuse it: {existing}")
+        raise SystemExit(
+            f"MOSS-TTS bridge process is not healthy; refusing to reuse it: {existing}"
+        )
 
     environment = os.environ.copy()
     python_bin = environment.get("DICE_PYTHON", sys.executable)

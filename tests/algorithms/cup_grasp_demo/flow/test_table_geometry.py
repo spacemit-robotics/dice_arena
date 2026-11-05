@@ -23,12 +23,17 @@ class TableGeometryTest(unittest.TestCase):
             with self.subTest(link=name):
                 reduced = self.fast.meshes[name][0]
                 np.testing.assert_allclose(
-                    np.min(vertices @ directions, axis=0), np.min(reduced @ directions, axis=0), atol=1e-12, rtol=0
+                    np.min(vertices @ directions, axis=0),
+                    np.min(reduced @ directions, axis=0),
+                    atol=1e-12,
+                    rtol=0,
                 )
 
     def test_all_path_samples_keep_table_result_and_blockers(self):
         center = np.radians([30, -70, -90, 100, -10, -5, 5])
-        qs = [center + np.radians([2 * u, 0, 0, 3 * u, 0, 0, 5 * u]) for u in np.linspace(-1, 1, 93)]
+        qs = [
+            center + np.radians([2 * u, 0, 0, 3 * u, 0, 0, 5 * u]) for u in np.linspace(-1, 1, 93)
+        ]
         for normal in ([0, 0, 1], [0.02, 0.03, math.sqrt(1 - 0.02**2 - 0.03**2)]):
             scene = dict(cup_support_base_m=[0, 0, 0], cup_normal_base=normal)
             full = self.full.check_table_batch(qs, scene, {"table_margin_mm": 5})
@@ -41,7 +46,9 @@ class TableGeometryTest(unittest.TestCase):
                 self.assertEqual(a["blockers"], b["blockers"])
 
     def test_fast_path_does_not_construct_cup_spheres_and_cannot_screen_a_cup(self):
-        with patch("cup_grasp_demo.flow.core.cover", side_effect=AssertionError("unneeded sphere cover")):
+        with patch(
+            "cup_grasp_demo.flow.core.cover", side_effect=AssertionError("unneeded sphere cover")
+        ):
             fast = Screen(table_only=True)
         with self.assertRaisesRegex(ValueError, "cannot check cup"):
             fast.check([[0] * 7], {}, False, {})
@@ -49,7 +56,10 @@ class TableGeometryTest(unittest.TestCase):
     def test_fast_and_full_caches_are_separate(self):
         with cached_screen_geometry():
             fast = Screen(table_only=True)
-            with patch("cup_grasp_demo.flow.core._stl_bounds", side_effect=AssertionError("reloading geometry")):
+            with patch(
+                "cup_grasp_demo.flow.core._stl_bounds",
+                side_effect=AssertionError("reloading geometry"),
+            ):
                 full = Screen()
             self.assertIs(Screen(table_only=True).meshes, fast.meshes)
             self.assertIs(Screen().meshes, full.meshes)
@@ -70,7 +80,9 @@ class TableGeometryTest(unittest.TestCase):
         screen.meshes = {}
         screen._sources = {}
         vertices = np.repeat(
-            np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]), 100, axis=0
+            np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
+            100,
+            axis=0,
         )
         real_unique = np.unique
 
@@ -82,7 +94,9 @@ class TableGeometryTest(unittest.TestCase):
             screen.add("tetrahedron", vertices)
         directions = np.random.default_rng(5).normal(size=(3, 100))
         np.testing.assert_allclose(
-            (vertices @ directions).min(axis=0), (screen.meshes["tetrahedron"][0] @ directions).min(axis=0), atol=1e-12
+            (vertices @ directions).min(axis=0),
+            (screen.meshes["tetrahedron"][0] @ directions).min(axis=0),
+            atol=1e-12,
         )
         self.assertIsNone(screen._sources["tetrahedron"][1])
 

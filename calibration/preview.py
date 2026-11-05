@@ -36,7 +36,9 @@ class CollectionPreview:
         source = image if image is not None else self.current_image
         self.last_image = None if source is None else source.copy()
         self.last_lines = [
-            f"ACCEPTED | saved total: {count}" if accepted else f"REJECTED | saved total unchanged: {count}"
+            f"ACCEPTED | saved total: {count}"
+            if accepted
+            else f"REJECTED | saved total unchanged: {count}"
         ]
         if quality:
             self.last_lines.append(self.quality_text(quality))
@@ -44,7 +46,10 @@ class CollectionPreview:
 
     @staticmethod
     def quality_text(quality):
-        return f"Corners: {quality['corners']}   Reprojection RMS: {quality['reprojection_rms_px']:.3f} px"
+        return (
+            f"Corners: {quality['corners']}   Reprojection RMS: "
+            f"{quality['reprojection_rms_px']:.3f} px"
+        )
 
     def board_window_status(self, pose, camera, detector, margin_px=10):
         """Project the complete board, not only its detected inner corners."""
@@ -53,13 +58,17 @@ class CollectionPreview:
         cfg = detector.cfg
         width = cfg["squares_x"] * cfg["square_length_m"]
         height = cfg["squares_y"] * cfg["square_length_m"]
-        corners = np.asarray([[0, 0, 0], [width, 0, 0], [width, height, 0], [0, height, 0]], dtype=np.float64)
+        corners = np.asarray(
+            [[0, 0, 0], [width, 0, 0], [width, height, 0], [0, height, 0]], dtype=np.float64
+        )
         rotation = np.asarray(pose, dtype=float)[:3, :3]
         translation = np.asarray(pose, dtype=float)[:3, 3]
         if np.any((rotation @ corners.T + translation[:, None])[2] <= 0):
             return False, None
         rvec = cv2.Rodrigues(rotation)[0]
-        points = cv2.projectPoints(corners, rvec, translation, camera.camera_matrix, camera.dist_coeffs)[0].reshape(-1, 2)
+        points = cv2.projectPoints(
+            corners, rvec, translation, camera.camera_matrix, camera.dist_coeffs
+        )[0].reshape(-1, 2)
         x0, y0, x1, y1 = self.board_window
         inside = bool(
             np.isfinite(points).all()
@@ -78,11 +87,27 @@ class CollectionPreview:
             canvas[header:, :panel_width] = cv2.resize(live, (panel_width, image_height))
         if self.last_image is not None:
             canvas[header:, panel_width:] = cv2.resize(self.last_image, (panel_width, image_height))
-        left = [f"LIVE VIEW | saved samples: {count}", "Enter / Space: capture    Q / Esc / close: quit", *live_lines]
+        left = [
+            f"LIVE VIEW | saved samples: {count}",
+            "Enter / Space: capture    Q / Esc / close: quit",
+            *live_lines,
+        ]
         right = ["LAST ATTEMPT / SAVED SAMPLE", *self.last_lines]
-        for x, lines, color in [(12, left, (225, 225, 225)), (panel_width + 12, right, self.last_color)]:
+        for x, lines, color in [
+            (12, left, (225, 225, 225)),
+            (panel_width + 12, right, self.last_color),
+        ]:
             for i, line in enumerate(lines[:6]):
-                cv2.putText(canvas, line, (x, 24 + 24 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.48, color, 1, cv2.LINE_AA)
+                cv2.putText(
+                    canvas,
+                    line,
+                    (x, 24 + 24 * i),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.48,
+                    color,
+                    1,
+                    cv2.LINE_AA,
+                )
         return canvas
 
     @staticmethod
@@ -109,7 +134,9 @@ class CollectionPreview:
             started = time.monotonic()
             image = camera.capture()
             try:
-                board, quality, vis = detector.detect(image, camera.camera_matrix, camera.dist_coeffs)
+                board, quality, vis = detector.detect(
+                    image, camera.camera_matrix, camera.dist_coeffs
+                )
                 xyz = board[:3, 3] * 1000
                 lines = [
                     self.quality_text(quality),
@@ -120,7 +147,11 @@ class CollectionPreview:
                     inside, points = self.board_window_status(board, camera, detector)
                     if points is not None:
                         cv2.polylines(
-                            vis, [np.rint(points).astype(np.int32)], True, (0, 255, 0) if inside else (0, 0, 255), 2
+                            vis,
+                            [np.rint(points).astype(np.int32)],
+                            True,
+                            (0, 255, 0) if inside else (0, 0, 255),
+                            2,
                         )
                     if not inside:
                         lines = [
@@ -158,7 +189,10 @@ class CollectionPreview:
                 return command
 
     def show_sampling(self, count):
-        cv2.imshow(self.TITLE, self.render(self.current_image, ["CAPTURING... Keep the arm and board still."], count))
+        cv2.imshow(
+            self.TITLE,
+            self.render(self.current_image, ["CAPTURING... Keep the arm and board still."], count),
+        )
         cv2.waitKey(1)
 
     def close(self):

@@ -33,7 +33,11 @@ def _rotation(value, name):
 
 def validate_calibration(result, *, expected_camera_serial, allow_provisional=False):
     """Validate an eye-to-hand result; failed quality requires explicit override."""
-    if not isinstance(result, dict) or result.get("schema") != 1 or result.get("mode") != "eye_to_hand":
+    if (
+        not isinstance(result, dict)
+        or result.get("schema") != 1
+        or result.get("mode") != "eye_to_hand"
+    ):
         raise ValueError("Expected eye_to_hand calibration schema 1")
     if type(result.get("quality_passed")) is not bool:
         raise ValueError("Calibration quality_passed must be boolean")
@@ -56,7 +60,11 @@ def validate_calibration(result, *, expected_camera_serial, allow_provisional=Fa
     if any(not isinstance(camera.get(k), int) or camera[k] <= 0 for k in ("width", "height")):
         raise ValueError("Invalid calibrated camera resolution")
     intrinsics = np.asarray(camera.get("camera_matrix"), dtype=float)
-    if intrinsics.shape != (3, 3) or not np.isfinite(intrinsics).all() or min(intrinsics[0, 0], intrinsics[1, 1]) <= 0:
+    if (
+        intrinsics.shape != (3, 3)
+        or not np.isfinite(intrinsics).all()
+        or min(intrinsics[0, 0], intrinsics[1, 1]) <= 0
+    ):
         raise ValueError("Invalid calibrated camera intrinsics")
     distortion = np.asarray(camera.get("dist_coeffs"), dtype=float)
     if distortion.shape != (5,) or not np.isfinite(distortion).all():
@@ -71,7 +79,9 @@ def load_calibration(path, *, expected_camera_serial, allow_provisional=False):
     source = Path(path)
     raw = source.read_bytes()
     result = validate_calibration(
-        json.loads(raw), expected_camera_serial=expected_camera_serial, allow_provisional=allow_provisional
+        json.loads(raw),
+        expected_camera_serial=expected_camera_serial,
+        allow_provisional=allow_provisional,
     ).copy()
     result["_source"] = {"path": str(source.resolve()), "sha256": hashlib.sha256(raw).hexdigest()}
     return result
@@ -79,14 +89,19 @@ def load_calibration(path, *, expected_camera_serial, allow_provisional=False):
 
 def map_localization(localization, calibration, *, camera_serial, allow_provisional=False):
     """Map a geometry.localize output from color optical coordinates to arm base."""
-    validate_calibration(calibration, expected_camera_serial=camera_serial, allow_provisional=allow_provisional)
+    validate_calibration(
+        calibration, expected_camera_serial=camera_serial, allow_provisional=allow_provisional
+    )
     if not isinstance(localization, dict) or localization.get("schema_version") != 1:
         raise ValueError("Expected localization schema 1")
     if localization.get("valid") is not True or not isinstance(localization.get("geometry"), dict):
         raise ValueError("Localization is invalid")
     if localization.get("frame") != "color_optical" or localization.get("units") != "m":
         raise ValueError("Localization must be meters in color_optical")
-    if localization.get("camera_serial") is not None and localization["camera_serial"] != camera_serial:
+    if (
+        localization.get("camera_serial") is not None
+        and localization["camera_serial"] != camera_serial
+    ):
         raise ValueError("Localization camera serial does not match live camera")
     geom = localization["geometry"]
     center = _point(geom["center_m"], "cup center")

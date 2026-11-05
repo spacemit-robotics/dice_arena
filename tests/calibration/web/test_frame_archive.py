@@ -16,12 +16,22 @@ from calibration.web.frame_archive import FrameArchive
 def devices():
     arm = Mock()
     arm.read.return_value = np.eye(4)
-    arm.read_joints.return_value = {"joints_rad": [0.0] * 7, "joints_deg": [0.0] * 7, "sdk_timestamp": 123.0}
-    camera = Mock(camera_matrix=np.eye(3), dist_coeffs=np.zeros(5), info={"serial": "offline-camera"})
+    arm.read_joints.return_value = {
+        "joints_rad": [0.0] * 7,
+        "joints_deg": [0.0] * 7,
+        "sdk_timestamp": 123.0,
+    }
+    camera = Mock(
+        camera_matrix=np.eye(3), dist_coeffs=np.zeros(5), info={"serial": "offline-camera"}
+    )
     camera.capture.return_value = np.zeros((60, 80, 3), np.uint8)
     detector = Mock(cfg={"type": "charuco", "min_corners": 12})
     detector.detect.side_effect = [
-        (np.eye(4), {"reprojection_rms_px": rms, "corners": 12}, np.full((60, 80, 3), 100 + i, np.uint8))
+        (
+            np.eye(4),
+            {"reprojection_rms_px": rms, "corners": 12},
+            np.full((60, 80, 3), 100 + i, np.uint8),
+        )
         for i, rms in enumerate((0.3, 0.1, 0.2))
     ]
     return arm, camera, detector
@@ -45,7 +55,9 @@ def test_three_observations_and_selected_frame_round_trip(tmp_path, monkeypatch)
         assert record["visualization_has_detection"]
         np.testing.assert_array_equal(cv2.imread(str(archive.path / record["raw_image"])), image)
         if index == 1:
-            np.testing.assert_array_equal(cv2.imread(str(archive.path / record["detection_image"])), vis)
+            np.testing.assert_array_equal(
+                cv2.imread(str(archive.path / record["detection_image"])), vis
+            )
     # CLI callers retain the original sample shape and best-frame selection.
     legacy, _, legacy_vis = calibrate.capture_sample(*devices())
     assert "selected_frame_index" not in legacy

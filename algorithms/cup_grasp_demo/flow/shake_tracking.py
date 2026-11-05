@@ -63,8 +63,12 @@ def check_feedback(row, plan, *, expected_s=None, joint_bounds=None):
         len(q) != 7
         or not all(math.isfinite(v) for v in q)
         or any(
-            q[i] < joint_bounds[i][0] - math.radians(plan["parameters"].get("joint_path_tolerance_deg", 0.15))
-            or q[i] > joint_bounds[i][1] + math.radians(plan["parameters"].get("joint_path_tolerance_deg", 0.15))
+            q[i]
+            < joint_bounds[i][0]
+            - math.radians(plan["parameters"].get("joint_path_tolerance_deg", 0.15))
+            or q[i]
+            > joint_bounds[i][1]
+            + math.radians(plan["parameters"].get("joint_path_tolerance_deg", 0.15))
             for i in range(7)
         )
     ):
@@ -116,21 +120,27 @@ class FeedbackMonitor:
         self.delay = plan["parameters"].get("feedback_reference_delay_s", 0.0)
         self.error_since = None
         self.bounds = [
-            (min(s["q_rad"][i] for s in self.samples), max(s["q_rad"][i] for s in self.samples)) for i in range(7)
+            (min(s["q_rad"][i] for s in self.samples), max(s["q_rad"][i] for s in self.samples))
+            for i in range(7)
         ]
 
     def check(self, row, elapsed):
         raw = interpolate_displacement(self.samples, elapsed, self.times)
-        reference = interpolate_displacement(self.samples, max(0.0, elapsed - self.delay), self.times)
+        reference = interpolate_displacement(
+            self.samples, max(0.0, elapsed - self.delay), self.times
+        )
         tracking = check_feedback(row, self.plan, joint_bounds=self.bounds)
         limit = self.plan["parameters"].get("tracking_error_limit_mm", 15.0)
         error = abs(tracking["along_m"] - reference) * 1000
         if error > limit:
             if self.error_since is None:
                 self.error_since = elapsed
-            if elapsed - self.error_since >= self.plan["parameters"].get("tracking_error_grace_s", 0.0):
+            if elapsed - self.error_since >= self.plan["parameters"].get(
+                "tracking_error_grace_s", 0.0
+            ):
                 raise RuntimeError(
-                    f"沿程跟踪偏差 {error:.2f} mm > {limit:g} mm，持续 {elapsed - self.error_since:.3f} s"
+                    f"沿程跟踪偏差 {error:.2f} mm > {limit:g} mm，持续 "
+                    f"{elapsed - self.error_since:.3f} s"
                 )
         else:
             self.error_since = None
@@ -187,7 +197,9 @@ def measured_wave(rows, plan):
         feedback_max_mm=max(x) * 1000 if x else None,
         zero_crossings_s=crossings,
         measured_period_count=len(periods),
-        max_table_height_error_mm=max((abs(r["tracking"]["height_m"]) * 1000 for r in rows), default=0),
+        max_table_height_error_mm=max(
+            (abs(r["tracking"]["height_m"]) * 1000 for r in rows), default=0
+        ),
         max_orientation_error_deg=max((r["tracking"]["rotation_deg"] for r in rows), default=0),
         tracking_verified=frequency is not None
         and abs(frequency / target["frequency_hz"] - 1) <= 0.1

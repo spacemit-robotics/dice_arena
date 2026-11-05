@@ -71,7 +71,9 @@ def load_registry(source=GESTURES_DIR):
     for path, config in groups:
         conflicts = sorted(n for n in _group_names(config) if n in seen)
         if conflicts:
-            errors.append(f"{path.name}: 与 {seen[conflicts[0]]} 重复的动作名 {conflicts}，整组拒载")
+            errors.append(
+                f"{path.name}: 与 {seen[conflicts[0]]} 重复的动作名 {conflicts}，整组拒载"
+            )
             continue
         invalid = _first_recipe_error(path, config)
         if invalid:

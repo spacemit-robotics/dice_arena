@@ -138,7 +138,9 @@ class BoardKeyReader:
             "permission_denied": self._permission_denied,
             "last_action": self.last_action,
             "last_key_age_seconds": (
-                round(time.monotonic() - self.last_key_monotonic, 1) if self.last_key_monotonic is not None else None
+                round(time.monotonic() - self.last_key_monotonic, 1)
+                if self.last_key_monotonic is not None
+                else None
             ),
         }
 

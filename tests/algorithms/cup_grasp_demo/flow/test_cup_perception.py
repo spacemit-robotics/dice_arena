@@ -58,7 +58,9 @@ class DecodeTest(unittest.TestCase):
     def test_legacy_default_and_invalid_configuration(self):
         self.assertEqual(vision.perception_options({}), {"backend": "depth_geometry"})
         base = dict(backend="yolo_seg_onnx", model=MODEL)
-        self.assertEqual(vision.perception_options({"cup_perception": base})["section_half_band_mm"], 4.0)
+        self.assertEqual(
+            vision.perception_options({"cup_perception": base})["section_half_band_mm"], 4.0
+        )
         for key, value in [
             ("confidence", True),
             ("mask_threshold", 0),
@@ -83,7 +85,9 @@ class SectionBandTest(unittest.TestCase):
         wall = np.column_stack((0.032 * np.cos(angle), 0.032 * np.sin(angle), np.full(200, target)))
         theta = rng.uniform(0, 2 * np.pi, 600)
         radius = 0.025 * np.sqrt(rng.uniform(0, 1, 600))
-        recess = np.column_stack((radius * np.cos(theta), radius * np.sin(theta), np.full(600, target + 0.003)))
+        recess = np.column_stack(
+            (radius * np.cos(theta), radius * np.sin(theta), np.full(600, target + 0.003))
+        )
         top = wall.copy()
         top[:, 2] = height
         points = np.vstack((wall, recess, top))
@@ -108,7 +112,9 @@ class ModelGeometryTest(unittest.TestCase):
         cls.cfg["contact_height_fraction"] = 10 / 11
         cls.fixture = ROOT / "cup_grasp_demo/datasets/compare_20260917_221945"
         if not cls.fixture.is_dir():
-            raise unittest.SkipTest("冻结采集数据集不存在（datasets 不入 git）：" + str(cls.fixture))
+            raise unittest.SkipTest(
+                "冻结采集数据集不存在（datasets 不入 git）：" + str(cls.fixture)
+            )
         cls.meta, cls.depth, cls.image, _ = load_batch(cls.fixture)
         cls.instances, cls.provenance = vision.infer(cls.image, vision.perception_options(cls.cfg))
         cls.assert_inference = (cls.instances, cls.provenance)
@@ -133,7 +139,9 @@ class ModelGeometryTest(unittest.TestCase):
         outside["mask"][:] = False
         outside["mask"][380:400, 580:610] = True
         with patch.object(vision, "infer", return_value=([outside], self.provenance)):
-            proposals, rejected = vision.yolo_candidates(self.depth, self.image, self.meta, self.cfg)
+            proposals, rejected = vision.yolo_candidates(
+                self.depth, self.image, self.meta, self.cfg
+            )
             self.assertEqual(proposals, [])
             self.assertEqual(rejected[0]["reason"], "outside_red_workspace")
         missing = self.depth.copy()

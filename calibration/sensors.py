@@ -19,7 +19,10 @@ class ArmFeedback:
         self.device = framework.acquire(motion)
         self.last_sample = 0
         self.speed_percent = framework.MAX_SPEED_PERCENT
-        self.speed_deg_s, self.acc_deg_s2 = 4.0, 6.0  # Route profile; callers set the configured values.
+        self.speed_deg_s, self.acc_deg_s2 = (
+            4.0,
+            6.0,
+        )  # Route profile; callers set the configured values.
         try:
             for _ in range(5):
                 self.read()
@@ -90,7 +93,10 @@ def opencv_distortion(model, coeffs):
         raise ValueError("Invalid camera distortion coefficients")
     if model in ("distortion.none", "distortion.brown_conrady"):
         return np.zeros(5) if model == "distortion.none" else coeffs
-    if model in ("distortion.inverse_brown_conrady", "distortion.modified_brown_conrady") and np.all(coeffs == 0):
+    if model in (
+        "distortion.inverse_brown_conrady",
+        "distortion.modified_brown_conrady",
+    ) and np.all(coeffs == 0):
         return np.zeros(5)
     raise ValueError(f"Unsupported nonzero camera distortion model: {model}; rectify first")
 
@@ -115,7 +121,9 @@ class RealSenseCamera:
             self.started = True
             stream = profile.get_stream(rs.stream.color).as_video_stream_profile()
             intr = stream.get_intrinsics()
-            self.camera_matrix = np.array([[intr.fx, 0, intr.ppx], [0, intr.fy, intr.ppy], [0, 0, 1.0]])
+            self.camera_matrix = np.array(
+                [[intr.fx, 0, intr.ppx], [0, intr.fy, intr.ppy], [0, 0, 1.0]]
+            )
             if self.crop is not None:
                 self.camera_matrix[0, 2] -= self.crop[0]
                 self.camera_matrix[1, 2] -= self.crop[1]
@@ -193,7 +201,9 @@ class CharucoDetector:
         if hasattr(self.board, "setLegacyPattern"):
             self.board.setLegacyPattern(bool(cfg.get("legacy_pattern", False)))
         elif cfg.get("legacy_pattern", False) is False and sy % 2 == 0:
-            raise ValueError("Even-row modern pattern requires newer OpenCV; use matching legacy_pattern")
+            raise ValueError(
+                "Even-row modern pattern requires newer OpenCV; use matching legacy_pattern"
+            )
         self.points = (
             self.board.getChessboardCorners()
             if hasattr(self.board, "getChessboardCorners")
@@ -244,7 +254,12 @@ class CharucoDetector:
         if len(np.unique(ids)) != len(ids):
             raise ValueError("Duplicate marker IDs; isolate one board with image_roi_xyxy")
         _, cc, ci = cv.aruco.interpolateCornersCharuco(
-            corners, ids, detection_image, self.board, cameraMatrix=camera_matrix, distCoeffs=dist_coeffs
+            corners,
+            ids,
+            detection_image,
+            self.board,
+            cameraMatrix=camera_matrix,
+            distCoeffs=dist_coeffs,
         )
         if ci is None or len(ci) < self.cfg.get("min_corners", 6):
             count = 0 if ci is None else len(ci)

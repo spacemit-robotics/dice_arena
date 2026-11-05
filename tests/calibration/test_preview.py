@@ -25,7 +25,9 @@ class PreviewTests(unittest.TestCase):
         ui = CollectionPreview.__new__(CollectionPreview)
         ui.board_window = [0, 0, 640, 480]
         camera = Mock()
-        camera.camera_matrix = np.array([[1000.0, 0.0, 320.0], [0.0, 1000.0, 240.0], [0.0, 0.0, 1.0]])
+        camera.camera_matrix = np.array(
+            [[1000.0, 0.0, 320.0], [0.0, 1000.0, 240.0], [0.0, 0.0, 1.0]]
+        )
         camera.dist_coeffs = np.zeros(5)
         detector = Mock()
         detector.cfg = {"squares_x": 4, "squares_y": 5, "square_length_m": 0.02}
@@ -56,7 +58,10 @@ class PreviewTests(unittest.TestCase):
                 patch("builtins.print"),
             ):
                 self.assertEqual(main(["collect", "--preview", "--dataset", str(path)]), 0)
-            trace = [json.loads(line) for line in (path / "teaching_frames.jsonl").read_text().splitlines()]
+            trace = [
+                json.loads(line)
+                for line in (path / "teaching_frames.jsonl").read_text().splitlines()
+            ]
             self.assertEqual(len(trace), 1)
             self.assertEqual(trace[0]["joints"]["joints_rad"], [0.1] * 7)
             self.assertEqual(trace[0]["image_width"], 640)
@@ -100,11 +105,16 @@ class PreviewTests(unittest.TestCase):
                 patch("sensors.ArmFeedback", return_value=arm),
                 patch("preview.CollectionPreview", return_value=ui),
                 patch("cv2.imread", return_value=image),
-                patch("calibrate.capture_sample", side_effect=[(sample, image, image), (fresh, image, image)]),
+                patch(
+                    "calibrate.capture_sample",
+                    side_effect=[(sample, image, image), (fresh, image, image)],
+                ),
                 patch("builtins.input") as terminal_input,
                 patch("builtins.print"),
             ):
-                self.assertEqual(main(["collect", "--resume", "--preview", "--dataset", str(path)]), 0)
+                self.assertEqual(
+                    main(["collect", "--resume", "--preview", "--dataset", str(path)]), 0
+                )
             self.assertEqual([c.args[0] for c in ui.result.call_args_list], [False, True])
             self.assertEqual([c.args[1] for c in ui.result.call_args_list], [1, 2])
             self.assertEqual(ui.restore.call_args.args[1], 1)
@@ -129,7 +139,11 @@ class PreviewTests(unittest.TestCase):
             arm.assert_not_called()
 
     def make_ui(self):
-        with patch.dict(os.environ, {"DISPLAY": ":test"}), patch("cv2.namedWindow"), patch("cv2.resizeWindow"):
+        with (
+            patch.dict(os.environ, {"DISPLAY": ":test"}),
+            patch("cv2.namedWindow"),
+            patch("cv2.resizeWindow"),
+        ):
             return CollectionPreview()
 
     def test_enter_can_attempt_capture_when_live_detection_fails(self):

@@ -24,7 +24,11 @@ SAMPLE_HZ = 100
 
 def direction_on_table(normal, azimuth_deg):
     normal = np.asarray(normal, dtype=float)
-    if normal.shape != (3,) or not np.isfinite(normal).all() or not 0.99 <= np.linalg.norm(normal) <= 1.01:
+    if (
+        normal.shape != (3,)
+        or not np.isfinite(normal).all()
+        or not 0.99 <= np.linalg.norm(normal) <= 1.01
+    ):
         raise ValueError("Invalid table normal")
     normal = normal / np.linalg.norm(normal)
     if normal[2] < 0.9:
@@ -41,7 +45,10 @@ def profile(t, opts):
     t = np.asarray(t, dtype=float)
     ramp = min(1 / frequency, duration / 4)
     w, wd, wdd = np.ones_like(t), np.zeros_like(t), np.zeros_like(t)
-    for mask, x, sign in ((t < ramp, t / ramp, 1), (t > duration - ramp, (duration - t) / ramp, -1)):
+    for mask, x, sign in (
+        (t < ramp, t / ramp, 1),
+        (t > duration - ramp, (duration - t) / ramp, -1),
+    ):
         x = np.clip(x[mask], 0, 1)
         w[mask] = 10 * x**3 - 15 * x**4 + 6 * x**5
         wd[mask] = sign * (30 * x**2 - 60 * x**3 + 30 * x**4) / ramp
@@ -60,7 +67,9 @@ class Kinematics:
     def __init__(self):
         self.model = load_model()
         self.lower, self.upper = np.array(self.model.limits_rad).T
-        self.origins = [np.array(_rpy_transform(j.origin_xyz, j.origin_rpy)) for j in self.model.joints]
+        self.origins = [
+            np.array(_rpy_transform(j.origin_xyz, j.origin_rpy)) for j in self.model.joints
+        ]
         self.axes = [np.array(j.axis_xyz) for j in self.model.joints]
 
     def forward(self, q):
@@ -94,7 +103,8 @@ class Kinematics:
         for _ in range(25):
             current, jacobian = self.forward(q)
             error = np.r_[
-                target[:3, 3] - current[:3, 3], Rotation.from_matrix(target[:3, :3] @ current[:3, :3].T).as_rotvec()
+                target[:3, 3] - current[:3, 3],
+                Rotation.from_matrix(target[:3, :3] @ current[:3, :3].T).as_rotvec(),
             ]
             if np.linalg.norm(error[:3]) < 1e-9 and np.linalg.norm(error[3:]) < 1e-9:
                 return q
@@ -114,7 +124,11 @@ def read_limits(feedback):
         raise ValueError("Require seven ordered joint limits")
     keys = ("min_angle_rad", "max_angle_rad", "max_velocity_rad_s", "max_acceleration_rad_s2")
     values = np.array([[r[k] for k in keys] for r in rows], dtype=float)
-    if not np.isfinite(values).all() or np.any(values[:, 0] >= values[:, 1]) or np.any(values[:, 2:] <= 0):
+    if (
+        not np.isfinite(values).all()
+        or np.any(values[:, 0] >= values[:, 1])
+        or np.any(values[:, 2:] <= 0)
+    ):
         raise ValueError("Invalid joint limit values")
     flange = feedback["flange_limits"]
     cart = np.array([flange["end_max_linear_vel"], flange["end_max_linear_acc"]], dtype=float)
@@ -178,7 +192,10 @@ def make_plan(session, feedback, cfg):
         cartesian_peak_velocity_m_s=float(np.max(np.abs(dv))),
         cartesian_peak_acceleration_m_s2=float(np.max(np.abs(da))),
     )
-    ratios = [result["cartesian_peak_velocity_m_s"] / cart[0], result["cartesian_peak_acceleration_m_s2"] / cart[1]]
+    ratios = [
+        result["cartesian_peak_velocity_m_s"] / cart[0],
+        result["cartesian_peak_acceleration_m_s2"] / cart[1],
+    ]
     for label, ratio, demand, limit in zip(
         ("末端线速度", "末端线加速度"),
         ratios,
@@ -187,7 +204,8 @@ def make_plan(session, feedback, cfg):
     ):
         if ratio > utilization:
             result["blockers"].append(
-                f"{label}需求 {demand:.3f}，配置限值 {limit:.3f}，占用 {ratio:.1%}，超过规划预算 {utilization:.0%}"
+                f"{label}需求 {demand:.3f}，配置限值 {limit:.3f}，占用 {ratio:.1%}，超过规划预算 "
+                f"{utilization:.0%}"
             )
     paths = {}
     try:
@@ -215,7 +233,9 @@ def make_plan(session, feedback, cfg):
             joint_peak_acceleration_rad_s2=peak_a.tolist(),
             joint_velocity_limit_ratio=v_ratio.tolist(),
             joint_acceleration_limit_ratio=a_ratio.tolist(),
-            minimum_joint_margin_deg=float(np.rad2deg(np.min(np.minimum(q - kin.lower, kin.upper - q)))),
+            minimum_joint_margin_deg=float(
+                np.rad2deg(np.min(np.minimum(q - kin.lower, kin.upper - q)))
+            ),
         )
         if result["minimum_joint_margin_deg"] < 1:
             raise ValueError("插值轨迹距关节限位不足 1°")
@@ -230,14 +250,24 @@ def make_plan(session, feedback, cfg):
                         f"占用 {ratio:.1%}，超过规划预算 {utilization:.0%}"
                     )
         max_pos, max_rot = 0.0, 0.0
-        for distance, angles in zip((knots[1:] + knots[:-1]) / 2, spline((knots[1:] + knots[:-1]) / 2)):
+        for distance, angles in zip(
+            (knots[1:] + knots[:-1]) / 2, spline((knots[1:] + knots[:-1]) / 2)
+        ):
             transform, _ = kin.forward(angles)
-            max_pos = max(max_pos, float(np.linalg.norm(transform[:3, 3] - t0[:3, 3] - distance * direction)))
+            max_pos = max(
+                max_pos, float(np.linalg.norm(transform[:3, 3] - t0[:3, 3] - distance * direction))
+            )
             max_rot = max(
-                max_rot, float(np.linalg.norm(Rotation.from_matrix(t0[:3, :3] @ transform[:3, :3].T).as_rotvec()))
+                max_rot,
+                float(
+                    np.linalg.norm(
+                        Rotation.from_matrix(t0[:3, :3] @ transform[:3, :3].T).as_rotvec()
+                    )
+                ),
             )
         result.update(
-            interpolation_position_error_mm=max_pos * 1000, interpolation_rotation_error_deg=math.degrees(max_rot)
+            interpolation_position_error_mm=max_pos * 1000,
+            interpolation_rotation_error_deg=math.degrees(max_rot),
         )
         if max_pos > 0.00001 or max_rot > math.radians(0.01):
             raise ValueError("插值后的位姿误差超限")

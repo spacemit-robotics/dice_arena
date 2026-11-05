@@ -31,13 +31,22 @@ class ApplicationLayoutTests(unittest.TestCase):
         dependencies = [item.text for item in package.findall("system_depend")]
         self.assertEqual(len(dependencies), len(set(dependencies)))
         self.assertTrue(
-            {"python3-numpy", "python3-opencv", "python3-scipy", "python3-spacemit-ort", "spacemit-onnxruntime"}
+            {
+                "python3-numpy",
+                "python3-opencv",
+                "python3-scipy",
+                "python3-spacemit-ort",
+                "spacemit-onnxruntime",
+            }
             <= set(dependencies)
         )
-        self.assertTrue((SDK / "components/control/manipulation/examples/point_sequence/point_sequence.yaml").is_file())
+        self.assertTrue(
+            (
+                SDK / "components/control/manipulation/examples/point_sequence/point_sequence.yaml"
+            ).is_file()
+        )
         for resource in ("algorithms", "calibration", "game", "python/cup_shake"):
             self.assertTrue((ROOT / resource).is_dir(), resource)
-
 
 
 class SiteConfigurationTests(unittest.TestCase):
@@ -73,24 +82,38 @@ class SiteConfigurationTests(unittest.TestCase):
         gestures = self.source / "configs/actions/gestures/result_feedback.json"
         gestures.parent.mkdir(parents=True)
         gestures.write_text(
-            json.dumps(dict(gestures={
-                name: dict(hand_0_100=[0] * 6) for name in ("yeah", "thumbs-up", "tie")
-            })), encoding="utf-8"
+            json.dumps(
+                dict(
+                    gestures={
+                        name: dict(hand_0_100=[0] * 6) for name in ("yeah", "thumbs-up", "tie")
+                    }
+                )
+            ),
+            encoding="utf-8",
         )
         (self.root / "green_cup.json").write_text(
-            json.dumps(dict(green_cup=dict(
-                open_targets_0_100=[0] * 6, grip_targets_0_100=[10] * 6
-            ))), encoding="utf-8"
+            json.dumps(
+                dict(green_cup=dict(open_targets_0_100=[0] * 6, grip_targets_0_100=[10] * 6))
+            ),
+            encoding="utf-8",
         )
         (self.root / "device.yaml").write_text("mock fixture\n", encoding="utf-8")
 
     def configure(self):
         return subprocess.run(
-            [sys.executable, str(ROOT / "tools/configure_site.py"), str(self.prefix),
-             str(self.root / "device.yaml"), str(self.source),
-             str(self.root / "green_cup.json"), str(self.root / "runtime"),
-             str(self.destination)],
-            capture_output=True, text=True, timeout=10,
+            [
+                sys.executable,
+                str(ROOT / "tools/configure_site.py"),
+                str(self.prefix),
+                str(self.root / "device.yaml"),
+                str(self.source),
+                str(self.root / "green_cup.json"),
+                str(self.root / "runtime"),
+                str(self.destination),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
             env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
         )
 
@@ -105,7 +128,9 @@ class SiteConfigurationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(self.marker.is_file())
         config = json.loads(self.destination.read_text())
-        self.assertEqual(config["open_positions"], [1] * 6)  # hand_0_100 0 is open; framework 1 is open.
+        self.assertEqual(
+            config["open_positions"], [1] * 6
+        )  # hand_0_100 0 is open; framework 1 is open.
         self.assertEqual(config["grip_positions"], [0.9] * 6)
         self.assertEqual(config["duration_s"], 0.5)
         for key in ("executable", "device_plan", "policy_library"):
@@ -237,7 +262,8 @@ class PolicyTests(unittest.TestCase):
             loop_config = dict(config, device_plan=str(open_loop))
             (Path(temporary) / "loop.json").write_text(json.dumps(loop_config))
             app = CupApplication(Path(temporary) / "loop.json", allow_motion=True)
-            try:  # Open-loop hand: the cycle completes on unverified hand moves, grip stays unverified.
+            # Open-loop hand: the cycle completes on unverified hand moves, grip stays unverified.
+            try:
                 for command in ("grasp_cup", "shake_dice", "settle_dice"):
                     result = app.command(command)
                     self.assertEqual(result["status"], "completed", result)
@@ -255,12 +281,16 @@ class PolicyTests(unittest.TestCase):
                 self.assertTrue(app.command("query_pose")["at_home"])
                 for command in ("reset_home", "ensure_home"):  # The original home action moves.
                     result = app.command(command)
-                    self.assertEqual((result["status"], result["at_home"]), ("completed", True), result)
+                    self.assertEqual(
+                        (result["status"], result["at_home"]), ("completed", True), result
+                    )
                 result = app.command("grasp_cup", is_cancelled=lambda: True)
                 self.assertEqual(result["status"], "failed")
                 self.assertEqual(app.policy.state, "fault")
                 self.assertEqual(app.command("grasp_cup")["status"], "failed")
-                self.assertEqual(app.command("reset_home")["status"], "failed")  # Never after a fault.
+                self.assertEqual(
+                    app.command("reset_home")["status"], "failed"
+                )  # Never after a fault.
             finally:
                 app.close()
 

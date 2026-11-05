@@ -18,7 +18,9 @@ class CaptureProfileTest(unittest.TestCase):
             normal = argument_parser().parse_args(run.call_args.args[0][2:])
             self.assertEqual(normal.warmup_frames, 20)
             self.assertFalse(normal.unique_warmup)
-            debug.capture_rgbd(Path("/tmp/table"), {"serial": "test"}, warmup_frames=30, unique_warmup=True)
+            debug.capture_rgbd(
+                Path("/tmp/table"), {"serial": "test"}, warmup_frames=30, unique_warmup=True
+            )
             table = argument_parser().parse_args(run.call_args.args[0][2:])
             self.assertEqual(table.warmup_frames, 30)
             self.assertTrue(table.unique_warmup)
@@ -40,15 +42,24 @@ class CaptureProfileTest(unittest.TestCase):
         self.assertEqual(capture_arguments({"green_cup": {"camera": {"fps": 30}}}), [])
 
     def test_camera_json_drives_capture_arguments(self):
-        cfg = {"serial": "test", "pipeline_strategy": "green_open_cup", "green_cup": {"perception": {}}}
+        cfg = {
+            "serial": "test",
+            "pipeline_strategy": "green_open_cup",
+            "green_cup": {"perception": {}},
+        }
         with patch("vision.capture.config.load_camera_config", return_value=self._camera()):
-            args = argument_parser().parse_args(["--output", "/tmp/x", "--serial", "s", *capture_arguments(cfg)])
+            args = argument_parser().parse_args(
+                ["--output", "/tmp/x", "--serial", "s", *capture_arguments(cfg)]
+            )
         self.assertEqual((args.depth_width, args.depth_height, args.fps), (1280, 720, 6))
         self.assertEqual(args.crop_xywh, [220, 0, 960, 720])
         self.assertEqual(args.color_resolution, [1280, 720])
 
     def test_stereo_flag_when_geometry_method_is_stereo_rim(self):
-        cfg = {"pipeline_strategy": "green_open_cup", "green_cup": {"perception": {"geometry_method": "stereo_rim"}}}
+        cfg = {
+            "pipeline_strategy": "green_open_cup",
+            "green_cup": {"perception": {"geometry_method": "stereo_rim"}},
+        }
         with patch("vision.capture.config.load_camera_config", return_value=self._camera()):
             argv = capture_arguments(cfg)
         self.assertIn("--stereo", argv)

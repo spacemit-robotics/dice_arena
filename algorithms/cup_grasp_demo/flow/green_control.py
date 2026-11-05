@@ -92,7 +92,9 @@ class ControlSession:
         """
         request_id = request.get("id")
         if request_id is not None and (
-            isinstance(request_id, bool) or not isinstance(request_id, (str, int)) or len(str(request_id)) > 64
+            isinstance(request_id, bool)
+            or not isinstance(request_id, (str, int))
+            or len(str(request_id)) > 64
         ):
             return None, "invalid_id", "id 必须是长度不超过 64 的字符串或整数"
         if request_id is not None:
@@ -137,7 +139,12 @@ class ControlSession:
             self._reset_for_next_run()
             self.state["last_failure"] = str(error_text)[:300]
             self.state["actions"].append(
-                dict(name="home", elapsed_s=result.get("elapsed_s"), receipt=result.get("receipt"), note="recovery")
+                dict(
+                    name="home",
+                    elapsed_s=result.get("elapsed_s"),
+                    receipt=result.get("receipt"),
+                    note="recovery",
+                )
             )
             save(self.state_path, self.state)
             self._reply("recovered", request_id, action="home", receipt=result.get("receipt"))
@@ -150,7 +157,11 @@ class ControlSession:
             )
             save(self.state_path, self.state)
             self._reply(
-                "failed", request_id, phase="recovery:home", error=self.state["error"], state_file=str(self.state_path)
+                "failed",
+                request_id,
+                phase="recovery:home",
+                error=self.state["error"],
+                state_file=str(self.state_path),
             )
             return False
 
@@ -250,7 +261,11 @@ class ControlSession:
                 )
                 save(self.state_path, self.state)
                 self._reply(
-                    "failed", request_id, phase=phase, error=self.state["error"], state_file=str(self.state_path)
+                    "failed",
+                    request_id,
+                    phase=phase,
+                    error=self.state["error"],
+                    state_file=str(self.state_path),
                 )
                 return False
             elapsed = time.perf_counter() - started
@@ -291,7 +306,9 @@ class ControlSession:
             if result is not None:
                 self.actions, self.run_action, changed = result
                 self.actions = tuple(self.actions)
-                self._reply("config_reloaded", request_id, files=changed, names=sorted(set(self.actions)))
+                self._reply(
+                    "config_reloaded", request_id, files=changed, names=sorted(set(self.actions))
+                )
         except Exception as exc:
             self._reject(request_id, "reload_failed", f"{type(exc).__name__}: {exc}")
             return False
@@ -316,14 +333,24 @@ class ControlSession:
             error = f"{type(exc).__name__}: {exc}"
             self.state.update(status="FAILED", error=error, last_failure=error)
             save(self.state_path, self.state)
-            self._reply("failed", request_id, phase=f"action:{name}", error=error, state_file=str(self.state_path))
+            self._reply(
+                "failed",
+                request_id,
+                phase=f"action:{name}",
+                error=error,
+                state_file=str(self.state_path),
+            )
             # 硬失败不再必然退出：先尝试归位恢复，恢复失败才退出。
             return self._recover(request_id, error)
         elapsed = time.perf_counter() - started
         self.state["status"] = "WAITING"
         self.state["active_action"] = None
         self.state["actions"].append(
-            dict(name=result.get("name", name), elapsed_s=round(elapsed, 3), receipt=result.get("receipt"))
+            dict(
+                name=result.get("name", name),
+                elapsed_s=round(elapsed, 3),
+                receipt=result.get("receipt"),
+            )
         )
         save(self.state_path, self.state)
         self._reply(
@@ -367,7 +394,9 @@ class ControlSession:
             self._reply("closed", request_id, state_file=str(self.state_path))
             return False
         if command == "new_cycle":
-            self._reject(request_id, "removed", "轮次已移除：流程完成自动复位，直接 advance 即可开始下一轮")
+            self._reject(
+                request_id, "removed", "轮次已移除：流程完成自动复位，直接 advance 即可开始下一轮"
+            )
             return True
         if command == "actions":
             self._reply("actions", request_id, names=sorted(set(self.actions)))
@@ -375,7 +404,9 @@ class ControlSession:
         if command == "reload":
             if self.next_index != 0:
                 self._reject(
-                    request_id, "flow_in_progress", f"抓取流程进行中（下一阶段 {self._next_phase()}），跑完后再重载参数"
+                    request_id,
+                    "flow_in_progress",
+                    f"抓取流程进行中（下一阶段 {self._next_phase()}），跑完后再重载参数",
                 )
                 return True
             if self.refresh_parameters is not None:
@@ -402,7 +433,9 @@ class ControlSession:
                 return True
             if self.next_index != 0:
                 self._reject(
-                    request_id, "flow_in_progress", f"抓取流程进行中（下一阶段 {self._next_phase()}），跑完后再执行动作"
+                    request_id,
+                    "flow_in_progress",
+                    f"抓取流程进行中（下一阶段 {self._next_phase()}），跑完后再执行动作",
                 )
                 return True
             if not self._refresh_parameters(request_id):
@@ -419,7 +452,11 @@ class ControlSession:
             self._reply("perception_reset", request_id)
             return True
         if command == "stop":
-            self._reject(request_id, "removed", "连跑已移除：单轮执行无中断需求，等待 command_completed 或 close 即可")
+            self._reject(
+                request_id,
+                "removed",
+                "连跑已移除：单轮执行无中断需求，等待 command_completed 或 close 即可",
+            )
             return True
         if command == "advance":
             target = request.get("until")
@@ -435,7 +472,9 @@ class ControlSession:
                 return True
             if "rounds" in request:
                 self._reject(
-                    request_id, "removed", "连跑已移除：一次 advance 一轮，循环由上层按 command_completed 驱动"
+                    request_id,
+                    "removed",
+                    "连跑已移除：一次 advance 一轮，循环由上层按 command_completed 驱动",
                 )
                 return True
             if self.next_index == 0 and not self._refresh_parameters(request_id):
@@ -506,7 +545,9 @@ class ControlSession:
                         finally:
                             self.executor_lock.release()
                     else:
-                        self._reject(request_id, "command_busy", "抓取流程或动作执行中，稍后再试 query_pose")
+                        self._reject(
+                            request_id, "command_busy", "抓取流程或动作执行中，稍后再试 query_pose"
+                        )
                 else:
                     self.queue.put(request)
         except BaseException as error:
@@ -518,9 +559,16 @@ class ControlSession:
             self.queue.put(None)
 
     def serve(self):
-        self._reply("ready", phases=list(PHASES), actions=sorted(set(self.actions)), state_file=str(self.state_path))
+        self._reply(
+            "ready",
+            phases=list(PHASES),
+            actions=sorted(set(self.actions)),
+            state_file=str(self.state_path),
+        )
         if getattr(self.incoming, "isatty", lambda: False)():
-            self.diagnostic.write("简短命令：next 下一步 / run 完整流程 / status 状态 / quit 退出 / help 帮助\n")
+            self.diagnostic.write(
+                "简短命令：next 下一步 / run 完整流程 / status 状态 / quit 退出 / help 帮助\n"
+            )
             self.diagnostic.flush()
         reader = threading.Thread(target=self._reader_loop, daemon=True, name="control-reader")
         reader.start()
@@ -584,7 +632,9 @@ def build_action_runtime(flow, diagnostic, *, strict=False, runtime_flow=None):
         # 分叉时只警告不拒绝（分叉 = action home 与 HOME 阶段去到不同姿态）。
         home = read_json(ROOT / flow.cfg["home"])
         if list(home["joints_deg"]) != list(registry.recipe("home")["joints_deg"]):
-            diagnostic.write("[actions] home.json 与手势库 home 的 joints_deg 不一致，归位动作将使用手势库的值\n")
+            diagnostic.write(
+                "[actions] home.json 与手势库 home 的 joints_deg 不一致，归位动作将使用手势库的值\n"
+            )
     return names, run_action
 
 

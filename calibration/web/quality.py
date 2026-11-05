@@ -10,7 +10,10 @@ import math
 
 def thresholds(config):
     values = config.get("quality_thresholds", {})
-    return {"position_m": values.get("position_mm", 5.0) / 1000, "angle_deg": values.get("angle_deg", 2.0)}
+    return {
+        "position_m": values.get("position_mm", 5.0) / 1000,
+        "angle_deg": values.get("angle_deg", 2.0),
+    }
 
 
 def evaluate(data, config):
@@ -35,7 +38,9 @@ def evaluate(data, config):
         )
     if complete:
         result["quality_passed"] = all(
-            p <= limits["position_m"] and a <= limits["angle_deg"] for group in groups for p, a in group
+            p <= limits["position_m"] and a <= limits["angle_deg"]
+            for group in groups
+            for p, a in group
         )
     else:
         result["quality_passed"] = False

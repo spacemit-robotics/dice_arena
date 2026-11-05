@@ -55,12 +55,20 @@ class SDKClient:
             self.log.write(f"\n===== worker restart #{self._log_index - 1} =====\n")
             self.log.flush()
         self.process = subprocess.Popen(
-            argv, cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.log, text=True, bufsize=1
+            argv,
+            cwd=ROOT,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=self.log,
+            text=True,
+            bufsize=1,
         )
         try:
             answer = self.receive(15)
             if answer.get("ready") is not True:
-                raise RuntimeError(f"SDK worker 启动失败：{answer.get('error', '未就绪')}；日志：{self.log_path}")
+                raise RuntimeError(
+                    f"SDK worker 启动失败：{answer.get('error', '未就绪')}；日志：{self.log_path}"
+                )
         except BaseException:
             self._terminate()
             raise
@@ -151,7 +159,9 @@ class SDKClient:
 
     def _call_once(self, command, output, request=None, *, on_dispatched=None):
         message = dict(command=command, output=str(output))
-        if command == "snapshot" and self.cfg.get("green_cup", {}).get("fast_cached_feedback", False):
+        if command == "snapshot" and self.cfg.get("green_cup", {}).get(
+            "fast_cached_feedback", False
+        ):
             message["cached_snapshot"] = True
         stages = 1
         if request is not None:
@@ -167,7 +177,9 @@ class SDKClient:
                 # worker 死亡，交给 call() 的 worker-exited 分支和 _recover
                 # 的重启逻辑接管；绝不让裸 ValueError 漏出去被上层误判成
                 # 「未知动作名」（2026-09-25 僵尸态根因之一）。
-                raise RuntimeError(f"SDK worker exited (write failed): {type(exc).__name__}: {exc}") from exc
+                raise RuntimeError(
+                    f"SDK worker exited (write failed): {type(exc).__name__}: {exc}"
+                ) from exc
             if on_dispatched is not None:
                 on_dispatched()
             # Feedback overlap can intentionally defer hand startup by up to 30 s.
@@ -177,7 +189,9 @@ class SDKClient:
 
                 request_cfg = read_json(request)["config"]
                 duration = request_cfg["green_cup"]["finger_duration_s"]
-                targets, interval = sequence_values(plan.get("hand_sequence"), plan["target_0_100"], duration)
+                targets, interval = sequence_values(
+                    plan.get("hand_sequence"), plan["target_0_100"], duration
+                )
                 hand_budget = 35 + (len(targets) - 1) * interval
             answer = self.receive(
                 stages * self.cfg["timeout_s"]
@@ -264,7 +278,9 @@ class VisionResources:
         if settings["enabled"]:
             crop = self.camera.crop
             width, height = (crop[2], crop[3]) if crop else tuple(self.camera.color_resolution)
-            self.streamer = RtspStreamer(settings["host"], settings["port"], settings["path"], width, height, args.fps)
+            self.streamer = RtspStreamer(
+                settings["host"], settings["port"], settings["path"], width, height, args.fps
+            )
             self.camera.set_stream_sink(self.streamer.submit)
         self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="green-prepare")
         self.camera_future = self.pool.submit(self.camera.start)

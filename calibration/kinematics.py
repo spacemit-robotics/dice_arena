@@ -20,14 +20,20 @@ class Model:
     def __init__(self, kinematics):
         self.kinematics = kinematics
         self.joints = [
-            Joint(joint.get("name"), float(joint.find("limit").get("lower")), float(joint.find("limit").get("upper")))
+            Joint(
+                joint.get("name"),
+                float(joint.find("limit").get("lower")),
+                float(joint.find("limit").get("upper")),
+            )
             for joint in kinematics.chain
             if joint.get("type") == "revolute"
         ]
 
     def fk(self, q_rad):
         """Flange pose; limits are checked by the planner against `joints`, not here."""
-        return np.asarray(self.kinematics.forward(list(q_rad), check_limits=False), dtype=float).reshape(4, 4)
+        return np.asarray(
+            self.kinematics.forward(list(q_rad), check_limits=False), dtype=float
+        ).reshape(4, 4)
 
 
 def load_model():

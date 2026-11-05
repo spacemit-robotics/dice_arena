@@ -15,7 +15,9 @@ from cup_grasp_demo.flow.green_image_rim import options
 class ImageRimTest(unittest.TestCase):
     def setUp(self):
         self.opts = deepcopy(
-            load_config(ROOT / "cup_grasp_demo/flow/green_open_cup/config.json")["green_cup"]["perception"]
+            load_config(ROOT / "cup_grasp_demo/flow/green_open_cup/config.json")["green_cup"][
+                "perception"
+            ]
         )
         y, x = np.indices((480, 640))
         self.rad = np.hypot(x - 320, y - 240)
@@ -236,7 +238,10 @@ class OpeningContourTest(unittest.TestCase):
         cv2.ellipse(image, (85, 85), (42, 48), 0, 0, 360, (0, 100, 0), -1)
         cv2.circle(image, (75, 70), 30, (0, 35, 0), -1)
         cv2.rectangle(image, (85, 68), (94, 77), (240, 240, 240), -1)
-        opts = {"min_area_px": 100, "image_rim": {"contour_source": "opening", "opening_value_quantile": 0.3}}
+        opts = {
+            "min_area_px": 100,
+            "image_rim": {"contour_source": "opening", "opening_value_quantile": 0.3},
+        }
         diagnostic = {}
         ellipse, _, _ = image_contour(image, np.ones((160, 160), bool), opts, diagnostic)
         np.testing.assert_allclose(ellipse[0], [75, 70], atol=1.5)
@@ -250,7 +255,10 @@ class OpeningContourTest(unittest.TestCase):
         cv2.circle(image, (80, 80), 35, (0, 90, 0), -1)
         with self.assertRaisesRegex(ValueError, "无法可靠分离"):
             image_contour(
-                image, np.ones((160, 160), bool), {"min_area_px": 100, "image_rim": {"contour_source": "opening"}}, {}
+                image,
+                np.ones((160, 160), bool),
+                {"min_area_px": 100, "image_rim": {"contour_source": "opening"}},
+                {},
             )
 
 

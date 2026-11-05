@@ -37,7 +37,12 @@ class FrameArchive:
         write_image_new(self.path / detected, visualization)
         write_new(
             self.path / (stem + ".json"),
-            dict(data, raw_image=raw, detection_image=detected, visualization_has_detection=not fallback),
+            dict(
+                data,
+                raw_image=raw,
+                detection_image=detected,
+                visualization_has_detection=not fallback,
+            ),
         )
         self.frames.append(stem + ".json")
         self.finish("capturing")

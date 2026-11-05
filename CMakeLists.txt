@@ -21,12 +21,15 @@ install(TARGETS cup_task LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(DIRECTORY python/cup_shake DESTINATION python PATTERN "__pycache__" EXCLUDE)
 set(cup_config_directory "/${CMAKE_INSTALL_DATADIR}/dice_arena/config")
-file(RELATIVE_PATH CUP_DEVICE_PATH "${cup_config_directory}" "/${CMAKE_INSTALL_BINDIR}/manipulation-device")
+file(RELATIVE_PATH CUP_DEVICE_PATH "${cup_config_directory}"
+    "/${CMAKE_INSTALL_BINDIR}/manipulation-device")
 file(RELATIVE_PATH CUP_PLAN_PATH "${cup_config_directory}"
     "/${CMAKE_INSTALL_DATADIR}/manipulation/examples/mock_device.yaml")
-file(RELATIVE_PATH CUP_POLICY_PATH "${cup_config_directory}" "/${CMAKE_INSTALL_LIBDIR}/libcup_task.so")
+file(RELATIVE_PATH CUP_POLICY_PATH "${cup_config_directory}"
+    "/${CMAKE_INSTALL_LIBDIR}/libcup_task.so")
 configure_file(config/mock.install.json.in ${CMAKE_CURRENT_BINARY_DIR}/mock.json @ONLY)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/mock.json DESTINATION ${CMAKE_INSTALL_DATADIR}/dice_arena/config)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/mock.json DESTINATION
+    ${CMAKE_INSTALL_DATADIR}/dice_arena/config)
 install(DIRECTORY algorithms calibration DESTINATION ${CMAKE_INSTALL_DATADIR}/dice_arena
     USE_SOURCE_PERMISSIONS PATTERN "__pycache__" EXCLUDE)
 install(DIRECTORY tools DESTINATION ${CMAKE_INSTALL_DATADIR}/dice_arena
@@ -38,7 +41,8 @@ install(PROGRAMS calibrate.sh calibrate_web.sh calibration_web_service.sh
 # The game as the original runs it: backend, web page and local MOSS-TTS with its models.
 install(DIRECTORY game/backend game/web game/tts DESTINATION ${GAME_DESTINATION}
     USE_SOURCE_PERMISSIONS PATTERN "__pycache__" EXCLUDE)
-install(FILES game/vision/yolov8_objdetect/README.md DESTINATION ${GAME_DESTINATION}/vision/yolov8_objdetect)
+install(FILES game/vision/yolov8_objdetect/README.md DESTINATION
+    ${GAME_DESTINATION}/vision/yolov8_objdetect)
 
 # Dice recognition, built where the SpacemiT inference runtime is installed (the K3), against the
 # board OpenCV as the original build did.
@@ -62,7 +66,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mediamtx/mediamtx")
 else()
     message(STATUS "MediaMTX runtime asset is absent; game serving requires runtime resources")
 endif()
-install(FILES mediamtx/mediamtx.yml mediamtx/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/dice_arena/mediamtx)
+install(FILES mediamtx/mediamtx.yml mediamtx/LICENSE DESTINATION
+    ${CMAKE_INSTALL_DATADIR}/dice_arena/mediamtx)
 install(FILES LICENSE NOTICE runtime_assets.json DESTINATION ${CMAKE_INSTALL_DATADIR}/dice_arena)
 
 install(DIRECTORY python/spacemit_dice_arena DESTINATION python PATTERN "__pycache__" EXCLUDE)
@@ -87,12 +92,18 @@ if(BUILD_TESTING)
         "CUP_TASK_LIBRARY=$<TARGET_FILE:cup_task>"
         "MANIPULATION_DEVICE=${MANIPULATION_DEVICE}"
         "PYTHONDONTWRITEBYTECODE=1")
-    add_test(NAME dice_arena_calibration COMMAND ${Python3_EXECUTABLE} -m pytest -q -p no:cacheprovider
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests/calibration)
-    set_tests_properties(dice_arena_calibration PROPERTIES TIMEOUT 300 ENVIRONMENT
-        "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR};PYTHONNOUSERSITE=1;PYTHONDONTWRITEBYTECODE=1;MANIPULATION_PREFIX=${CMAKE_INSTALL_PREFIX}")
-    add_test(NAME dice_arena_algorithms COMMAND ${Python3_EXECUTABLE} -m pytest -q -p no:cacheprovider
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests/algorithms)
-    set_tests_properties(dice_arena_algorithms PROPERTIES TIMEOUT 600 ENVIRONMENT
-        "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/algorithms;PYTHONNOUSERSITE=1;PYTHONDONTWRITEBYTECODE=1")
+    add_test(NAME dice_arena_calibration
+        COMMAND ${Python3_EXECUTABLE} -m pytest -q -p no:cacheprovider
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/calibration)
+    set(calibration_environment "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}" "PYTHONNOUSERSITE=1"
+        "PYTHONDONTWRITEBYTECODE=1" "MANIPULATION_PREFIX=${CMAKE_INSTALL_PREFIX}")
+    set_tests_properties(dice_arena_calibration PROPERTIES TIMEOUT 300
+        ENVIRONMENT "${calibration_environment}")
+    add_test(NAME dice_arena_algorithms
+        COMMAND ${Python3_EXECUTABLE} -m pytest -q -p no:cacheprovider
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/algorithms)
+    set(algorithm_environment "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/algorithms"
+        "PYTHONNOUSERSITE=1" "PYTHONDONTWRITEBYTECODE=1")
+    set_tests_properties(dice_arena_algorithms PROPERTIES TIMEOUT 600
+        ENVIRONMENT "${algorithm_environment}")
 endif()

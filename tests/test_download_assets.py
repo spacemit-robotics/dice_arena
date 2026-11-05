@@ -57,8 +57,14 @@ class DownloadTests(unittest.TestCase):
         self.manifest = dict(
             schema_version=1,
             base_url=self.url,
-            files=[dict(path="models/model.bin", remote_path="model.bin", size_bytes=4,
-                        sha256=hashlib.sha256(b"data").hexdigest())],
+            files=[
+                dict(
+                    path="models/model.bin",
+                    remote_path="model.bin",
+                    size_bytes=4,
+                    sha256=hashlib.sha256(b"data").hexdigest(),
+                )
+            ],
         )
 
     def download(self, **kwargs):
@@ -138,7 +144,11 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(type(self).requests, 3)
 
     def test_invalid_base_url_is_rejected(self):
-        for url in ("file:///tmp/", "https://user:secret@example.com/", "https://example.com/?key=x"):
+        for url in (
+            "file:///tmp/",
+            "https://user:secret@example.com/",
+            "https://example.com/?key=x",
+        ):
             with self.assertRaises(ValueError):
                 self.download(base_url=url)
             self.assertFalse(self.root.exists())

@@ -31,9 +31,15 @@ def digest(path):
 
 def board_corners(board, calibration):
     measured = calibration.get("board_measurement", {})
-    width = measured.get("grid_width_mm", board["squares_x"] * board["square_length_m"] * 1000) / 1000
-    height = measured.get("grid_height_mm", board["squares_y"] * board["square_length_m"] * 1000) / 1000
-    return np.asarray([[0, 0, 0], [width, 0, 0], [width, height, 0], [0, height, 0]], dtype=np.float64)
+    width = (
+        measured.get("grid_width_mm", board["squares_x"] * board["square_length_m"] * 1000) / 1000
+    )
+    height = (
+        measured.get("grid_height_mm", board["squares_y"] * board["square_length_m"] * 1000) / 1000
+    )
+    return np.asarray(
+        [[0, 0, 0], [width, 0, 0], [width, height, 0], [0, height, 0]], dtype=np.float64
+    )
 
 
 def outline(t_camera_board, camera, corners):
@@ -87,7 +93,10 @@ def draw_window(dataset):
     if image is None:
         raise ValueError("First sample image is unavailable")
     x, y, w, h = cv2.selectROI(
-        "Draw area containing the full hand board at every pose", image, showCrosshair=True, fromCenter=False
+        "Draw area containing the full hand board at every pose",
+        image,
+        showCrosshair=True,
+        fromCenter=False,
     )
     cv2.destroyAllWindows()
     if w <= 0 or h <= 0:
@@ -115,7 +124,8 @@ def inputs(dataset, calibration_path):
     if not trace_path.is_file():
         missing.append(trace_path.name)
     if any(
-        not isinstance(sample.get("frame_joint_observations"), list) or len(sample["frame_joint_observations"]) != 3
+        not isinstance(sample.get("frame_joint_observations"), list)
+        or len(sample["frame_joint_observations"]) != 3
         for sample in samples
     ):
         missing.append("sample_*.json: frame_joint_observations")
@@ -137,8 +147,12 @@ def inputs(dataset, calibration_path):
 
 
 def project_joint(q, model, manifest, calibration, corners):
-    base_board = matrix(model.fk(q)) @ matrix(manifest["T_flange_tcp"]) @ matrix(calibration["T_tcp_board"])
-    return outline(inverse(matrix(calibration["T_base_camera"])) @ base_board, manifest["camera"], corners)
+    base_board = (
+        matrix(model.fk(q)) @ matrix(manifest["T_flange_tcp"]) @ matrix(calibration["T_tcp_board"])
+    )
+    return outline(
+        inverse(matrix(calibration["T_base_camera"])) @ base_board, manifest["camera"], corners
+    )
 
 
 def interpolate(a, b, max_step_deg):
@@ -149,7 +163,9 @@ def interpolate(a, b, max_step_deg):
     return [(a + (b - a) * (i / steps)).tolist() for i in range(1, steps + 1)]
 
 
-def check_path(start, targets, model, manifest, calibration, box, max_step_deg, margin_px, capture_indices=None):
+def check_path(
+    start, targets, model, manifest, calibration, box, max_step_deg, margin_px, capture_indices=None
+):
     corners = board_corners(manifest["board"], calibration)
     waypoints = []
     previous = start
@@ -167,13 +183,20 @@ def check_path(start, targets, model, manifest, calibration, box, max_step_deg, 
             if not inside_window(points, box, margin_px):
                 raise ValueError(f"Board leaves drawn window on segment {sample_index}, step {i}")
             waypoints.append(
-                {"q_rad": q, "capture_sample_index": capture_indices[sample_index] if i == len(segment) - 1 else None}
+                {
+                    "q_rad": q,
+                    "capture_sample_index": capture_indices[sample_index]
+                    if i == len(segment) - 1
+                    else None,
+                }
             )
         previous = target
     return waypoints
 
 
-def taught_route(dataset, samples, manifest, calibration, box, margin_px, capture_only_visibility=False):
+def taught_route(
+    dataset, samples, manifest, calibration, box, margin_px, capture_only_visibility=False
+):
     trace_path = dataset / "teaching_frames.jsonl"
     if not trace_path.is_file():
         raise ValueError("No per-frame teaching trace; repeat manual collect with --preview")
@@ -208,7 +231,9 @@ def taught_route(dataset, samples, manifest, calibration, box, margin_px, captur
             if (
                 frame["T_camera_board"] is not None
                 and not capture_only_visibility
-                and not inside_window(outline(frame["T_camera_board"], manifest["camera"], corners), box, margin_px)
+                and not inside_window(
+                    outline(frame["T_camera_board"], manifest["camera"], corners), box, margin_px
+                )
             ):
                 raise ValueError(f"Hand board left drawn window during teaching segment {index}")
             joints = frame.get("joints", {}).get("joints_rad")
@@ -288,7 +313,9 @@ def make_plan(
 ):
     manifest, samples, calibration, box, window_path = inputs(dataset, calibration_path)
     if not calibration.get("quality_passed") and not allow_provisional:
-        raise ValueError("Calibration quality failed; pass --allow-provisional to use the accepted result")
+        raise ValueError(
+            "Calibration quality failed; pass --allow-provisional to use the accepted result"
+        )
     model = load_model()
     targets = [s["joints_rad"] for s in samples]
     route, capture, trace_path = taught_route(
@@ -307,7 +334,9 @@ def make_plan(
         targets = [point["q_rad"] for point in path if point["capture_sample_index"] is not None]
     else:
         # Check the observed manual route and interpolations between its frames.
-        path = check_path(targets[0], route, model, manifest, calibration, box, max_step_deg, margin_px, capture)
+        path = check_path(
+            targets[0], route, model, manifest, calibration, box, max_step_deg, margin_px, capture
+        )
         correction_deg = 0.0
     files = [
         dataset / "manifest.json",
@@ -404,9 +433,12 @@ class AutoCollectionView:
         detail = (
             "Ctrl+C to stop; cyan: allowed board area"
             if quality is None
-            else f"corners {quality['corners']} | reprojection RMS {quality['reprojection_rms_px']:.3f} px"
+            else f"corners {quality['corners']} | reprojection RMS "
+            f"{quality['reprojection_rms_px']:.3f} px"
         )
-        cv2.putText(canvas, detail, (12, 59), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 255, 180), 1, cv2.LINE_AA)
+        cv2.putText(
+            canvas, detail, (12, 59), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 255, 180), 1, cv2.LINE_AA
+        )
         self.last_image = image.copy()
         try:
             cv2.imshow(self.TITLE, canvas)
@@ -444,13 +476,26 @@ def ensure_can_control(arm):
     """The framework never switches control mode: the arm must already be in CAN position mode."""
     state = arm.state()
     if not state.get("position_mode", True):
-        raise RuntimeError("机械臂不在 CAN 位置控制模式（例如仍由厂商 Web 控制）；请先切回 CAN 控制再运行")
+        raise RuntimeError(
+            "机械臂不在 CAN 位置控制模式（例如仍由厂商 Web 控制）；请先切回 CAN 控制再运行"
+        )
     if state["moving"]:
         raise RuntimeError("Cannot start calibration motion while the arm is moving")
     require_arm_ready(arm)
 
 
-def move_and_watch(arm, camera, detector, manifest, calibration, box, margin_px, target, watch_board=True, pump=None):
+def move_and_watch(
+    arm,
+    camera,
+    detector,
+    manifest,
+    calibration,
+    box,
+    margin_px,
+    target,
+    watch_board=True,
+    pump=None,
+):
     """Settle on target in the streaming (js) mode, within 0.8° (as the original move_js settle).
 
     Nothing is sent when the arm already rests there. The board window is checked afterwards.
@@ -494,7 +539,11 @@ def capture_after_settling(arm, camera, detector, frame_check, attempts=3):
             return capture_sample(arm, camera, detector, frame_check=frame_check)
         except ValueError as exc:
             if (
-                str(exc) not in ("Arm moved during capture; sample rejected", "Joints moved during calibration sample")
+                str(exc)
+                not in (
+                    "Arm moved during capture; sample rejected",
+                    "Joints moved during calibration sample",
+                )
                 or attempt == attempts - 1
             ):
                 raise
@@ -533,7 +582,9 @@ def run_plan(
         raise ValueError("Automatic output directory already exists")
     camera = arm = preview = None
     try:
-        camera = RealSenseCamera(manifest["camera"]["serial"], image_profile=manifest["board"].get("image_profile"))
+        camera = RealSenseCamera(
+            manifest["camera"]["serial"], image_profile=manifest["board"].get("image_profile")
+        )
         if camera.info != manifest["camera"]:
             raise ValueError("Camera serial/intrinsics/crop changed after teaching")
         if show:
@@ -552,7 +603,9 @@ def run_plan(
             # Validate both legs before sending the first HOME motion command.
             home_route = joint_route(current, home, model, plan["max_step_deg"])
             if capture_only:
-                entry = joint_route(home, plan["waypoints"][0]["q_rad"], model, plan["max_step_deg"])
+                entry = joint_route(
+                    home, plan["waypoints"][0]["q_rad"], model, plan["max_step_deg"]
+                )
                 approach = [{"q_rad": q, "capture_sample_index": None} for q in entry[1:]]
             else:
                 approach = check_path(
@@ -567,7 +620,8 @@ def run_plan(
                 )
         elif capture_only:
             deviations = [
-                math.degrees(max(abs(a - b) for a, b in zip(current, point["q_rad"]))) for point in plan["waypoints"]
+                math.degrees(max(abs(a - b) for a, b in zip(current, point["q_rad"])))
+                for point in plan["waypoints"]
             ]
             nearest = int(np.argmin(deviations))
             if deviations[nearest] > 2.0:
@@ -674,15 +728,28 @@ def run_plan(
                 continue
 
             def check_frame(image, pose=None):
-                live_board(camera, detector, manifest, calibration, box, plan["margin_px"], image=image, pose=pose)
+                live_board(
+                    camera,
+                    detector,
+                    manifest,
+                    calibration,
+                    box,
+                    plan["margin_px"],
+                    image=image,
+                    pose=pose,
+                )
 
             sample, image, vis = capture_after_settling(arm, camera, detector, check_frame)
             points = outline(
-                sample["T_camera_board"], manifest["camera"], board_corners(manifest["board"], calibration)
+                sample["T_camera_board"],
+                manifest["camera"],
+                board_corners(manifest["board"], calibration),
             )
             if not inside_window(points, box, plan["margin_px"]):
                 raise RuntimeError("Captured board left the drawn image window")
-            sample["T_base_tcp"] = (matrix(sample["T_base_flange"]) @ matrix(manifest["T_flange_tcp"])).tolist()
+            sample["T_base_tcp"] = (
+                matrix(sample["T_base_flange"]) @ matrix(manifest["T_flange_tcp"])
+            ).tolist()
             sample["source_sample_index"] = index
             stem = f"sample_{count:04d}"
             write_image_new(output / (stem + ".png"), image)
@@ -691,7 +758,10 @@ def run_plan(
             count += 1
             if preview is not None:
                 preview.update(vis, "ACCEPTED", count, sample["quality"], points)
-            print(json.dumps({"accepted": count, "source_sample_index": index, **sample["quality"]}), flush=True)
+            print(
+                json.dumps({"accepted": count, "source_sample_index": index, **sample["quality"]}),
+                flush=True,
+            )
         (output / "AUTO_INCOMPLETE.json").unlink()
         return count
     finally:
@@ -706,9 +776,13 @@ def run_plan(
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
-    q = sub.add_parser("draw-window", help="Draw a full-board visibility window on first taught frame")
+    q = sub.add_parser(
+        "draw-window", help="Draw a full-board visibility window on first taught frame"
+    )
     q.add_argument("--dataset", type=Path, required=True)
-    q = sub.add_parser("plan", help="Offline project the complete replay path into the drawn window")
+    q = sub.add_parser(
+        "plan", help="Offline project the complete replay path into the drawn window"
+    )
     q.add_argument("--dataset", type=Path, required=True)
     q.add_argument("--calibration", type=Path, required=True)
     q.add_argument("--output", type=Path, required=True)
@@ -718,7 +792,8 @@ def main(argv=None):
     q.add_argument(
         "--capture-only-visibility",
         action="store_true",
-        help="Replay taught joints when board left view in transit; require full board at each sample",
+        help="Replay taught joints when board left view in transit; require full board at each "
+        "sample",
     )
     q = sub.add_parser("run", help="Move the arm and acquire a new dataset")
     q.add_argument("--plan", type=Path, required=True)
@@ -727,14 +802,20 @@ def main(argv=None):
     q.add_argument("--smooth-speed-deg-s", type=float, default=4.0)
     q.add_argument("--smooth-acc-deg-s2", type=float, default=6.0)
     q.add_argument(
-        "--fps", type=int, choices=(6, 15, 30), help="Override only the teaching frame rate; keep resolution and crop"
+        "--fps",
+        type=int,
+        choices=(6, 15, 30),
+        help="Override only the teaching frame rate; keep resolution and crop",
     )
-    q.add_argument("--show", action="store_true", help="Show each accepted calibration frame over X11")
+    q.add_argument(
+        "--show", action="store_true", help="Show each accepted calibration frame over X11"
+    )
     q.add_argument(
         "--start-from",
         choices=("home", "current"),
         default="home",
-        help="Default: settle at HOME before entering the taught route; current preserves legacy replay",
+        help="Default: settle at HOME before entering the taught route; current preserves legacy "
+        "replay",
     )
     q.add_argument("--home", type=Path, help="HOME JSON (default: calibration/config/home.json)")
     args = p.parse_args(argv)

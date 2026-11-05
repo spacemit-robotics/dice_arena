@@ -20,7 +20,11 @@ class YOLOOutputError(ValueError):
 
 
 def cap_outputs(outputs):
-    if len(outputs) != 2 or outputs[0].shape != (1, 38, 8400) or outputs[1].shape != (1, 32, 160, 160):
+    if (
+        len(outputs) != 2
+        or outputs[0].shape != (1, 38, 8400)
+        or outputs[1].shape != (1, 32, 160, 160)
+    ):
         raise YOLOOutputError("Green model requires [1,38,8400] and [1,32,160,160]")
     if not all(np.isfinite(x).all() for x in outputs):
         raise YOLOOutputError("Nonfinite YOLO outputs")
@@ -43,8 +47,14 @@ def runtime_settings(opts):
     if not isinstance(cpus, (list, tuple)) or any(type(x) is not int for x in cpus):
         raise ValueError("YOLO inference_cpu_ids must be integer CPU IDs")
     if provider == "spacemit":
-        if len(cpus) != threads or len(set(cpus)) != len(cpus) or any(x < 8 or x > 15 for x in cpus):
-            raise ValueError("K3 AI backend needs one distinct CPU ID in 8..15 per inference thread")
+        if (
+            len(cpus) != threads
+            or len(set(cpus)) != len(cpus)
+            or any(x < 8 or x > 15 for x in cpus)
+        ):
+            raise ValueError(
+                "K3 AI backend needs one distinct CPU ID in 8..15 per inference thread"
+            )
     elif cpus:
         raise ValueError("inference_cpu_ids is for the spacemit backend; use [] for cpu")
     return threads, provider, tuple(cpus)
@@ -68,7 +78,9 @@ def session(path, sha, package, threads=1, provider="cpu", cpu_ids=()):
         if package and package not in sys.path:
             sys.path.append(package)
         ort = importlib.import_module("onnxruntime")
-    runtime_settings(dict(inference_threads=threads, inference_provider=provider, inference_cpu_ids=cpu_ids))
+    runtime_settings(
+        dict(inference_threads=threads, inference_provider=provider, inference_cpu_ids=cpu_ids)
+    )
     providers = ["CPUExecutionProvider"]
     if provider == "spacemit":
         # The vendor EP creates AI threads with the K3 kernel-specific affinity setup.
@@ -90,11 +102,19 @@ def session(path, sha, package, threads=1, provider="cpu", cpu_ids=()):
     options.inter_op_num_threads = 1
     model = ort.InferenceSession(path, sess_options=options, providers=providers)
     if provider == "spacemit" and "SpaceMITExecutionProvider" not in model.get_providers():
-        raise RuntimeError("SpaceMIT EP unavailable; select cpu explicitly instead of silent fallback")
-    if model.get_inputs()[0].shape != [1, 3, 640, 640] or model.get_inputs()[0].type != "tensor(float)":
+        raise RuntimeError(
+            "SpaceMIT EP unavailable; select cpu explicitly instead of silent fallback"
+        )
+    if (
+        model.get_inputs()[0].shape != [1, 3, 640, 640]
+        or model.get_inputs()[0].type != "tensor(float)"
+    ):
         raise ValueError("Invalid green YOLO input")
     metadata = model.get_modelmeta().custom_metadata_map
-    if metadata.get("task") != "segment" or ast.literal_eval(metadata.get("names", "{}")) != {0: "cap", 1: "ground"}:
+    if metadata.get("task") != "segment" or ast.literal_eval(metadata.get("names", "{}")) != {
+        0: "cap",
+        1: "ground",
+    }:
         raise ValueError("Green model must have cap=0, ground=1")
     return model
 

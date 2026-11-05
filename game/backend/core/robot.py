@@ -152,4 +152,6 @@ class RobotProvider(Component):
         home, so it degrades to the unconditional reset_home — "ensure"
         must never silently skip the motion.
         """
-        return self.reset_home(on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout_seconds)
+        return self.reset_home(
+            on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout_seconds
+        )

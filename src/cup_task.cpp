@@ -5,19 +5,28 @@
 #include <map>
 #include <new>
 #include <string>
+
 namespace {
 struct Task {
     std::string state = "needs_home", active, error;
     bool grip_confirmed = false;
 };
+
 int Reject(Task& task, const char* error) {
     task.error = error;
     return -1;
 }
 }  // namespace
+
 extern "C" {
-void* cup_task_create() { return new (std::nothrow) Task; }
-void cup_task_destroy(void* task) { delete static_cast<Task*>(task); }
+void* cup_task_create() {
+    return new (std::nothrow) Task;
+}
+
+void cup_task_destroy(void* task) {
+    delete static_cast<Task*>(task);
+}
+
 int cup_task_step(void* pointer, const char* phase, int action) {
     if (!pointer || !phase) return -1;
     auto& task = *static_cast<Task*>(pointer);
@@ -31,9 +40,10 @@ int cup_task_step(void* pointer, const char* phase, int action) {
         if (task.state == "fault") return Reject(task, "fault latched; no automatic recovery/home");
         const std::string name = phase;
         const std::map<std::string, std::pair<std::string, std::string>> transitions = {
-            {"approach", {"ready", "approached"}}, {"grip", {"approached", "closed"}}, {"lift", {"closed", "held"}},
-            {"shake", {"held", "shaken"}}, {"lower", {"shaken", "lowered"}}, {"open", {"lowered", "released"}},
-            {"return_home", {"released", "ready"}}, {"gesture", {"ready", "ready"}}};
+                {"approach", {"ready", "approached"}},  {"grip", {"approached", "closed"}},
+                {"lift", {"closed", "held"}},           {"shake", {"held", "shaken"}},
+                {"lower", {"shaken", "lowered"}},       {"open", {"lowered", "released"}},
+                {"return_home", {"released", "ready"}}, {"gesture", {"ready", "ready"}}};
         std::pair<std::string, std::string> transition;
         if (name == "home") {
             if (task.state != "needs_home" && task.state != "ready")
@@ -64,13 +74,21 @@ int cup_task_step(void* pointer, const char* phase, int action) {
         return -1;
     }
 }
+
 int cup_task_confirm_grip(void* pointer) {
     if (!pointer) return -1;
     auto& task = *static_cast<Task*>(pointer);
-    if (task.state != "closed" || !task.active.empty()) return Reject(task, "grip confirmation outside closed phase");
+    if (task.state != "closed" || !task.active.empty())
+        return Reject(task, "grip confirmation outside closed phase");
     task.grip_confirmed = true;
     return 0;
 }
-const char* cup_task_state(void* task) { return task ? static_cast<Task*>(task)->state.c_str() : "invalid"; }
-const char* cup_task_error(void* task) { return task ? static_cast<Task*>(task)->error.c_str() : "invalid task"; }
+
+const char* cup_task_state(void* task) {
+    return task ? static_cast<Task*>(task)->state.c_str() : "invalid";
+}
+
+const char* cup_task_error(void* task) {
+    return task ? static_cast<Task*>(task)->error.c_str() : "invalid task";
+}
 }

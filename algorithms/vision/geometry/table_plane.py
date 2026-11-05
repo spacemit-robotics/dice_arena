@@ -69,7 +69,9 @@ def _top_surface(points, support_center, axis, cfg):
     nearby = selected[np.linalg.norm(lateral, axis=1) < cfg.top_center_support_radius_m]
     if len(nearby) < cfg.top_min_center_support_points:
         invalid["reason"] = "top_center_unobserved"
-        invalid["quality"].update(center_support_points=len(nearby), top_plane_rms_m=rms, top_normal_tilt_deg=tilt)
+        invalid["quality"].update(
+            center_support_points=len(nearby), top_plane_rms_m=rms, top_normal_tilt_deg=tilt
+        )
         return invalid
     near_residual = float(np.median(np.abs((nearby - center) @ normal)))
     if near_residual > cfg.top_max_plane_rms_m:
@@ -272,9 +274,16 @@ def localize(depth, object_mask, table_mask, metadata, *, cfg=Config()):
     for key in ("timestamp_domain", "instance_id", "frame_id", "mask_source"):
         if not isinstance(metadata[key], str) or not metadata[key]:
             raise ValueError(f"Missing {key}")
-    result = {key: metadata[key] for key in ("timestamp_domain", "instance_id", "frame_id", "mask_source")}
+    result = {
+        key: metadata[key] for key in ("timestamp_domain", "instance_id", "frame_id", "mask_source")
+    }
     result.update(
-        schema_version=1, frame="color_optical", units="m", timestamp_ms=timestamp, valid=False, geometry=None
+        schema_version=1,
+        frame="color_optical",
+        units="m",
+        timestamp_ms=timestamp,
+        valid=False,
+        geometry=None,
     )
     try:
         if metadata.get("depth_registered_to") != "color_optical":

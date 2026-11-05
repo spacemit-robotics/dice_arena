@@ -12,10 +12,16 @@ from vision.geometry.table_plane import deproject, estimate_points, localize
 def scene(arc=160, tilt=0, noise=0.0002):
     """Create a partial tapered side surface and a support plane."""
     rng = np.random.default_rng(21)
-    angles, heights = np.meshgrid(np.linspace(-arc / 2, arc / 2, 100) * np.pi / 180, np.linspace(0.008, 0.12, 80))
+    angles, heights = np.meshgrid(
+        np.linspace(-arc / 2, arc / 2, 100) * np.pi / 180, np.linspace(0.008, 0.12, 80)
+    )
     radius = 0.0375 - 0.008 * heights / 0.12
     obj = np.column_stack(
-        (0.03 + (radius * np.sin(angles)).ravel(), 0.15 - heights.ravel(), (0.70 - radius * np.cos(angles)).ravel())
+        (
+            0.03 + (radius * np.sin(angles)).ravel(),
+            0.15 - heights.ravel(),
+            (0.70 - radius * np.cos(angles)).ravel(),
+        )
     )
     obj += rng.normal(0, noise, obj.shape)
     x, z = np.meshgrid(np.linspace(-0.15, 0.2, 30), np.linspace(0.5, 0.9, 30))
@@ -41,8 +47,12 @@ class GeometryTests(unittest.TestCase):
             obj, table, _ = scene(tilt=tilt)
             angle = rng.uniform(-np.pi, np.pi, 1200)
             radius = 0.028 * np.sqrt(rng.random(1200))
-            cap = np.column_stack((0.03 + radius * np.sin(angle), np.full(1200, 0.03), 0.70 - radius * np.cos(angle)))
-            rotation = np.array([[np.cos(tilt), -np.sin(tilt), 0], [np.sin(tilt), np.cos(tilt), 0], [0, 0, 1]])
+            cap = np.column_stack(
+                (0.03 + radius * np.sin(angle), np.full(1200, 0.03), 0.70 - radius * np.cos(angle))
+            )
+            rotation = np.array(
+                [[np.cos(tilt), -np.sin(tilt), 0], [np.sin(tilt), np.cos(tilt), 0], [0, 0, 1]]
+            )
             result = estimate_points(np.vstack((obj, cap @ rotation.T)), table)
             top = result["top_surface"]
             self.assertTrue(top["valid"], top)
@@ -54,7 +64,9 @@ class GeometryTests(unittest.TestCase):
         rng = np.random.default_rng(8)
         angle = rng.uniform(-np.pi, np.pi, 1200)
         radius = 0.02 + 0.008 * rng.random(1200)
-        cap = np.column_stack((0.03 + radius * np.sin(angle), np.full(1200, 0.03), 0.70 - radius * np.cos(angle)))
+        cap = np.column_stack(
+            (0.03 + radius * np.sin(angle), np.full(1200, 0.03), 0.70 - radius * np.cos(angle))
+        )
         result = estimate_points(np.vstack((obj, cap)), table)
         self.assertFalse(result["top_surface"]["valid"])
         self.assertEqual(result["top_surface"]["reason"], "top_center_unobserved")
@@ -103,7 +115,9 @@ class GeometryTests(unittest.TestCase):
         np.testing.assert_allclose(points[-1], [0.01, 0.01, 1])
         points = deproject(np.full((2, 2), 1000, dtype=np.uint16), mask, intr, 0.0001)
         np.testing.assert_allclose(points[-1], [0.001, 0.001, 0.1])
-        points = deproject(np.array([[0, 65535], [1000, 65535]], dtype=np.uint16), mask, intr, 0.001)
+        points = deproject(
+            np.array([[0, 65535], [1000, 65535]], dtype=np.uint16), mask, intr, 0.001
+        )
         np.testing.assert_allclose(points, [[0, 0.01, 1]])
         intr["dist_coeffs"][0] = 0.01
         with self.assertRaisesRegex(ValueError, "rectify"):
@@ -150,7 +164,10 @@ class PlaneRefinementTest(unittest.TestCase):
         from vision.geometry.table_plane import _plane, Config
 
         for count in (0, 2, 99):
-            with self.subTest(count=count), self.assertRaisesRegex(ValueError, "table_plane_insufficient_valid_depth"):
+            with (
+                self.subTest(count=count),
+                self.assertRaisesRegex(ValueError, "table_plane_insufficient_valid_depth"),
+            ):
                 _plane(np.zeros((count, 3)), Config())
 
     def test_refine_before_support_gate(self):
@@ -158,12 +175,16 @@ class PlaneRefinementTest(unittest.TestCase):
         from vision.geometry.table_plane import _plane, Config
 
         rng = np.random.default_rng(9)
-        points = np.column_stack((rng.uniform(-0.2, 0.2, (1000, 2)), rng.uniform(-0.003, 0.003, 1000)))
+        points = np.column_stack(
+            (rng.uniform(-0.2, 0.2, (1000, 2)), rng.uniform(-0.003, 0.003, 1000))
+        )
         points = np.vstack(([[-0.2, -0.2, 0.0048], [0.2, -0.2, 0.0048], [0, 0.2, 0.0048]], points))
         initial = np.abs(points[:, 2] - 0.0048) <= 0.006
         self.assertLess(initial.mean(), 0.8)
         chooser = Mock()
-        chooser.choice.side_effect = lambda n, size, replace: np.arange(n) if size > 3 else np.array([0, 1, 2])
+        chooser.choice.side_effect = lambda n, size, replace: (
+            np.arange(n) if size > 3 else np.array([0, 1, 2])
+        )
         with patch("vision.geometry.table_plane.np.random.default_rng", return_value=chooser):
             _, _, fraction, _ = _plane(points, Config(plane_tolerance_m=0.006))
         self.assertGreaterEqual(fraction, 0.8)

@@ -57,7 +57,9 @@ def same_board_for_resume(previous, current):
     # Detection ROI does not change object geometry or camera pixel coordinates.
     # All other fields, including dimensions, image profile and quality gates,
     # remain exact-match requirements. Original manifest is never rewritten.
-    return {k: v for k, v in previous.items() if k not in ("image_roi_xyxy", "image_exclude_rois_xyxy")} == {
+    return {
+        k: v for k, v in previous.items() if k not in ("image_roi_xyxy", "image_exclude_rois_xyxy")
+    } == {
         k: v for k, v in current.items() if k not in ("image_roi_xyxy", "image_exclude_rois_xyxy")
     }
 
@@ -70,12 +72,16 @@ def read_resume_dataset(path, board, tcp_name, tcp):
     manifest, samples = read_dataset(path)
     if not same_board_for_resume(manifest.get("board", {}), board):
         raise ValueError("Resume board configuration disagrees with session manifest")
-    if manifest.get("tcp") != tcp_name or not np.allclose(matrix(manifest["T_flange_tcp"]), tcp, atol=1e-9, rtol=0):
+    if manifest.get("tcp") != tcp_name or not np.allclose(
+        matrix(manifest["T_flange_tcp"]), tcp, atol=1e-9, rtol=0
+    ):
         raise ValueError("Resume TCP disagrees with session manifest")
     if not isinstance(manifest.get("camera"), dict) or not manifest["camera"].get("serial"):
         raise ValueError("Resume session lacks camera identity")
     expected = {
-        "sample_" + f"{i:04d}" + suffix for i in range(len(samples)) for suffix in (".json", ".png", "_detected.png")
+        "sample_" + f"{i:04d}" + suffix
+        for i in range(len(samples))
+        for suffix in (".json", ".png", "_detected.png")
     }
     actual = {p.name for p in path.iterdir() if p.name.startswith("sample_")}
     if actual != expected or any(not (path / name).is_file() for name in expected):
@@ -119,7 +125,10 @@ def capture_sample(arm, camera, detector, frame_check=None, frame_observer=None)
         }
         if frame_observer is not None:
             frame_record.update(
-                camera=camera.info, board=detector.cfg, transform_units="metres", joint_units="radians_and_degrees"
+                camera=camera.info,
+                board=detector.cfg,
+                transform_units="metres",
+                joint_units="radians_and_degrees",
             )
         try:
             board, quality, vis = detector.detect(image, camera.camera_matrix, camera.dist_coeffs)
@@ -143,18 +152,33 @@ def capture_sample(arm, camera, detector, frame_check=None, frame_observer=None)
             raise
         if frame_observer is not None:
             frame_observer(
-                image, vis, dict(frame_record, status="detected", quality=quality, T_camera_board=board.tolist())
+                image,
+                vis,
+                dict(
+                    frame_record, status="detected", quality=quality, T_camera_board=board.tolist()
+                ),
             )
         observations.append((board, quality, image, vis, poses[-1], frame_joints))
     assert_still(poses)
-    if any(p > 0.002 or a > 1.0 for p, a in [distance(observations[0][0], o[0]) for o in observations[1:]]):
+    if any(
+        p > 0.002 or a > 1.0
+        for p, a in [distance(observations[0][0], o[0]) for o in observations[1:]]
+    ):
         raise ValueError("Board observations unstable; sample rejected")
-    board, quality, image, vis, flange, _ = min(observations, key=lambda o: o[1]["reprojection_rms_px"])
+    board, quality, image, vis, flange, _ = min(
+        observations, key=lambda o: o[1]["reprojection_rms_px"]
+    )
     joints_after = arm.read_joints()
-    if np.max(np.abs(np.asarray(joints_after["joints_rad"]) - joints_before["joints_rad"])) > np.radians(0.2):
+    if np.max(
+        np.abs(np.asarray(joints_after["joints_rad"]) - joints_before["joints_rad"])
+    ) > np.radians(0.2):
         raise ValueError("Joints moved during calibration sample")
     archive_selection = (
-        {"selected_frame_index": min(range(len(observations)), key=lambda i: observations[i][1]["reprojection_rms_px"])}
+        {
+            "selected_frame_index": min(
+                range(len(observations)), key=lambda i: observations[i][1]["reprojection_rms_px"]
+            )
+        }
         if frame_observer is not None
         else {}
     )
@@ -194,16 +218,24 @@ def main(argv=None):
     add_tcp(q)
     for command in ["camera-check", "collect"]:
         q = sub.add_parser(command)
-        q.add_argument("--board", type=Path, default=ROOT / "calibration/config/board_perceptive.json")
+        q.add_argument(
+            "--board", type=Path, default=ROOT / "calibration/config/board_perceptive.json"
+        )
         q.add_argument("--serial", help="RealSense serial; omit only with one connected camera")
         q.add_argument("--dataset", type=Path, required=True, help="Output directory")
         if command == "collect":
             add_tcp(q)
-            q.add_argument("--resume", action="store_true", help="Append to a validated existing session")
-            q.add_argument("--preview", action="store_true", help="Open live OpenCV/X11 sampling window")
+            q.add_argument(
+                "--resume", action="store_true", help="Append to a validated existing session"
+            )
+            q.add_argument(
+                "--preview", action="store_true", help="Open live OpenCV/X11 sampling window"
+            )
     q = sub.add_parser("solve")
     q.add_argument("--dataset", type=Path, required=True)
-    q.add_argument("--output", type=Path, required=True, help="New result JSON; never applies to robot")
+    q.add_argument(
+        "--output", type=Path, required=True, help="New result JSON; never applies to robot"
+    )
     q.add_argument("--max-position-mm", type=float, default=5.0)
     q.add_argument("--max-angle-deg", type=float, default=2.0)
     args = p.parse_args(argv)
@@ -238,7 +270,9 @@ def main(argv=None):
             arm.close()
     if args.command == "solve":
         meta, samples = read_dataset(args.dataset)
-        result = solve(samples, meta["T_flange_tcp"], args.max_position_mm / 1000, args.max_angle_deg)
+        result = solve(
+            samples, meta["T_flange_tcp"], args.max_position_mm / 1000, args.max_angle_deg
+        )
         result["camera"] = meta["camera"]
         result["board"] = meta["board"]
         result["tcp"] = meta["tcp"]
@@ -269,7 +303,8 @@ def main(argv=None):
 
             preview = CollectionPreview()
         camera = RealSenseCamera(
-            args.serial, **({"image_profile": cfg["image_profile"]} if "image_profile" in cfg else {})
+            args.serial,
+            **({"image_profile": cfg["image_profile"]} if "image_profile" in cfg else {}),
         )
         if resume:
             if camera.info != manifest["camera"]:
@@ -285,7 +320,8 @@ def main(argv=None):
                     "opencv_version": cv2.__version__,
                     "tcp": getattr(args, "tcp", "flange"),
                     "T_flange_tcp": tcp.tolist(),
-                    "sampling": "stationary bracketed observations, not hardware timestamp synchronization",
+                    "sampling": "stationary bracketed observations, not hardware timestamp "
+                    "synchronization",
                     "created_unix_s": time.time(),
                 },
             )
@@ -294,13 +330,20 @@ def main(argv=None):
             if not cv2.imwrite(str(args.dataset / "color.png"), image):
                 raise RuntimeError("Image write failed")
             try:
-                board, quality, vis = detector.detect(image, camera.camera_matrix, camera.dist_coeffs)
+                board, quality, vis = detector.detect(
+                    image, camera.camera_matrix, camera.dist_coeffs
+                )
                 cv2.imwrite(str(args.dataset / "detected.png"), vis)
-                write_new(args.dataset / "detection.json", {"T_camera_board": board.tolist(), "quality": quality})
+                write_new(
+                    args.dataset / "detection.json",
+                    {"T_camera_board": board.tolist(), "quality": quality},
+                )
                 print(json.dumps({"camera": camera.info, "detection": quality}))
                 return 0
             except ValueError as exc:
-                print(json.dumps({"camera": camera.info, "board_detected": False, "reason": str(exc)}))
+                print(
+                    json.dumps({"camera": camera.info, "board_detected": False, "reason": str(exc)})
+                )
                 return 2
         arm = ArmFeedback()
         print("静止后 Enter 采样，q 退出。程序只读取反馈，不移动/使能/失能机械臂。", flush=True)
@@ -310,7 +353,9 @@ def main(argv=None):
             last_image = cv2.imread(str(args.dataset / f"sample_{count - 1:04d}_detected.png"))
             preview.restore(last_image, count, existing[-1]["quality"])
         if preview and (args.dataset / "board_window.json").is_file():
-            preview.board_window = json.loads((args.dataset / "board_window.json").read_text())["window_xyxy"]
+            preview.board_window = json.loads((args.dataset / "board_window.json").read_text())[
+                "window_xyxy"
+            ]
 
         def record_preview_frame(image, board_pose, quality):
             observation = {
@@ -360,7 +405,9 @@ def main(argv=None):
             except ValueError as exc:
                 print(f"样本未保存: {exc}", flush=True)
                 if preview:
-                    preview.result(False, count, str(exc), sample["quality"] if sample else None, vis)
+                    preview.result(
+                        False, count, str(exc), sample["quality"] if sample else None, vis
+                    )
         print(f"已保存 {count} 组。使用 solve 命令离线求解。")
         return 0
     except KeyboardInterrupt:

@@ -188,7 +188,9 @@ def cover(vertices, maximum=0.006):
             break
         a, b, c = tri[:, 0], tri[:, 1], tri[:, 2]
         ab, bc, ca = (a + b) / 2, (b + c) / 2, (c + a) / 2
-        todo = np.concatenate([np.stack(x, axis=1) for x in [(a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca)]])
+        todo = np.concatenate(
+            [np.stack(x, axis=1) for x in [(a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca)]]
+        )
     return np.concatenate(centers), np.concatenate(radii)
 
 
@@ -229,7 +231,11 @@ class Screen:
     def add(self, name, vertices, *, unique=None):
         # Qhull accepts repeated triangle vertices. Sorting the entire STL first
         # is unnecessary for plane extrema; retain deduplication for cup covers.
-        vertices_unique = (vertices if self.table_only else np.unique(vertices, axis=0)) if unique is None else unique
+        vertices_unique = (
+            (vertices if self.table_only else np.unique(vertices, axis=0))
+            if unique is None
+            else unique
+        )
         if getattr(self, "_sources", None) is not None:
             self._sources[name] = (vertices, unique if self.table_only else vertices_unique)
         if self.table_only:
@@ -272,10 +278,16 @@ class Screen:
                 if value < minimum:
                     minimum, link = value, name
         blockers = (
-            [f"{link}: table clearance {minimum * 1000:.1f} mm"] if minimum < cfg["table_margin_mm"] / 1000 else []
+            [f"{link}: table clearance {minimum * 1000:.1f} mm"]
+            if minimum < cfg["table_margin_mm"] / 1000
+            else []
         )
         return dict(
-            table_min_mm=minimum * 1000, table_link=link, cup_lower_bound_mm=None, cup_link=None, blockers=blockers
+            table_min_mm=minimum * 1000,
+            table_link=link,
+            cup_lower_bound_mm=None,
+            cup_link=None,
+            blockers=blockers,
         )
 
     def check(self, samples, scene, cup_removed, cfg, *, allow_hand_cup_contact=False):
@@ -321,9 +333,13 @@ class Screen:
         blockers = []
         if table_min < cfg["table_margin_mm"] / 1000:
             blockers.append(f"{table_link}: table clearance {table_min * 1000:.1f} mm")
-        enforced_min, enforced_link = (rigid_min, rigid_link) if allow_hand_cup_contact else (cup_min, cup_link)
+        enforced_min, enforced_link = (
+            (rigid_min, rigid_link) if allow_hand_cup_contact else (cup_min, cup_link)
+        )
         if not cup_removed and enforced_min < cfg["cup_margin_mm"] / 1000:
-            blockers.append(f"{enforced_link}: cup clearance lower bound {enforced_min * 1000:.1f} mm")
+            blockers.append(
+                f"{enforced_link}: cup clearance lower bound {enforced_min * 1000:.1f} mm"
+            )
         result = dict(
             table_min_mm=table_min * 1000,
             table_link=table_link,
@@ -339,7 +355,10 @@ class Screen:
                 hand_cup_lower_bound_mm=hand_min * 1000 if math.isfinite(hand_min) else None,
                 hand_cup_link=hand_link,
                 contact_warnings=(
-                    [f"{hand_link}: allowed hand/cup contact; clearance lower bound {hand_min * 1000:.1f} mm"]
+                    [
+                        f"{hand_link}: allowed hand/cup contact; clearance lower bound "
+                        f"{hand_min * 1000:.1f} mm"
+                    ]
                     if hand_min < cfg["cup_margin_mm"] / 1000
                     else []
                 ),
@@ -347,7 +366,9 @@ class Screen:
         return result
 
 
-def make_plan(session, current, cfg, frame, gap_mm, cup_removed, screen=None, *, allow_hand_cup_contact=False):
+def make_plan(
+    session, current, cfg, frame, gap_mm, cup_removed, screen=None, *, allow_hand_cup_contact=False
+):
     if not math.isfinite(gap_mm) or not 0 <= gap_mm <= 200:
         raise ValueError("gap_mm must be 0..200")
     if gap_mm == 0 and not cup_removed:
@@ -363,7 +384,9 @@ def make_plan(session, current, cfg, frame, gap_mm, cup_removed, screen=None, *,
     fk = np.array(arm.fk(current))
     # First raise the current flange, then transfer above the target, then lower.
     final = flange_target(point, rotation, tcp, frame)
-    reference = np.clip(read_json(cfg["orientation_reference"])["joints_rad"], *np.array(arm.limits_rad).T)
+    reference = np.clip(
+        read_json(cfg["orientation_reference"])["joints_rad"], *np.array(arm.limits_rad).T
+    )
     endpoint_trials = [
         arm.ik(
             final,
@@ -388,7 +411,8 @@ def make_plan(session, current, cfg, frame, gap_mm, cup_removed, screen=None, *,
             stages=[],
             endpoint_trials=[asdict(trial) for trial in endpoint_trials],
             blockers=[
-                "终点 IK 未找到解；可将杯子移近基座后重新 capture。这是局部求解结果，不是整个工作空间不可达的证明"
+                "终点 IK 未找到解；可将杯子移近基座后重新 capture。这是局部求解结果，"
+                "不是整个工作空间不可达的证明"
             ],
             screen_passed=False,
             calibration_quality_passed=session["calibration_quality_passed"],
@@ -414,13 +438,21 @@ def make_plan(session, current, cfg, frame, gap_mm, cup_removed, screen=None, *,
         # Translation is interpolated; orientation changes only on the high transfer.
         from scipy.spatial.transform import Rotation, Slerp
 
-        interpolate = Slerp([0, 1], Rotation.from_matrix(np.stack([beginning[:3, :3], target[:3, :3]])))
+        interpolate = Slerp(
+            [0, 1], Rotation.from_matrix(np.stack([beginning[:3, :3], target[:3, :3]]))
+        )
         for index in range(1, steps + 1):
             ratio = index / steps
             waypoint = np.eye(4)
             waypoint[:3, :3] = interpolate(ratio).as_matrix()
             waypoint[:3, 3] = (1 - ratio) * beginning[:3, 3] + ratio * target[:3, 3]
-            ik = arm.ik(waypoint, seed, max_iterations=600, position_tolerance_m=1e-5, orientation_tolerance_rad=1e-4)
+            ik = arm.ik(
+                waypoint,
+                seed,
+                max_iterations=600,
+                position_tolerance_m=1e-5,
+                orientation_tolerance_rad=1e-4,
+            )
             if not ik.success:
                 blockers.append(f"{name}/{index}: IK {ik.reason}")
                 break
@@ -432,7 +464,9 @@ def make_plan(session, current, cfg, frame, gap_mm, cup_removed, screen=None, *,
             # Contact permission is limited to the target descent. Transit keeps
             # the original full-hand cup checks, as do comparison experiments.
             if allow_hand_cup_contact and name == "lower":
-                review = screen.check(checked.samples_rad, scene, cup_removed, cfg, allow_hand_cup_contact=True)
+                review = screen.check(
+                    checked.samples_rad, scene, cup_removed, cfg, allow_hand_cup_contact=True
+                )
             else:
                 review = screen.check(checked.samples_rad, scene, cup_removed, cfg)
             stages.append(

@@ -36,7 +36,9 @@ def test_reassessment_is_consistent_for_historical_result_and_registration():
     assert registration["quality_passed"]
     assert registration["source_calibration"] == new
     assert approval_key(old, CFG) == approval_key({"source_calibration": old}, CFG)
-    assert approval_key(old, CFG) != approval_key(old, {"quality_thresholds": {"position_mm": 16, "angle_deg": 5}})
+    assert approval_key(old, CFG) != approval_key(
+        old, {"quality_thresholds": {"position_mm": 16, "angle_deg": 5}}
+    )
 
 
 @pytest.mark.parametrize("errors", [None, [], [[float("nan"), 1]], [[-0.1, 1]], [[True, 1]]])
@@ -60,7 +62,10 @@ def workflow(tmp_path, action, source):
     config = read(CONFIG)
     config.update(state_file=str(tmp_path / "state.json"), output_root=str(tmp_path / "datasets"))
     write(job / "config.json", config)
-    write(job / "request.json", {"action": action, "source_path": str(source), "source_sha256": digest(source)})
+    write(
+        job / "request.json",
+        {"action": action, "source_path": str(source), "source_sha256": digest(source)},
+    )
     return BrowserWorkflow(job)
 
 

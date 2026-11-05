@@ -23,18 +23,22 @@ struct Detection {
 // model [1,10,8400]); the decoder restores boxes to the camera image and runs
 // class-aware NMS outside the ONNX graph.
 class Yolov8Detector {
-    public:
+public:
     Yolov8Detector();
     ~Yolov8Detector();
     Yolov8Detector(const Yolov8Detector&) = delete;
     Yolov8Detector& operator=(const Yolov8Detector&) = delete;
 
-    bool init(const std::string& model_path, int intra_threads = 1, const std::string& ep_affinity = {});
-    std::vector<Detection> infer(const float* data, std::size_t count, float conf_threshold, float scale, int pad_x,
-        int pad_y, int image_width, int image_height, float iou_threshold = 0.45f, int max_detections = 300);
+    bool init(const std::string& model_path, int intra_threads = 1,
+              const std::string& ep_affinity = {});
+    std::vector<Detection> infer(const float* data, std::size_t count, float conf_threshold,
+                                 float scale, int pad_x, int pad_y, int image_width,
+                                 int image_height, float iou_threshold = 0.45f,
+                                 int max_detections = 300);
+
     bool ready() const { return session_opaque_ != nullptr; }
 
-    private:
+private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
     void* session_opaque_ = nullptr;

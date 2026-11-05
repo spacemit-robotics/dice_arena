@@ -17,7 +17,10 @@ class LowerEndpointTests(unittest.TestCase):
             w = object.__new__(flow.Workflow)
             w.root = Path(folder)
             w.cfg = {"speed_percent": 30, "joint_delivery": {"command_mode": "smooth_profile"}}
-            w.g = {"lower_command_mode": "controller_endpoint", "fast_phase_speed_percent": {"lower": 60}}
+            w.g = {
+                "lower_command_mode": "controller_endpoint",
+                "fast_phase_speed_percent": {"lower": 60},
+            }
             before = copy.deepcopy(w.cfg)
             w.unchanged = Mock()
             w.receipts = {}
@@ -35,14 +38,20 @@ class LowerEndpointTests(unittest.TestCase):
                 current[0] = phase
                 w._issue_once({"blockers": [], "stages": []}, phase)
             self.assertEqual(requests["lower"]["config"]["speed_percent"], 60)
-            self.assertEqual(requests["lower"]["config"]["joint_delivery"]["command_mode"], "controller_endpoint")
-            self.assertEqual(requests["lower"]["config"]["joint_delivery"]["endpoint_resend_interval_s"], 0.05)
+            self.assertEqual(
+                requests["lower"]["config"]["joint_delivery"]["command_mode"], "controller_endpoint"
+            )
+            self.assertEqual(
+                requests["lower"]["config"]["joint_delivery"]["endpoint_resend_interval_s"], 0.05
+            )
             for phase in ("approach", "lift", "lower_correct", "return_home"):
                 self.assertEqual(requests[phase]["config"], before)
             self.assertEqual(w.cfg, before)
             w.g.pop("lower_command_mode")
             w._issue_once({"blockers": [], "stages": []}, "lower")
-            self.assertEqual(requests[current[0]]["config"]["joint_delivery"]["command_mode"], "smooth_profile")
+            self.assertEqual(
+                requests[current[0]]["config"]["joint_delivery"]["command_mode"], "smooth_profile"
+            )
 
     def test_config_validation(self):
         cfg = load_config(ROOT / "configs/green_cup.json")

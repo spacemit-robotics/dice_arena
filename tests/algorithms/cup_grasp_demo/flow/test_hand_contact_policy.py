@@ -33,7 +33,9 @@ class ContactScreenTest(unittest.TestCase):
         self.screen.meshes[name] = (vertex, vertex, np.array([0.001]))
 
     def check(self, enabled):
-        return self.screen.check([[0.0] * 7], self.scene, False, self.cfg, allow_hand_cup_contact=enabled)
+        return self.screen.check(
+            [[0.0] * 7], self.scene, False, self.cfg, allow_hand_cup_contact=enabled
+        )
 
     def test_only_target_hand_margin_becomes_a_warning(self):
         strict, contact = self.check(False), self.check(True)
@@ -56,11 +58,15 @@ class ContactScreenTest(unittest.TestCase):
                 self.add(link, [0.052, 0, 0.1])
                 review = self.check(True)
                 self.assertEqual(review["cup_link"], "right_pinky_distal_link")
-                self.assertTrue(any(b.startswith(link + ": cup clearance") for b in review["blockers"]))
+                self.assertTrue(
+                    any(b.startswith(link + ": cup clearance") for b in review["blockers"])
+                )
 
     def test_contact_option_is_explicit_boolean_and_direct_only(self):
         self.assertFalse(hand_contact_allowed({}))
-        self.assertTrue(hand_contact_allowed(dict(strategy="direct_close", allow_hand_cup_contact=True)))
+        self.assertTrue(
+            hand_contact_allowed(dict(strategy="direct_close", allow_hand_cup_contact=True))
+        )
         for value in ("true", 1, None):
             with self.assertRaises(ValueError):
                 hand_contact_allowed(dict(strategy="direct_close", allow_hand_cup_contact=value))
@@ -78,7 +84,13 @@ class RecordedContactTest(unittest.TestCase):
         cls.saved = read_json(path / "ready_plan.json")
         cls.scene = cls.saved["scene"]
         cls.cfg = deepcopy(cls.session["config"])
-        for name in ("home", "calibration", "orientation_reference", "tcp_candidate", "grasp_config"):
+        for name in (
+            "home",
+            "calibration",
+            "orientation_reference",
+            "tcp_candidate",
+            "grasp_config",
+        ):
             cls.cfg[name] = str(ROOT / cls.cfg[name])
         cls.cfg["side_grasp"]["allow_hand_cup_contact"] = True
         cls.start = cls.saved["start_q_rad"]
@@ -90,7 +102,9 @@ class RecordedContactTest(unittest.TestCase):
         self.assertEqual(len(self.plan["stages"]), len(self.saved["stages"]))
         for actual, original in zip(self.plan["stages"], self.saved["stages"]):
             np.testing.assert_allclose(actual["target_q_rad"], original["target_q_rad"], atol=1e-9)
-            self.assertAlmostEqual(actual["screen"]["table_min_mm"], original["screen"]["table_min_mm"], places=7)
+            self.assertAlmostEqual(
+                actual["screen"]["table_min_mm"], original["screen"]["table_min_mm"], places=7
+            )
             if actual["name"].startswith("lower_"):
                 self.assertTrue(actual["screen"]["hand_cup_contact_allowed"])
                 self.assertGreater(actual["screen"]["non_hand_cup_lower_bound_mm"], 5)
@@ -105,21 +119,33 @@ class RecordedContactTest(unittest.TestCase):
         self.assertNotIn("allow_hand_cup_contact", result)
 
     def test_comparison_workflow_keeps_strict_check_even_with_active_contact_config(self):
-        result = make_plan({**self.session, "scene": self.scene}, self.start, self.cfg, "tcp", 40, False)
-        self.assertTrue(any("right_pinky_distal_link: cup clearance" in b for b in result["blockers"]))
+        result = make_plan(
+            {**self.session, "scene": self.scene}, self.start, self.cfg, "tcp", 40, False
+        )
+        self.assertTrue(
+            any("right_pinky_distal_link: cup clearance" in b for b in result["blockers"])
+        )
 
     def test_ready_resume_records_contact_warning_and_uses_same_two_step_closure(self):
         result = make_grasp_plan(
-            self.session, self.plan["stages"][-1]["target_q_rad"], self.cfg, self.scene, "ready", "grip"
+            self.session,
+            self.plan["stages"][-1]["target_q_rad"],
+            self.cfg,
+            self.scene,
+            "ready",
+            "grip",
         )
         self.assertEqual(result["blockers"], [])
         self.assertTrue(result["contact_warnings"])
-        self.assertEqual([s["target_0_100"] for s in result["stages"]], [[0, 100, 0, 0, 0, 0], [100] * 6])
+        self.assertEqual(
+            [s["target_0_100"] for s in result["stages"]], [[0, 100, 0, 0, 0, 0], [100] * 6]
+        )
 
     def test_optional_radial_approach_uses_contact_policy(self):
         cfg = deepcopy(self.cfg)
         cfg["side_grasp"].update(
-            close_gap_mm=30, approach=dict(enabled=True, start_gap_mm=40, step_mm=2, speed_percent=2)
+            close_gap_mm=30,
+            approach=dict(enabled=True, start_gap_mm=40, step_mm=2, speed_percent=2),
         )
         result = make_grasp_plan(self.session, self.start, cfg, self.scene, until="ready")
         self.assertTrue(result["screen_passed"])

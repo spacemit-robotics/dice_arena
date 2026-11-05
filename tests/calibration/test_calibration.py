@@ -38,7 +38,12 @@ class CalibrationTests(unittest.TestCase):
         self.assertFalse(original["quality_passed"])
         self.assertTrue(relaxed["quality_passed"])
         self.assertEqual(relaxed["thresholds"], {"position_m": 0.015, "angle_deg": 5.0})
-        for key in ("T_base_camera", "T_tcp_board", "holdout_errors_m_deg", "all_sample_errors_m_deg"):
+        for key in (
+            "T_base_camera",
+            "T_tcp_board",
+            "holdout_errors_m_deg",
+            "all_sample_errors_m_deg",
+        ):
             self.assertEqual(original[key], relaxed[key])
         for residual in ((0.01501, 1), (0.001, 5.01)):
             with patch("core.distance", return_value=residual):
@@ -101,11 +106,17 @@ class CalibrationTests(unittest.TestCase):
             p = Path(d) / "tcp.json"
             for parent, base in [("flange", np.eye(4)), ("hand_base", HAND_BASE), ("palm", PALM)]:
                 offset = pose_matrix([0.012, -0.006, 0.028, 0.2, -0.1, 0.3])
-                p.write_text(json.dumps({"units": "m", "relative_to": parent, "matrix": offset.tolist()}))
+                p.write_text(
+                    json.dumps({"units": "m", "relative_to": parent, "matrix": offset.tolist()})
+                )
                 np.testing.assert_allclose(tcp_transform("custom", p), base @ offset)
-            p.write_text(json.dumps({"units": "m", "relative_to": "flange", "matrix": PALM.tolist()}))
+            p.write_text(
+                json.dumps({"units": "m", "relative_to": "flange", "matrix": PALM.tolist()})
+            )
             np.testing.assert_allclose(tcp_transform("custom", p), tcp_transform("palm"))
-            p.write_text(json.dumps({"units": "m", "relative_to": "flange", "matrix": np.eye(4).tolist()}))
+            p.write_text(
+                json.dumps({"units": "m", "relative_to": "flange", "matrix": np.eye(4).tolist()})
+            )
             np.testing.assert_allclose(tcp_transform("custom", p), tcp_transform("flange"))
 
     def test_invalid_matrix_tcp_rejected(self):
@@ -167,7 +178,11 @@ class CalibrationTests(unittest.TestCase):
         cfg = json.loads((ROOT / "config/board_4x5_21p5mm.json").read_text())
         full = CharucoDetector(cfg)
         board = full.board
-        generated = board.generateImage((200, 250)) if hasattr(board, "generateImage") else board.draw((200, 250))
+        generated = (
+            board.generateImage((200, 250))
+            if hasattr(board, "generateImage")
+            else board.draw((200, 250))
+        )
         single = np.full((480, 640), 255, np.uint8)
         single[100:350, 60:260] = generated
         two = single.copy()
@@ -194,14 +209,20 @@ class CalibrationTests(unittest.TestCase):
         cfg = json.loads((ROOT / "config/board_reference_redcloth.json").read_text())
         detector = CharucoDetector(cfg)
         board = detector.board
-        pattern = board.generateImage((120, 150)) if hasattr(board, "generateImage") else board.draw((120, 150))
+        pattern = (
+            board.generateImage((120, 150))
+            if hasattr(board, "generateImage")
+            else board.draw((120, 150))
+        )
         image = np.full((720, 960, 3), 255, np.uint8)
         image[465:615, 640:760] = cv2.cvtColor(pattern, cv2.COLOR_GRAY2BGR)
         camera_matrix = np.array([[900.0, 0.0, 480.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]])
         _, quality, _ = detector.detect(image, camera_matrix, np.zeros(5))
         self.assertEqual(quality["corners"], 12)
         clipped = CharucoDetector({**cfg, "image_roi_xyxy": [520, 440, 740, 700]})
-        with self.assertRaisesRegex(ValueError, r"Too few ChArUco corners:.*8/12.*520, 440, 740, 700"):
+        with self.assertRaisesRegex(
+            ValueError, r"Too few ChArUco corners:.*8/12.*520, 440, 740, 700"
+        ):
             clipped.detect(image, camera_matrix, np.zeros(5))
         # A second copy outside the fixed-board ROI cannot contaminate registration.
         image[100:250, 200:320] = cv2.cvtColor(pattern, cv2.COLOR_GRAY2BGR)
@@ -211,7 +232,11 @@ class CalibrationTests(unittest.TestCase):
         cfg = json.loads((ROOT / "config/board_4x5_21p5mm.json").read_text())
         full = CharucoDetector(cfg)
         board = full.board
-        pattern = board.generateImage((200, 250)) if hasattr(board, "generateImage") else board.draw((200, 250))
+        pattern = (
+            board.generateImage((200, 250))
+            if hasattr(board, "generateImage")
+            else board.draw((200, 250))
+        )
         image = np.full((720, 960, 3), 255, np.uint8)
         image[450:700, 50:250] = cv2.cvtColor(pattern, cv2.COLOR_GRAY2BGR)
         camera_matrix = np.array([[900.0, 0.0, 480.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]])
@@ -227,10 +252,14 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(q["corners"], 12)
         from tools.reprocess_dimensions import measured_observation
 
-        measured, _, _, _ = measured_observation(image, detector, camera_matrix, np.zeros(5), 0.0865, 0.108)
+        measured, _, _, _ = measured_observation(
+            image, detector, camera_matrix, np.zeros(5), 0.0865, 0.108
+        )
         single = image.copy()
         single[:, 580:] = 255
-        reference, _, _, _ = measured_observation(single, full, camera_matrix, np.zeros(5), 0.0865, 0.108)
+        reference, _, _, _ = measured_observation(
+            single, full, camera_matrix, np.zeros(5), 0.0865, 0.108
+        )
         np.testing.assert_allclose(measured, reference, atol=1e-9)
         image[:, :300] = 255
         with self.assertRaisesRegex(ValueError, "No ChArUco markers"):
@@ -238,7 +267,14 @@ class CalibrationTests(unittest.TestCase):
 
     def test_roi_rejects_invalid_and_out_of_bounds_regions(self):
         cfg = json.loads((ROOT / "config/board_4x5_21p5mm.json").read_text())
-        for bad in [[0, 0, 0, 100], [-1, 0, 20, 20], [0, 0, 1.5, 10], [False, 0, 10, 10], [0, 0, 10], "0,0,10,10"]:
+        for bad in [
+            [0, 0, 0, 100],
+            [-1, 0, 20, 20],
+            [0, 0, 1.5, 10],
+            [False, 0, 10, 10],
+            [0, 0, 10],
+            "0,0,10,10",
+        ]:
             with self.subTest(roi=bad), self.assertRaisesRegex(ValueError, "image_roi_xyxy"):
                 CharucoDetector({**cfg, "image_roi_xyxy": bad})
         detector = CharucoDetector({**cfg, "image_roi_xyxy": [0, 0, 641, 480]})
@@ -250,11 +286,17 @@ class CalibrationTests(unittest.TestCase):
         detector = CharucoDetector(cfg)
         board = detector.board
         # Four squares span 400 pixels; depth follows fx * physical square size / square pixels.
-        generated = board.generateImage((400, 500)) if hasattr(board, "generateImage") else board.draw((400, 500))
+        generated = (
+            board.generateImage((400, 500))
+            if hasattr(board, "generateImage")
+            else board.draw((400, 500))
+        )
         img = np.full((700, 600), 255, np.uint8)
         img[100:600, 100:500] = generated
         camera_matrix = np.array([[1000.0, 0, 300], [0, 1000.0, 350], [0, 0, 1]])
-        board_transform, quality, _ = detector.detect(cv2.cvtColor(img, cv2.COLOR_GRAY2BGR), camera_matrix, np.zeros(5))
+        board_transform, quality, _ = detector.detect(
+            cv2.cvtColor(img, cv2.COLOR_GRAY2BGR), camera_matrix, np.zeros(5)
+        )
         self.assertGreaterEqual(quality["corners"], 6)
         square_pixels = 400 / cfg["squares_x"]
         expected_depth = camera_matrix[0, 0] * cfg["square_length_m"] / square_pixels
@@ -263,7 +305,9 @@ class CalibrationTests(unittest.TestCase):
             detector.detect(np.full((700, 600, 3), 255, np.uint8), camera_matrix, np.zeros(5))
 
     def test_distortion_compatibility(self):
-        np.testing.assert_array_equal(opencv_distortion("distortion.inverse_brown_conrady", [0] * 5), [0] * 5)
+        np.testing.assert_array_equal(
+            opencv_distortion("distortion.inverse_brown_conrady", [0] * 5), [0] * 5
+        )
         with self.assertRaises(ValueError):
             opencv_distortion("distortion.inverse_brown_conrady", [0.1, 0, 0, 0, 0])
         with self.assertRaises(ValueError):
@@ -279,8 +323,15 @@ class CalibrationTests(unittest.TestCase):
         reader = ArmFeedback.__new__(ArmFeedback)
         reader.last_sample = 100
         reader.device = Mock()
-        reader.device.state.return_value = {"arm_sample_id": 100, "joints_rad": [0.0] * 7, "source_time_s": 1.0}
-        with patch("sensors.time.monotonic", side_effect=[0.0, 0.1, 0.6]), patch("sensors.time.sleep"):
+        reader.device.state.return_value = {
+            "arm_sample_id": 100,
+            "joints_rad": [0.0] * 7,
+            "source_time_s": 1.0,
+        }
+        with (
+            patch("sensors.time.monotonic", side_effect=[0.0, 0.1, 0.6]),
+            patch("sensors.time.sleep"),
+        ):
             with self.assertRaisesRegex(RuntimeError, "No new"):
                 reader.read()
 
@@ -301,7 +352,9 @@ class CalibrationTests(unittest.TestCase):
             arm.read.side_effect = [np.eye(4)] * 8 + [pose_matrix([0.01, 0, 0, 0, 0, 0])] * 6
             with self.assertRaisesRegex(ValueError, "moved"):
                 capture_sample(arm, camera, detector)
-        self.assertEqual([c[0] for c in arm.method_calls if c[0] not in ("read", "read_joints")], [])
+        self.assertEqual(
+            [c[0] for c in arm.method_calls if c[0] not in ("read", "read_joints")], []
+        )
 
     def test_dataset_overwrite_protected(self):
         with tempfile.TemporaryDirectory() as d:
@@ -357,17 +410,24 @@ class CalibrationTests(unittest.TestCase):
             with (
                 patch("sensors.RealSenseCamera", return_value=cam),
                 patch("sensors.ArmFeedback", return_value=arm),
-                patch("calibrate.capture_sample", side_effect=[(duplicate, image, image), (fresh, image, image)]),
+                patch(
+                    "calibrate.capture_sample",
+                    side_effect=[(duplicate, image, image), (fresh, image, image)],
+                ),
                 patch("builtins.input", side_effect=["", "", "q"]),
                 patch("builtins.print"),
             ):
-                self.assertEqual(main(["collect", "--tcp", "palm", "--dataset", str(path), "--resume"]), 0)
+                self.assertEqual(
+                    main(["collect", "--tcp", "palm", "--dataset", str(path), "--resume"]), 0
+                )
             for name, contents in previous.items():
                 self.assertEqual((path / name).read_bytes(), contents)
             self.assertEqual(len(list(path.glob("sample_*.json"))), 11)
             self.assertTrue((path / "sample_0010.png").is_file())
             self.assertTrue((path / "sample_0010_detected.png").is_file())
-            np.testing.assert_allclose(json.loads((path / "sample_0010.json").read_text())["T_base_tcp"], flange @ PALM)
+            np.testing.assert_allclose(
+                json.loads((path / "sample_0010.json").read_text())["T_base_tcp"], flange @ PALM
+            )
             cam.close.assert_called_once()
             arm.close.assert_called_once()
 
@@ -392,7 +452,9 @@ class CalibrationTests(unittest.TestCase):
                 patch("builtins.input", side_effect=KeyboardInterrupt),
                 patch("builtins.print"),
             ):
-                self.assertEqual(main(["collect", "--tcp", "palm", "--dataset", str(path), "--resume"]), 130)
+                self.assertEqual(
+                    main(["collect", "--tcp", "palm", "--dataset", str(path), "--resume"]), 130
+                )
             self.assertEqual(signal.getsignal(signal.SIGINT), previous_handler)
             arm.close.assert_called_once()
             cam.close.assert_called_once()
@@ -411,7 +473,9 @@ class CalibrationTests(unittest.TestCase):
                 patch("builtins.input", side_effect=EOFError),
                 patch("builtins.print"),
             ):
-                self.assertEqual(main(["collect", "--tcp", "palm", "--dataset", str(path), "--resume"]), 0)
+                self.assertEqual(
+                    main(["collect", "--tcp", "palm", "--dataset", str(path), "--resume"]), 0
+                )
             arm.close.assert_called_once()
             cam.close.assert_called_once()
 
@@ -442,11 +506,28 @@ class CalibrationTests(unittest.TestCase):
             _, camera_info = self.make_collection_session(path)
             with patch("sensors.RealSenseCamera") as camera:
                 with self.assertRaisesRegex(ValueError, "serial"):
-                    main(["collect", "--tcp", "palm", "--dataset", str(path), "--resume", "--serial", "another-camera"])
+                    main(
+                        [
+                            "collect",
+                            "--tcp",
+                            "palm",
+                            "--dataset",
+                            str(path),
+                            "--resume",
+                            "--serial",
+                            "another-camera",
+                        ]
+                    )
                 camera.assert_not_called()
             cam = Mock()
-            cam.info = {**camera_info, "camera_matrix": [[601.0, 0.0, 320.0], [0.0, 600.0, 240.0], [0.0, 0.0, 1.0]]}
-            with patch("sensors.RealSenseCamera", return_value=cam), patch("sensors.ArmFeedback") as arm:
+            cam.info = {
+                **camera_info,
+                "camera_matrix": [[601.0, 0.0, 320.0], [0.0, 600.0, 240.0], [0.0, 0.0, 1.0]],
+            }
+            with (
+                patch("sensors.RealSenseCamera", return_value=cam),
+                patch("sensors.ArmFeedback") as arm,
+            ):
                 with self.assertRaisesRegex(ValueError, "identity/intrinsics"):
                     main(["collect", "--tcp", "palm", "--dataset", str(path), "--resume"])
                 arm.assert_not_called()
@@ -455,7 +536,10 @@ class CalibrationTests(unittest.TestCase):
     def test_dataset_tcp_matches_manifest(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d)
-            write_new(p / "manifest.json", {"schema": 1, "mode": "eye_to_hand", "T_flange_tcp": PALM.tolist()})
+            write_new(
+                p / "manifest.json",
+                {"schema": 1, "mode": "eye_to_hand", "T_flange_tcp": PALM.tolist()},
+            )
             flange = pose_matrix([0.2, 0.3, 0.4, -0.2, 0.1, 0.8])
             sample = {
                 "T_base_flange": flange.tolist(),
@@ -488,7 +572,9 @@ class CalibrationTests(unittest.TestCase):
             for i, s in enumerate(samples):
                 write_new(p / f"sample_{i:04d}.json", s)
             with patch("builtins.print"):
-                self.assertEqual(main(["solve", "--dataset", d, "--output", str(p / "result.json")]), 0)
+                self.assertEqual(
+                    main(["solve", "--dataset", d, "--output", str(p / "result.json")]), 0
+                )
             self.assertTrue(json.loads((p / "result.json").read_text())["quality_passed"])
 
 

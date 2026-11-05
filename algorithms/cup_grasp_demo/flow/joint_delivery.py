@@ -64,7 +64,10 @@ def delivery_options(raw=None):
             raise ValueError(f"joint_delivery.{name} must be {low}..{high}")
     cap = options["velocity_cap_deg_s"]
     if cap is not None and (
-        isinstance(cap, bool) or not isinstance(cap, (int, float)) or not math.isfinite(cap) or cap <= 0
+        isinstance(cap, bool)
+        or not isinstance(cap, (int, float))
+        or not math.isfinite(cap)
+        or cap <= 0
     ):
         raise ValueError("joint_delivery.velocity_cap_deg_s must be positive or null")
     if options["tracking_error_action"] not in ("record", "stop"):
@@ -97,7 +100,11 @@ def trapezoid_profile(start, target, velocity, acceleration):
     Return duration, acceleration interval and normalized peak velocity.
     Zero-distance paths retain a short constant-position delivery interval.
     """
-    moving = [(abs(b - a), v, acc) for a, b, v, acc in zip(start, target, velocity, acceleration) if abs(b - a) > 1e-12]
+    moving = [
+        (abs(b - a), v, acc)
+        for a, b, v, acc in zip(start, target, velocity, acceleration)
+        if abs(b - a) > 1e-12
+    ]
     if not moving:
         return 0.04, 0.02, 0.0
     vmax = min(v / distance for distance, v, _ in moving)

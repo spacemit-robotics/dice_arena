@@ -68,7 +68,10 @@ def options(opts):
             if not isinstance(ref, dict) or set(ref) != {"height", "diameter"}:
                 raise ValueError(name + " requires height and diameter")
             if any(
-                isinstance(v, bool) or not isinstance(v, (int, float)) or not np.isfinite(v) or v <= 0
+                isinstance(v, bool)
+                or not isinstance(v, (int, float))
+                or not np.isfinite(v)
+                or v <= 0
                 for v in ref.values()
             ):
                 raise ValueError(name + " must be positive finite mm")
@@ -107,7 +110,9 @@ def image_contour(image, mask, opts, diagnostic):
         & roi
     )
     contours, _ = cv2.findContours(green.astype("uint8"), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    contours = [c for c in contours if len(c) >= 20 and cv2.contourArea(c) >= opts["min_area_px"] * 0.5]
+    contours = [
+        c for c in contours if len(c) >= 20 and cv2.contourArea(c) >= opts["min_area_px"] * 0.5
+    ]
     if not contours:
         raise ValueError("YOLO 区域内没有完整绿色杯口外沿")
     contour = max(contours, key=cv2.contourArea)
@@ -159,7 +164,11 @@ def image_contour(image, mask, opts, diagnostic):
         image_arc_deg=arc,
         contour_inlier_fraction=float(selected.mean()),
     )
-    if min(radii) / max(radii) < o["min_axis_ratio"] or arc < o["min_image_arc_deg"] or selected.mean() < 0.7:
+    if (
+        min(radii) / max(radii) < o["min_axis_ratio"]
+        or arc < o["min_image_arc_deg"]
+        or selected.mean() < 0.7
+    ):
         raise ValueError("杯口图像外沿不完整或不是合格椭圆")
     if (
         min(full[:, 0]) <= 1
@@ -190,7 +199,9 @@ def estimate(depth, image, meta, mask, table, normal, opts, diagnostic):
     heights = (points - table) @ normal
     normalized, _, _ = ellipse_coordinates(uv, ellipse)
     angles = np.mod(np.arctan2(normalized[:, 1], normalized[:, 0]), 2 * np.pi)
-    sectors = np.minimum((angles / (2 * np.pi) * o["depth_sectors"]).astype(int), o["depth_sectors"] - 1)
+    sectors = np.minimum(
+        (angles / (2 * np.pi) * o["depth_sectors"]).astype(int), o["depth_sectors"] - 1
+    )
     # Equal angular votes prevent a dense tiny patch from determining the height.
     medians = np.full(o["depth_sectors"], np.nan)
     for sector in range(o["depth_sectors"]):
@@ -235,7 +246,10 @@ def estimate(depth, image, meta, mask, table, normal, opts, diagnostic):
         )
     # Independent separated height clusters indicate mixed table/wall/rim depths.
     for h in candidates:
-        if abs(h - height) > 2 * tolerance and np.sum(abs(medians - h) <= tolerance) >= o["depth_sectors"] * 0.25:
+        if (
+            abs(h - height) > 2 * tolerance
+            and np.sum(abs(medians - h) <= tolerance) >= o["depth_sectors"] * 0.25
+        ):
             raise ValueError("杯口附近存在互相矛盾的深度高度，无法确定杯口平面")
     theta = np.linspace(0, 2 * np.pi, 180, endpoint=False)
     outline = np.c_[np.cos(theta), np.sin(theta)] * radii @ rotation.T + ellipse[0]
@@ -270,7 +284,10 @@ def estimate(depth, image, meta, mask, table, normal, opts, diagnostic):
         deviations = {k: measured[k] - opts["reference_dimensions_mm"][k] for k in measured}
         diagnostic["reference_deviation_mm"] = deviations
         if any(abs(v) > opts["reference_tolerance_mm"][k] for k, v in deviations.items()):
-            raise ValueError(f"视觉尺寸与实测参考不符：估计 {measured} mm，参考 {opts['reference_dimensions_mm']} mm")
+            raise ValueError(
+                f"视觉尺寸与实测参考不符：估计 {measured} mm，参考 "
+                f"{opts['reference_dimensions_mm']} mm"
+            )
     diagnostic.update(valid=True, rim_center_camera_m=center3.tolist(), diameter_mm=radius * 2000)
     return dict(
         height_m=height,

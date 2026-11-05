@@ -37,7 +37,9 @@ def joint_route(start, target, model, step_deg=2.0):
     # The start is measured feedback: the controller may hold it just past the URDF limits (the
     # taught path reaches joint2 = -100°). Only the commanded points must stay inside them.
     for q in route[1:]:
-        if any(not joint.lower_rad <= angle <= joint.upper_rad for joint, angle in zip(model.joints, q)):
+        if any(
+            not joint.lower_rad <= angle <= joint.upper_rad for joint, angle in zip(model.joints, q)
+        ):
             raise ValueError("HOME/approach exceeds joint limits")
     return route
 
@@ -60,7 +62,9 @@ def move_home(arm, route, speed_deg_s, acc_deg_s2, preview=None):
     error = math.degrees(max(abs(a - b) for a, b in zip(actual, route[-1])))
     if error > 0.8:
         raise RuntimeError("HOME feedback did not confirm arrival")
-    print(json.dumps({"phase": "HOME", "status": "completed", "joint_error_deg": error}), flush=True)
+    print(
+        json.dumps({"phase": "HOME", "status": "completed", "joint_error_deg": error}), flush=True
+    )
     return actual
 
 

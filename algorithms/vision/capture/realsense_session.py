@@ -16,10 +16,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import sys as _sys
 from pathlib import Path as _Path
 
-_ROOT = _Path(__file__).resolve().parents[2]  # Algorithm root: no PYTHONPATH from the caller is needed.
+_ROOT = (
+    _Path(__file__).resolve().parents[2]
+)  # Algorithm root: no PYTHONPATH from the caller is needed.
 if str(_ROOT) not in _sys.path:
     _sys.path.insert(0, str(_ROOT))
-from cup_grasp_demo.flow.image_profile import profile_options, crop_intrinsics, crop_image  # noqa: E402
+from cup_grasp_demo.flow.image_profile import (  # noqa: E402
+    profile_options,
+    crop_intrinsics,
+    crop_image,
+)
 
 
 def intrinsics_dict(intr):
@@ -47,7 +53,11 @@ def argument_parser():
     parser.add_argument("--stereo", action="store_true", help="Save both calibrated IR streams")
     parser.add_argument("--fps", type=int, default=15, choices=(6, 15, 30))
     parser.add_argument("--warmup-frames", type=int, default=20, choices=range(1, 61))
-    parser.add_argument("--unique-warmup", action="store_true", help="Count advancing RGB/depth/IR sets during warmup")
+    parser.add_argument(
+        "--unique-warmup",
+        action="store_true",
+        help="Count advancing RGB/depth/IR sets during warmup",
+    )
     parser.add_argument("--fresh-discard-frames", type=int, default=2, choices=range(0, 6))
     return parser
 
@@ -118,10 +128,19 @@ class CaptureSession:
         cfg = rs.config()
         cfg.enable_device(args.serial)
         cfg.enable_stream(rs.stream.color, *self.color_resolution, rs.format.bgr8, args.fps)
-        cfg.enable_stream(rs.stream.depth, args.depth_width, args.depth_height, rs.format.z16, args.fps)
+        cfg.enable_stream(
+            rs.stream.depth, args.depth_width, args.depth_height, rs.format.z16, args.fps
+        )
         if args.stereo:
             for side in (1, 2):
-                cfg.enable_stream(rs.stream.infrared, side, args.depth_width, args.depth_height, rs.format.y8, args.fps)
+                cfg.enable_stream(
+                    rs.stream.infrared,
+                    side,
+                    args.depth_width,
+                    args.depth_height,
+                    rs.format.y8,
+                    args.fps,
+                )
         try:
             started = time.perf_counter()
             self.profile = self.pipeline.start(cfg)
@@ -150,7 +169,9 @@ class CaptureSession:
                 warmed += 1
             self.timings["warmup_s"] = time.perf_counter() - warmup_started
             if self.stream_sink is not None:
-                self._reader = threading.Thread(target=self._reader_loop, name="capture-reader", daemon=True)
+                self._reader = threading.Thread(
+                    target=self._reader_loop, name="capture-reader", daemon=True
+                )
                 self._reader.start()
         except BaseException:
             self.close()
@@ -226,7 +247,11 @@ class CaptureSession:
                 boundary = frame_numbers(pipeline.wait_for_frames(3000), args.stereo)
         for index in range(count):
             wait_started = time.perf_counter()
-            frames = next_frames(pipeline, boundary, args.stereo) if fresh else pipeline.wait_for_frames(3000)
+            frames = (
+                next_frames(pipeline, boundary, args.stereo)
+                if fresh
+                else pipeline.wait_for_frames(3000)
+            )
             wait_s = time.perf_counter() - wait_started
             if fresh:
                 boundary = frame_numbers(frames, args.stereo)
@@ -242,7 +267,12 @@ class CaptureSession:
         import pyrealsense2 as rs
 
         args = self.args
-        _pipeline, profile, scale, alignment = self.pipeline, self.profile, self.scale, self.alignment
+        _pipeline, profile, scale, alignment = (
+            self.pipeline,
+            self.profile,
+            self.scale,
+            self.alignment,
+        )
         raw_depth = frames.get_depth_frame()
         raw_color = frames.get_color_frame()
         aligned = alignment.process(frames)
@@ -302,7 +332,10 @@ class CaptureSession:
             "depth_scale_m": scale,
             "intrinsics": ci,
             "native_depth_intrinsics": intrinsics_dict(dp.get_intrinsics()),
-            "depth_to_color": {"rotation_column_major": list(ext.rotation), "translation_m": list(ext.translation)},
+            "depth_to_color": {
+                "rotation_column_major": list(ext.rotation),
+                "translation_m": list(ext.translation),
+            },
             "alignment": "librealsense rs.align(color)",
             "filters": [],
         }

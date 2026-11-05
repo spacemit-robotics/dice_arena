@@ -15,7 +15,11 @@ def profile_options(profile=None):
     if type(fps) is not int or fps not in (6, 15, 30):
         raise ValueError("Invalid camera fps")
     if crop is not None:
-        if not isinstance(crop, (list, tuple)) or len(crop) != 4 or any(type(x) is not int for x in crop):
+        if (
+            not isinstance(crop, (list, tuple))
+            or len(crop) != 4
+            or any(type(x) is not int for x in crop)
+        ):
             raise ValueError("crop_xywh requires four integers")
         x, y, w, h = crop
         if min(x, y) < 0 or min(w, h) <= 0 or x + w > resolution[0] or y + h > resolution[1]:

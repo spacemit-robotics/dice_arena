@@ -10,7 +10,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tools import register_home_table, table_capture  # adds the application's algorithms to the import path
+from tools import (
+    register_home_table,
+    table_capture,
+)  # adds the application's algorithms to the import path
 from cup_grasp_demo.flow import core  # noqa: E402
 
 
@@ -24,11 +27,15 @@ class TableRegistrationTests(unittest.TestCase):
         with (
             patch.object(planar_scene, "load_config", return_value={}),
             patch.object(planar_scene.common, "new_run", return_value=session / "run"),
-            patch.object(planar_scene.common, "capture_rgbd", side_effect=ValueError("bad depth")) as capture,
+            patch.object(
+                planar_scene.common, "capture_rgbd", side_effect=ValueError("bad depth")
+            ) as capture,
         ):
             with self.assertRaisesRegex(ValueError, "bad depth"):
                 planar_scene.capture(SimpleNamespace(session=session, config=self.config))
-        capture.assert_called_once_with(session / "run/rgbd", {}, warmup_frames=30, unique_warmup=True)
+        capture.assert_called_once_with(
+            session / "run/rgbd", {}, warmup_frames=30, unique_warmup=True
+        )
         self.assertTrue((session / "planar_table_scene.pending").exists())
         self.assertFalse((session / "planar_table_scene.json").exists())
 
@@ -41,7 +48,9 @@ class TableRegistrationTests(unittest.TestCase):
         self.calibration.write_text("installed hand-eye result")
         self.cfg = json.loads((core.ROOT / "configs/green_cup.json").read_text())
         self.cfg["calibration"] = "calibration.json"
-        self.cfg["green_cup"].update(home_table_scene="table/home.json", installation_requires_calibration=True)
+        self.cfg["green_cup"].update(
+            home_table_scene="table/home.json", installation_requires_calibration=True
+        )
         self.config.write_text(json.dumps(self.cfg))
         self.table = self.root / "capture.json"
         self.scene = {"cup_support_base_m": [0, 0, 0.02], "cup_normal_base": [0, 0, 1]}
@@ -52,7 +61,8 @@ class TableRegistrationTests(unittest.TestCase):
                     "config_path": str(self.config),
                     "scene": self.scene,
                     "input_hashes": {
-                        str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in (self.config, self.calibration)
+                        str(p): hashlib.sha256(p.read_bytes()).hexdigest()
+                        for p in (self.config, self.calibration)
                     },
                 }
             )
@@ -65,7 +75,9 @@ class TableRegistrationTests(unittest.TestCase):
         output = register_home_table.register(self.config, self.table)
         record = json.loads(output.read_text())
         self.assertEqual(record["scene"], self.scene)
-        self.assertEqual(record["calibration_sha256"], hashlib.sha256(self.calibration.read_bytes()).hexdigest())
+        self.assertEqual(
+            record["calibration_sha256"], hashlib.sha256(self.calibration.read_bytes()).hexdigest()
+        )
         expected = copy.deepcopy(self.cfg)
         expected["green_cup"]["installation_requires_calibration"] = False
         self.assertEqual(json.loads(self.config.read_text()), expected)
@@ -99,7 +111,9 @@ class TableRegistrationTests(unittest.TestCase):
             return 0
 
         with patch.object(table_capture.planar_scene, "capture", side_effect=capture):
-            self.assertEqual(table_capture.main(["--config", str(self.config), "--session", str(session)]), 0)
+            self.assertEqual(
+                table_capture.main(["--config", str(self.config), "--session", str(session)]), 0
+            )
 
 
 if __name__ == "__main__":

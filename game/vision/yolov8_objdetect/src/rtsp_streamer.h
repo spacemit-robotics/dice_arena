@@ -20,19 +20,22 @@
 // M2M device is available, otherwise by the software encoder x264enc — and
 // sent over RTSP (typically to MediaMTX running on the same board).
 class RtspStreamer {
-    public:
+public:
     RtspStreamer() = default;
     ~RtspStreamer();
     RtspStreamer(const RtspStreamer&) = delete;
     RtspStreamer& operator=(const RtspStreamer&) = delete;
 
-    bool start(const std::string& host, int port, const std::string& path, int width, int height, int fps);
+    bool start(const std::string& host, int port, const std::string& path, int width, int height,
+               int fps);
     void publish(const cv::Mat& bgr);
     void stop();
+
     bool running() const { return running_.load(); }
+
     std::string url() const;
 
-    private:
+private:
     bool initialize_pipeline(bool use_hardware_encoder);
     void destroy_pipeline();
     void encoder_loop();

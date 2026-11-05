@@ -9,8 +9,9 @@
 #include <vector>
 
 class OpenClPreprocessor {
-    public:
+public:
     OpenClPreprocessor();
+
     struct Result {
         std::shared_ptr<std::vector<float>> data;
         float scale = 1.0f;  // source pixels per model pixel
@@ -25,9 +26,10 @@ class OpenClPreprocessor {
     // split into Y/U/V OpenCL images; color conversion, resize, letterbox and
     // CHW packing run in the GPU kernel.
     Result preprocess(const cv::Mat& nv12);
+
     const char* device_name() const { return device_name_.c_str(); }
 
-    private:
+private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
     std::string device_name_;

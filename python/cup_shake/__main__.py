@@ -16,9 +16,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config")
     parser.add_argument("command", choices=["inspect", "cycle", "home"])
-    parser.add_argument("--operator", help="name recorded with each grip confirmation (default: the login user)")
+    parser.add_argument(
+        "--operator", help="name recorded with each grip confirmation (default: the login user)"
+    )
     args = parser.parse_args()
-    args.operator = args.operator or getpass.getuser()  # Who confirmed the grip, for the run record.
+    args.operator = (
+        args.operator or getpass.getuser()
+    )  # Who confirmed the grip, for the run record.
     interrupted = [False]
     signal.signal(signal.SIGINT, lambda *_args: interrupted.__setitem__(0, True))
     signal.signal(signal.SIGTERM, lambda *_args: interrupted.__setitem__(0, True))
@@ -32,7 +36,10 @@ def main():
                 return
             output = Path(value["acknowledgement"])
             output.parent.mkdir(parents=True, exist_ok=True)
-            save_new(output, dict(token=value["token"], operator=args.operator, checked_epoch_s=time.time()))
+            save_new(
+                output,
+                dict(token=value["token"], operator=args.operator, checked_epoch_s=time.time()),
+            )
 
     app = CupApplication(args.config, allow_motion=args.command != "inspect")
     try:

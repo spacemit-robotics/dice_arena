@@ -82,7 +82,9 @@ def _stl_bounds(path: Path) -> tuple[np.ndarray, float, np.ndarray]:
         triangles = struct.unpack_from("<I", raw, 80)[0]
         records = np.frombuffer(
             raw,
-            dtype=np.dtype([("normal", "<f4", (3,)), ("vertices", "<f4", (3, 3)), ("attribute", "<u2")]),
+            dtype=np.dtype(
+                [("normal", "<f4", (3,)), ("vertices", "<f4", (3, 3)), ("attribute", "<u2")]
+            ),
             count=triangles,
             offset=84,
         )
@@ -90,7 +92,11 @@ def _stl_bounds(path: Path) -> tuple[np.ndarray, float, np.ndarray]:
     else:
         lines = raw.decode("ascii").splitlines()
         vertices = np.array(
-            [_xyz(line.strip().removeprefix("vertex ").strip()) for line in lines if line.strip().startswith("vertex ")]
+            [
+                _xyz(line.strip().removeprefix("vertex ").strip())
+                for line in lines
+                if line.strip().startswith("vertex ")
+            ]
         )
     if vertices.ndim != 2 or vertices.shape[1] != 3 or len(vertices) == 0:
         raise ValueError(f"Invalid STL vertices: {path}")
@@ -142,7 +148,11 @@ class RightRevo2Model:
                 float(limit.get("lower")) if limit is not None and kind == "revolute" else 0.0,
                 float(limit.get("upper")) if limit is not None and kind == "revolute" else 0.0,
                 (
-                    (mimic.get("joint"), float(mimic.get("multiplier", "1")), float(mimic.get("offset", "0")))
+                    (
+                        mimic.get("joint"),
+                        float(mimic.get("multiplier", "1")),
+                        float(mimic.get("offset", "0")),
+                    )
                     if mimic is not None
                     else None
                 ),
@@ -181,7 +191,11 @@ class RightRevo2Model:
             ],
             "mesh_count": len(self.collision),
             "collision_mesh_sources": [
-                {"link": name, "filename": source.name, "sha256": hashlib.sha256(source.read_bytes()).hexdigest()}
+                {
+                    "link": name,
+                    "filename": source.name,
+                    "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                }
                 for name, (_, _, _, _, source) in self.collision.items()
             ],
             "T_flange_hand_base": self.T_flange_hand_base.tolist(),
@@ -235,7 +249,9 @@ class RightRevo2Model:
     def tip_transforms_from_flange(
         self, t_base_flange, *, joint_positions_rad: dict[str, float] | None = None
     ) -> dict[str, np.ndarray]:
-        links = self.link_transforms_from_flange(t_base_flange, joint_positions_rad=joint_positions_rad)
+        links = self.link_transforms_from_flange(
+            t_base_flange, joint_positions_rad=joint_positions_rad
+        )
         return {finger: links[f"right_{finger}_tip_link"] for finger in FINGERS}
 
     def tip_transforms_from_palm(
@@ -288,19 +304,28 @@ def check_hand_pose(
     if not (math.isfinite(margin_m) and 0 <= margin_m <= 0.03):
         raise ValueError("margin_m must be 0..0.03 metres")
     diameter, height = float(cup_diameter_m), float(cup_height_m)
-    if not (math.isfinite(diameter) and 0.02 <= diameter <= 0.20 and math.isfinite(height) and 0.03 <= height <= 0.30):
+    if not (
+        math.isfinite(diameter)
+        and 0.02 <= diameter <= 0.20
+        and math.isfinite(height)
+        and 0.03 <= height <= 0.30
+    ):
         raise ValueError("Cup diameter/height outside measured plausible range")
     support = np.asarray(support_center_m, dtype=float)
     if support.shape != (3,) or not np.isfinite(support).all():
         raise ValueError("support_center_m must be three finite metres")
     cup_axis = _unit(axis, "cup/table axis")
-    links = model.link_transforms_from_flange(t_base_flange, joint_positions_rad=joint_positions_rad)
+    links = model.link_transforms_from_flange(
+        t_base_flange, joint_positions_rad=joint_positions_rad
+    )
     tips = {}
     blockers = []
     for finger in FINGERS:
         point = links[f"right_{finger}_tip_link"][:3, 3]
         altitude = float((point - support) @ cup_axis)
-        clearance, radial, cup_h = _cup_point_clearance(point, support, cup_axis, diameter / 2, height)
+        clearance, radial, cup_h = _cup_point_clearance(
+            point, support, cup_axis, diameter / 2, height
+        )
         table_hit, cup_hit = altitude <= margin_m, clearance <= margin_m
         tips[finger] = {
             "link": f"right_{finger}_tip_link",
@@ -327,7 +352,9 @@ def check_hand_pose(
         # occurs at one of its STL vertices. This is exact for the URDF mesh
         # tabletop screen, apart from supplied model/plane uncertainty.
         local_plane_axis = transform[:3, :3].T @ cup_axis
-        exact_mesh_table_minimum = float(np.min(vertices @ local_plane_axis) + (transform[:3, 3] - support) @ cup_axis)
+        exact_mesh_table_minimum = float(
+            np.min(vertices @ local_plane_axis) + (transform[:3, 3] - support) @ cup_axis
+        )
         exact_table_minimum = min(exact_table_minimum, exact_mesh_table_minimum)
         table_vertex_hit = exact_mesh_table_minimum <= margin_m
         if table_vertex_hit:
@@ -360,7 +387,9 @@ def check_hand_pose(
         "units": "m_rad",
         "hand_joint_positions_rad": model._angles(joint_positions_rad),
         "hand_posture_source": (
-            "caller_supplied_urdf_angles" if joint_positions_rad is not None else "nominal_urdf_zero_open_assumption"
+            "caller_supplied_urdf_angles"
+            if joint_positions_rad is not None
+            else "nominal_urdf_zero_open_assumption"
         ),
         "table_plane": {"point_base_m": support.tolist(), "normal_base": cup_axis.tolist()},
         "cup_cylinder": {
@@ -382,9 +411,11 @@ def check_hand_pose(
             "Tip link origins are kinematic frames, not full fingertip surfaces.",
             "Table distance is exact for the URDF STL collision triangles at this pose.",
             "Cup uses enclosing spheres, so overlap can be a false positive.",
-            "Cup is a complete cylinder inferred from visible side, with hidden surfaces unmeasured.",
+            "Cup is a complete cylinder inferred from visible side, with hidden surfaces "
+            "unmeasured.",
             "Table plane uses observed support center and assumed upright axis.",
-            "Actual hand joints, soft pads, cables, arm links, self collision, and controller path are not verified.",
+            "Actual hand joints, soft pads, cables, arm links, self collision, and controller path "
+            "are not verified.",
         ],
     }
 
@@ -498,14 +529,24 @@ def check_plan_geometry(
             path[name] = {
                 "sample_type": "URDF joint_linear_interpolation_only",
                 "sample_count": len(reports),
-                "tip_table_min_m": min(min(v["table_altitude_m"] for v in r["tips"].values()) for r in reports),
-                "tip_cup_min_m": min(min(v["cup_signed_clearance_m"] for v in r["tips"].values()) for r in reports),
-                "exact_mesh_table_min_m": min(r["exact_collision_mesh_table_min_m"] for r in reports),
+                "tip_table_min_m": min(
+                    min(v["table_altitude_m"] for v in r["tips"].values()) for r in reports
+                ),
+                "tip_cup_min_m": min(
+                    min(v["cup_signed_clearance_m"] for v in r["tips"].values()) for r in reports
+                ),
+                "exact_mesh_table_min_m": min(
+                    r["exact_collision_mesh_table_min_m"] for r in reports
+                ),
                 "table_margin_passed": all(r["table_margin_passed"] for r in reports),
                 "cup_margin_passed": all(r["cup_margin_passed"] for r in reports),
                 "path_geometry_passed": (
                     all(r["table_margin_passed"] for r in reports)
-                    and (all(r["cup_margin_passed"] for r in reports) if name in ("clearance", "pregrasp") else True)
+                    and (
+                        all(r["cup_margin_passed"] for r in reports)
+                        if name in ("clearance", "pregrasp")
+                        else True
+                    )
                 ),
                 "first_possible_collision_sample": next(
                     (i for i, r in enumerate(reports) if r["possible_collision"]), None
@@ -516,7 +557,9 @@ def check_plan_geometry(
     approach_names = [name for name in stage_names if name in ("clearance", "pregrasp")]
     approach_passed = all(stages[n]["stage_geometry_passed"] for n in approach_names)
     if path:
-        approach_passed = approach_passed and all(path[n]["path_geometry_passed"] for n in approach_names)
+        approach_passed = approach_passed and all(
+            path[n]["path_geometry_passed"] for n in approach_names
+        )
     contact_table_passed = stages["contact"]["table_margin_passed"]
     if path:
         contact_table_passed = contact_table_passed and path["contact"]["table_margin_passed"]
@@ -525,7 +568,9 @@ def check_plan_geometry(
         "kind": "read_only_plan_hand_geometry_screen",
         "plan_frame_id": plan.get("snapshot_frame_id"),
         "plan_sha256": plan_sha256,
-        "ik_review_source_plan_sha256": (ik_review.get("source_plan_sha256") if ik_review is not None else None),
+        "ik_review_source_plan_sha256": (
+            ik_review.get("source_plan_sha256") if ik_review is not None else None
+        ),
         "stage_sequence": list(stage_names),
         "stages": stages,
         "joint_linear_paths": path,
@@ -539,8 +584,10 @@ def check_plan_geometry(
         "limitations": [
             "Only right-Revo2 hand model; arm/cables/scene self collision omitted.",
             "IK interpolation does not identify real controller trajectory.",
-            "An open hand has to be confirmed from current actuator feedback; URDF zero is an assumption.",
-            "Cup-side contact may be intentional, but this screen does not grant contact clearance.",
+            "An open hand has to be confirmed from current actuator feedback; URDF zero is an "
+            "assumption.",
+            "Cup-side contact may be intentional, but this screen does not grant contact "
+            "clearance.",
         ],
     }
 
@@ -550,7 +597,10 @@ def main(argv=None) -> int:
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--ik-review", type=Path)
     parser.add_argument(
-        "--output", type=Path, required=True, help="Create a new JSON report; existing files are never overwritten"
+        "--output",
+        type=Path,
+        required=True,
+        help="Create a new JSON report; existing files are never overwritten",
     )
     parser.add_argument("--margin-mm", type=float, default=DEFAULT_MARGIN_M * 1000)
     args = parser.parse_args(argv)
@@ -559,7 +609,9 @@ def main(argv=None) -> int:
         plan_sha = hashlib.sha256(plan_raw).hexdigest()
         plan = json.loads(plan_raw)
         ik = json.loads(args.ik_review.read_bytes()) if args.ik_review else None
-        result = check_plan_geometry(plan, ik_review=ik, plan_sha256=plan_sha, margin_m=args.margin_mm / 1000)
+        result = check_plan_geometry(
+            plan, ik_review=ik, plan_sha256=plan_sha, margin_m=args.margin_mm / 1000
+        )
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with args.output.open("x", encoding="utf-8") as stream:
             json.dump(result, stream, indent=2, ensure_ascii=False, allow_nan=False)
@@ -576,7 +628,9 @@ def main(argv=None) -> int:
                     "stages": {
                         name: {
                             "tip_table_min_mm": round(stage["tip_table_min_m"] * 1000, 2),
-                            "exact_mesh_table_min_mm": round(stage["exact_mesh_table_min_m"] * 1000, 2),
+                            "exact_mesh_table_min_mm": round(
+                                stage["exact_mesh_table_min_m"] * 1000, 2
+                            ),
                             "table_margin_passed": stage["table_margin_passed"],
                             "cup_margin_passed": stage["cup_margin_passed"],
                         }

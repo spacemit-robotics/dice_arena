@@ -31,6 +31,7 @@ class TeachingTest(unittest.TestCase):
         reader = ArmFeedback.__new__(ArmFeedback)
         reader.device = Mock()
         reader.last_sample = 1
+
         def state(i, q):
             return {"arm_sample_id": i, "joints_rad": q, "source_time_s": float(i)}
 

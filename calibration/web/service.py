@@ -60,13 +60,19 @@ class Service:
         if not self.state_path.exists():
             # Reuse CLI provenance only when those files actually exist.
             state = read(resolve(self.config["state_file"]), {})
-            state = {k: str(resolve(v)) for k, v in state.items() if isinstance(v, str) and resolve(v).exists()}
+            state = {
+                k: str(resolve(v))
+                for k, v in state.items()
+                if isinstance(v, str) and resolve(v).exists()
+            }
             write(self.state_path, state)
         self.recovery_required = read(self.data / "recovery.json", {}).get("required", False)
         for path in (self.data / "jobs").glob("*/record.json"):
             record = read(path)
             if record["status"] in ("running", "stopping"):
-                record.update(status="interrupted", error="服务中断；不得自动续跑", ended=time.time())
+                record.update(
+                    status="interrupted", error="服务中断；不得自动续跑", ended=time.time()
+                )
                 write(path, record)
                 if record["action"] in HARDWARE:
                     self.set_recovery(True)
@@ -77,7 +83,9 @@ class Service:
         import json
 
         with (self.data / "audit.jsonl").open("a") as stream:
-            stream.write(json.dumps({"time": time.time(), "kind": kind, **values}, ensure_ascii=False) + "\n")
+            stream.write(
+                json.dumps({"time": time.time(), "kind": kind, **values}, ensure_ascii=False) + "\n"
+            )
 
     def set_recovery(self, value):
         self.recovery_required = value
@@ -115,7 +123,9 @@ class Service:
         return resolve(value)
 
     def source(self, action):
-        if action in ("register", "apply", "table") and read(self.state_path, {}).get("home_required"):
+        if action in ("register", "apply", "table") and read(self.state_path, {}).get(
+            "home_required"
+        ):
             raise ConflictError("请先回 HOME 并确认到位，再进行固定板或桌面登记")
         if action == "plan":
             path = self.selected("teaching_calibration")
@@ -146,7 +156,9 @@ class Service:
             "approval_key": key,
             "approved": bool(approved),
             "approval": approved,
-            "approval_required": action in QUALITY_CHECKPOINTS and not approved and not quality.get("quality_passed"),
+            "approval_required": action in QUALITY_CHECKPOINTS
+            and not approved
+            and not quality.get("quality_passed"),
             "quality_passed": quality.get("quality_passed") is True,
             "summary": summary,
         }
@@ -155,7 +167,8 @@ class Service:
         processes = occupied()
         if processes:
             raise ConflictError(
-                "设备被其他程序占用，请正常退出原程序后重新检测：" + "、".join(str(p["pid"]) for p in processes)
+                "设备被其他程序占用，请正常退出原程序后重新检测："
+                + "、".join(str(p["pid"]) for p in processes)
             )
 
     def start(self, action, body, owner, session):
@@ -184,7 +197,9 @@ class Service:
                         or not 5 <= len(reason.strip()) <= 500
                         or body.get("quality_confirmed") is not True
                     ):
-                        raise ValueError("源标定未达标，需要工程师解锁、确认当前误差并填写至少 5 字的原因")
+                        raise ValueError(
+                            "源标定未达标，需要工程师解锁、确认当前误差并填写至少 5 字的原因"
+                        )
                     new_approval = {
                         "reason": reason.strip(),
                         "time": time.time(),
@@ -192,7 +207,9 @@ class Service:
                         "action": action,
                     }
                 else:
-                    reason = (source.get("approval") or {}).get("reason", "准备步骤：保留未达标标记，未授权运动或应用")
+                    reason = (source.get("approval") or {}).get(
+                        "reason", "准备步骤：保留未达标标记，未授权运动或应用"
+                    )
                 approval = source["sha256"]
             if action in ("solve",):
                 self.selected("dataset")
@@ -201,12 +218,18 @@ class Service:
                 if action in HARDWARE:
                     self.idle()
                     device = lock_file(device_lock())
-                    workflow_lock = lock_file(resolve(self.config["state_file"]).with_suffix(".lock"))
+                    workflow_lock = lock_file(
+                        resolve(self.config["state_file"]).with_suffix(".lock")
+                    )
                     self.idle()
                 job_id = time.strftime("%Y%m%d_%H%M%S") + "_" + secrets.token_hex(4)
                 job = self.data / "jobs" / job_id
                 (job / "commands").mkdir(parents=True)
-                request = {"action": action, "approved_sha256": approval, "heartbeat_timeout": self.timeout}
+                request = {
+                    "action": action,
+                    "approved_sha256": approval,
+                    "heartbeat_timeout": self.timeout,
+                }
                 if source:
                     request.update(source_path=source["path"], source_sha256=source["sha256"])
                 config = copy.deepcopy(self.config)
@@ -219,7 +242,12 @@ class Service:
                 write(job / "config.json", config)
                 write(job / "request.json", request)
                 event(job / "heartbeat.json", monotonic=time.monotonic())
-                record = {"id": job_id, "action": action, "status": "running", "started": time.time()}
+                record = {
+                    "id": job_id,
+                    "action": action,
+                    "status": "running",
+                    "started": time.time(),
+                }
                 if approval:
                     record.update(provisional_reason=reason, approved_sha256=approval)
                 write(job / "record.json", record)
@@ -259,7 +287,9 @@ class Service:
                     approvals = read(self.data / "quality-approvals.json", {})
                     approvals[source["approval_key"]] = new_approval
                     write(self.data / "quality-approvals.json", approvals)
-                    self.audit("quality_approved", approval_key=source["approval_key"], **new_approval)
+                    self.audit(
+                        "quality_approved", approval_key=source["approval_key"], **new_approval
+                    )
                 return record
             except BaseException:
                 if device:
@@ -305,7 +335,10 @@ class Service:
             stage = read(active["job"] / "stage.json", {}).get("script")
             if action == "first" and stage != "calibration/calibrate.py":
                 raise ConflictError("采样尚未开始或已进入求解阶段")
-            if command == "sample" and read(active["job"] / "progress.json", {}).get("phase") == "capturing":
+            if (
+                command == "sample"
+                and read(active["job"] / "progress.json", {}).get("phase") == "capturing"
+            ):
                 raise ConflictError("正在采样，请保持静止，等待当前采样结束")
             pending = list((active["job"] / "commands").glob("*.json"))
             if pending:
@@ -332,7 +365,12 @@ class Service:
                 raise ValueError("范围必须为图像内的整数坐标，右下角应大于左上角")
             write(
                 dataset / "board_window.json",
-                {"schema": 1, "window_xyxy": box, "camera": manifest["camera"], "board": manifest["board"]},
+                {
+                    "schema": 1,
+                    "window_xyxy": box,
+                    "camera": manifest["camera"],
+                    "board": manifest["board"],
+                },
             )
             state = read(self.state_path, {})
             state["plan"] = None
@@ -362,7 +400,9 @@ class Service:
             )
             if a["cancel_at"] and outcome["status"] == "completed":
                 outcome.update(status="cancelled", error="完成边界收到取消，请检查已产生的文件")
-            if a["record"]["action"] in MOTION and not read(a["job"] / "stop.json", {}).get("confirmed"):
+            if a["record"]["action"] in MOTION and not read(a["job"] / "stop.json", {}).get(
+                "confirmed"
+            ):
                 outcome["needs_device_check"] = True
             if outcome.get("needs_device_check"):
                 self.set_recovery(True)
@@ -417,7 +457,9 @@ class Service:
             )
 
             def matches(other):
-                return isinstance(other, dict) and all(camera.get(k) == other.get(k) for k in profile_keys)
+                return isinstance(other, dict) and all(
+                    camera.get(k) == other.get(k) for k in profile_keys
+                )
 
             if not matches(window.get("camera", {})):
                 raise ValueError("可见范围与示教相机配置不一致")
@@ -427,7 +469,10 @@ class Service:
                 image = None
                 try:
                     latest = self.selected("dataset")
-                    if matches(read(latest / "manifest.json")["camera"]) and (latest / "sample_0000.png").is_file():
+                    if (
+                        matches(read(latest / "manifest.json")["camera"])
+                        and (latest / "sample_0000.png").is_file()
+                    ):
                         image = latest / "sample_0000.png"
                         label = "本次采样图（非实时画面）；范围来自已保存的示教数据"
                 except (OSError, ValueError, KeyError, TypeError):
@@ -453,19 +498,29 @@ class Service:
             result_path = state["result"] if "result" in state else self.config.get("result")
             try:
                 result = (
-                    result_summary(resolve(result_path), evaluate(read(resolve(result_path)), self.config))
+                    result_summary(
+                        resolve(result_path), evaluate(read(resolve(result_path)), self.config)
+                    )
                     if result_path
                     else None
                 )
-                pipeline = read(resolve(self.config["pipeline_config"]), {})  # Absent until the first apply.
+                pipeline = read(
+                    resolve(self.config["pipeline_config"]), {}
+                )  # Absent until the first apply.
                 installed = resolve(pipeline["calibration"])
-                applied = bool(result and installed.exists() and digest(installed) == result["sha256"])
-                table_ready = applied and not pipeline["green_cup"].get("installation_requires_calibration", True)
+                applied = bool(
+                    result and installed.exists() and digest(installed) == result["sha256"]
+                )
+                table_ready = applied and not pipeline["green_cup"].get(
+                    "installation_requires_calibration", True
+                )
             except (OSError, KeyError, ValueError):
                 result, applied, table_ready = None, False, False
             records = sorted((self.data / "jobs").glob("*/record.json"), reverse=True)[:30]
             jobs = [read(p) for p in records]
-            inspection = next((p.parent for p in records if read(p).get("action") == "inspect"), None)
+            inspection = next(
+                (p.parent for p in records if read(p).get("action") == "inspect"), None
+            )
             inspected = bool(
                 inspection
                 and read(inspection / "record.json").get("status") == "completed"
@@ -473,7 +528,9 @@ class Service:
                 and read(inspection / "frame.json")
                 and len(read(inspection / "progress.json", {}).get("joints_deg", [])) == 7
             )
-            current = self.active["job"] if self.active else (records[0].parent if records else None)
+            current = (
+                self.active["job"] if self.active else (records[0].parent if records else None)
+            )
             detail = None
             if current:
                 detail = {
@@ -481,10 +538,20 @@ class Service:
                     **read(current / "record.json"),
                     **{
                         key: read(current / (key + ".json"))
-                        for key in ("progress", "stage", "frame", "detection", "stop", "camera_error", "home_return")
+                        for key in (
+                            "progress",
+                            "stage",
+                            "frame",
+                            "detection",
+                            "stop",
+                            "camera_error",
+                            "home_return",
+                        )
                     },
                 }
-                detail["frame_age_s"] = max(0.0, time.time() - detail["frame"]["time"]) if detail["frame"] else None
+                detail["frame_age_s"] = (
+                    max(0.0, time.time() - detail["frame"]["time"]) if detail["frame"] else None
+                )
                 log = current / "worker.log"
                 if log.exists():
                     with log.open("rb") as stream:
@@ -518,9 +585,19 @@ class Service:
             visibility = self.visibility()
             frame = (detail or {}).get("frame") or {}
             saved_camera, live_camera = visibility.get("camera"), frame.get("camera")
-            keys = ("serial", "width", "height", "crop_xywh", "source_resolution", "camera_matrix", "dist_coeffs")
+            keys = (
+                "serial",
+                "width",
+                "height",
+                "crop_xywh",
+                "source_resolution",
+                "camera_matrix",
+                "dist_coeffs",
+            )
             visibility["live_compatible"] = bool(
-                saved_camera and live_camera and all(saved_camera.get(k) == live_camera.get(k) for k in keys)
+                saved_camera
+                and live_camera
+                and all(saved_camera.get(k) == live_camera.get(k) for k in keys)
             )
             return {
                 "readonly": self.readonly,
@@ -553,7 +630,9 @@ class Service:
             return Path(path)
         if kind == "teaching":
             return self.selected("teaching_dataset") / "sample_0000.png"
-        if kind not in ("preview", "sample") or not re.fullmatch(r"[0-9]{8}_[0-9]{6}_[a-f0-9]{8}", job_id or ""):
+        if kind not in ("preview", "sample") or not re.fullmatch(
+            r"[0-9]{8}_[0-9]{6}_[a-f0-9]{8}", job_id or ""
+        ):
             raise ValueError("无效图像请求")
         return self.data / "jobs" / job_id / (kind + ".jpg")
 

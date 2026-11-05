@@ -13,13 +13,21 @@ import sys
 
 
 def hand_positions(targets_0_100):
-    """Algorithm recipes use the hand's scale (0 open, 100 closed); the framework 0 closed, 1 open."""
+    """Algorithm recipes use the hand's scale (0 open, 100 closed); the framework 0 closed, 1
+    open."""
     return [round(1 - value / 100, 4) for value in targets_0_100]
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("prefix", "device_plan", "source_root", "green_config", "runtime_directory", "output"):
+    for name in (
+        "prefix",
+        "device_plan",
+        "source_root",
+        "green_config",
+        "runtime_directory",
+        "output",
+    ):
         parser.add_argument(name)
     args = parser.parse_args()
     destination = Path(args.output).absolute()
@@ -36,8 +44,12 @@ def main():
         raise RuntimeError("conflicting algorithm source")
     cfg = pipeline.load_config(config)
     green = pipeline.validate(cfg)
-    subprocess.run([str(prefix / layout["bindir"] / "manipulation-device"), "validate", str(plan)], check=True)
-    gestures = json.loads((source / "configs/actions/gestures/result_feedback.json").read_text())["gestures"]
+    subprocess.run(
+        [str(prefix / layout["bindir"] / "manipulation-device"), "validate", str(plan)], check=True
+    )
+    gestures = json.loads((source / "configs/actions/gestures/result_feedback.json").read_text())[
+        "gestures"
+    ]
 
     def relative(path):
         return os.path.relpath(path, destination.parent)
@@ -48,7 +60,8 @@ def main():
         device_plan=relative(plan),
         policy_library=relative(prefix / layout["libdir"] / "libcup_task.so"),
         grip_ack_directory=relative(runtime / "grip_ack"),
-        # speed_scale applies to fixture planners only; the green planner uses the FAST phase speeds.
+        # speed_scale applies to fixture planners only; the green planner uses the FAST phase
+        # speeds.
         speed_scale=0.05,
         duration_s=green.get("fast_finger_duration_s", green.get("finger_duration_s", 0.5)),
         open_positions=hand_positions(green["open_targets_0_100"]),
@@ -67,12 +80,16 @@ def main():
     with destination.open("x", encoding="utf-8") as stream:
         json.dump(output, stream, ensure_ascii=False, indent=2, allow_nan=False)
         stream.write("\n")
-    print("configuration created; no motion performed; review the hand targets for this installation")
+    print(
+        "configuration created; no motion performed; review the hand targets for this installation"
+    )
 
 
 if __name__ == "__main__":
     try:
         main()
     except FileExistsError as error:
-        print(f"configuration already exists; existing file kept: {error.filename}", file=sys.stderr)
+        print(
+            f"configuration already exists; existing file kept: {error.filename}", file=sys.stderr
+        )
         raise SystemExit(1) from None

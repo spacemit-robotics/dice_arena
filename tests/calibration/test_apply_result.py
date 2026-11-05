@@ -27,7 +27,12 @@ class ApplyResultTests(unittest.TestCase):
             )
             config = root / "green.json"
             config.write_text(
-                json.dumps({"calibration": "old.json", "green_cup": {"installation_requires_calibration": False}})
+                json.dumps(
+                    {
+                        "calibration": "old.json",
+                        "green_cup": {"installation_requires_calibration": False},
+                    }
+                )
             )
             destination = root / "installed.json"
             with patch.object(apply_result, "ROOT", root):
@@ -36,7 +41,9 @@ class ApplyResultTests(unittest.TestCase):
             self.assertTrue(report["table_registration_required"])
             self.assertEqual(json.loads(destination.read_text()), json.loads(source.read_text()))
             installed = json.loads(config.read_text())
-            self.assertEqual(installed["calibration"], str(destination.resolve()))  # Absolute site path.
+            self.assertEqual(
+                installed["calibration"], str(destination.resolve())
+            )  # Absolute site path.
             self.assertTrue(installed["green_cup"]["installation_requires_calibration"])
 
     def test_invalid_result_is_rejected_without_writes(self):

@@ -108,7 +108,9 @@ def _validate_speech_content(action: Mapping[str, Any], field: str) -> None:
         raise _error(f"{field}.mode", "must be tts_local, tts_remote, or audio")
     if "provider" in action:
         if mode == "audio":
-            raise _error(f"{field}.provider", "audio speech never synthesizes; drop the provider field")
+            raise _error(
+                f"{field}.provider", "audio speech never synthesizes; drop the provider field"
+            )
         _require_str(action["provider"], f"{field}.provider")
     if mode == "audio":
         if "audio" not in action:
@@ -134,7 +136,9 @@ def _validate_robot_action(action: Mapping[str, Any], field: str) -> None:
         raise _error(f"{field}.await", "robot actions run in the background and cannot await")
     command = action.get("command")
     if command not in ROBOT_COMMANDS:
-        raise _error(f"{field}.command", f"must be one of {sorted(ROBOT_COMMANDS)} (got {command!r})")
+        raise _error(
+            f"{field}.command", f"must be one of {sorted(ROBOT_COMMANDS)} (got {command!r})"
+        )
     if command == "feedback":
         # The gesture is chosen from the adjudicated winner_role; the case
         # values are gesture names, not speech payloads, so the shared
@@ -178,7 +182,13 @@ def _validate_robot_action(action: Mapping[str, Any], field: str) -> None:
         if "prepared" in action and type(action["prepared"]) is not bool:
             raise _error(field, "prepared must be boolean")
         if "delay_seconds" in action:
-            _require_number(action["delay_seconds"], f"{field}.delay_seconds", low=0, high=30, low_inclusive=True)
+            _require_number(
+                action["delay_seconds"],
+                f"{field}.delay_seconds",
+                low=0,
+                high=30,
+                low_inclusive=True,
+            )
     extra = set(action) - allowed
     if extra:
         raise _error(field, f"robot {command} accepts no extra keys: {sorted(extra)}")
@@ -189,7 +199,9 @@ def _validate_action(action: Any, field: str) -> None:
         raise _error(field, "must be an object")
     action_type = action.get("action")
     if action_type not in ACTION_TYPES:
-        raise _error(f"{field}.action", f"must be one of {sorted(ACTION_TYPES)} (got {action_type!r})")
+        raise _error(
+            f"{field}.action", f"must be one of {sorted(ACTION_TYPES)} (got {action_type!r})"
+        )
     if action_type == "adjudicate":
         return
     if action_type == "robot":

@@ -27,19 +27,26 @@ class CupSelectionTest(unittest.TestCase):
         cls.config_path = ROOT / "cup_grasp_demo/flow/index_joint_center/config.json"
         if not cls.config_path.is_file() or not cls.failed.is_dir():
             raise unittest.SkipTest(
-                "旧银杯流程配置/冻结采集数据集已移除：" + str(cls.config_path) + " / " + str(cls.failed)
+                "旧银杯流程配置/冻结采集数据集已移除："
+                + str(cls.config_path)
+                + " / "
+                + str(cls.failed)
             )
         cls.cfg = load_config(cls.config_path)
         cls.cfg.pop("cup_perception", None)  # Preserve the established geometry backend regression.
         cls.cfg["contact_height_fraction"] = 9 / 11  # Frozen regression section.
         cls.meta, cls.depth, cls.image, _ = load_batch(cls.failed)
-        cls.proposals, _ = depth_candidates(cls.depth, cls.image, cls.meta, Config(plane_tolerance_m=0.005), 9 / 11)
+        cls.proposals, _ = depth_candidates(
+            cls.depth, cls.image, cls.meta, Config(plane_tolerance_m=0.005), 9 / 11
+        )
         cls.cup = next(p for p in cls.proposals if p[0]["bbox_xywh"][:2] == [108, 188])
         cls.hand = next(p for p in cls.proposals if p is not cls.cup)
 
     def test_original_failure_and_configured_selection_on_real_frames(self):
         with self.assertRaisesRegex(ValueError, "got 2"):
-            depth_proposals(self.depth, self.image, self.meta, Config(plane_tolerance_m=0.005), 9 / 11)
+            depth_proposals(
+                self.depth, self.image, self.meta, Config(plane_tolerance_m=0.005), 9 / 11
+            )
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp)
             selected = select_cup(self.depth, self.image, self.meta, self.cfg, output)
@@ -47,7 +54,10 @@ class CupSelectionTest(unittest.TestCase):
             self.assertTrue(report["passed"])
             self.assertEqual(selected[0]["bbox_xywh"], [108, 188, 81, 78])
             self.assertAlmostEqual(selected[0]["height_m"] * 1000, 115.32097, places=4)
-            self.assertEqual(report["candidates"][0]["reasons"], ["height_outside_range", "diameter_outside_range"])
+            self.assertEqual(
+                report["candidates"][0]["reasons"],
+                ["height_outside_range", "diameter_outside_range"],
+            )
             self.assertFalse(report["position_filter_used"])
             self.assertFalse(report["semantic_identity_verified"])
             self.assertTrue((output / "cup_candidates.png").exists())
@@ -91,7 +101,15 @@ class CupSelectionTest(unittest.TestCase):
                 self.assertTrue((output / "cup_candidates.png").exists())
 
     def test_invalid_bounds_are_rejected(self):
-        for value in ([140, 90], [90, 90], [0, 140], [90, float("nan")], [True, 140], "90,140", [90]):
+        for value in (
+            [140, 90],
+            [90, 90],
+            [0, 140],
+            [90, float("nan")],
+            [True, 140],
+            "90,140",
+            [90],
+        ):
             cfg = deepcopy(self.cfg)
             cfg["cup_selection"]["height_range_mm"] = value
             with self.subTest(value=value), self.assertRaisesRegex(ValueError, "height_range_mm"):
@@ -180,7 +198,10 @@ class CupSelectionTest(unittest.TestCase):
                 second, cfg = debug.verify_session(directory)
             self.assertNotEqual(first["capture_id"], second["capture_id"])
             self.assertAlmostEqual(
-                np.linalg.norm(np.array(first["T_flange_tcp"])[:3, 3] - np.array(second["T_flange_tcp"])[:3, 3]), 0.01
+                np.linalg.norm(
+                    np.array(first["T_flange_tcp"])[:3, 3] - np.array(second["T_flange_tcp"])[:3, 3]
+                ),
+                0.01,
             )
             self.assertEqual(cfg["side_grasp"]["close_gap_mm"], 30)
             with self.assertRaisesRegex(ValueError, "Session changed"):

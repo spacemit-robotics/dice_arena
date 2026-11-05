@@ -44,8 +44,9 @@ bool vpu_m2m_device_available() {
         const bool queried = ::ioctl(fd, VIDIOC_QUERYCAP, &capability) == 0;
         ::close(fd);
         if (!queried) continue;
-        const std::uint32_t caps =
-            (capability.capabilities & V4L2_CAP_DEVICE_CAPS) ? capability.device_caps : capability.capabilities;
+        const std::uint32_t caps = (capability.capabilities & V4L2_CAP_DEVICE_CAPS)
+                                           ? capability.device_caps
+                                           : capability.capabilities;
         if (caps & (V4L2_CAP_VIDEO_M2M | V4L2_CAP_VIDEO_M2M_MPLANE)) return true;
     }
     return false;
@@ -71,9 +72,12 @@ std::string gst_error_text(GError* error) {
 
 }  // namespace
 
-RtspStreamer::~RtspStreamer() { stop(); }
+RtspStreamer::~RtspStreamer() {
+    stop();
+}
 
-bool RtspStreamer::start(const std::string& host, int port, const std::string& path, int width, int height, int fps) {
+bool RtspStreamer::start(const std::string& host, int port, const std::string& path, int width,
+                         int height, int fps) {
     stop();
     if (port < 1 || port > 65535 || width <= 0 || height <= 0 || fps <= 0) {
         std::cerr << "[RTSP] invalid destination port, dimensions, or FPS\n";
@@ -99,11 +103,11 @@ bool RtspStreamer::start(const std::string& host, int port, const std::string& p
         hardware = false;
     } else if (!hardware) {
         std::cerr << "[Encoder] Hardware encoder unavailable (no V4L2 M2M device); "
-                        "using software encoder x264enc\n";
+                     "using software encoder x264enc\n";
     }
     if (hardware && !initialize_pipeline(true)) {
         std::cerr << "[Encoder] Hardware encoder spacemith264enc failed; "
-                        "falling back to software encoder x264enc\n";
+                     "falling back to software encoder x264enc\n";
         hardware = false;
     }
     if (!hardware && !initialize_pipeline(false)) return false;
@@ -112,8 +116,9 @@ bool RtspStreamer::start(const std::string& host, int port, const std::string& p
     running_.store(true);
     start_time_ = std::chrono::steady_clock::now();
     encoder_thread_ = std::thread(&RtspStreamer::encoder_loop, this);
-    std::cerr << "[RTSP] publishing H.264 (encoder=" << (hardware_encoder_ ? "spacemith264enc VPU" : "x264enc software")
-                << ") to " << url() << " (RTSP client sink; MediaMTX/server must be listening)\n";
+    std::cerr << "[RTSP] publishing H.264 (encoder="
+              << (hardware_encoder_ ? "spacemith264enc VPU" : "x264enc software") << ") to "
+              << url() << " (RTSP client sink; MediaMTX/server must be listening)\n";
     return true;
 }
 
@@ -123,15 +128,16 @@ bool RtspStreamer::initialize_pipeline(bool use_hardware_encoder) {
     std::ostringstream description;
     description << "appsrc name=source is-live=true do-timestamp=true format=time "
                 << "block=false max-bytes=" << (width_ * height_ * 3 * 2)
-                << " caps=video/x-raw,format=BGR,width=" << width_ << ",height=" << height_ << ",framerate=" << fps_
-                << "/1 "
+                << " caps=video/x-raw,format=BGR,width=" << width_ << ",height=" << height_
+                << ",framerate=" << fps_ << "/1 "
                 << "! queue max-size-buffers=2 leaky=downstream "
                 << "! videoconvert n-threads=2 "
                 // The VPU encoder takes NV12; x264enc is fed I420 (libx264's
                 // native format, always supported).
                 << "! video/x-raw,format=" << (use_hardware_encoder ? "NV12" : "I420") << " ";
     if (use_hardware_encoder) {
-        description << "! spacemith264enc coding-width=" << width_ << " code-hight=" << height_ << " ";
+        description << "! spacemith264enc coding-width=" << width_ << " code-hight=" << height_
+                    << " ";
     } else {
         // ultrafast keeps 720p software encoding comfortably above 30 fps on
         // the X100 cores (measured ~71 fps); zerolatency keeps the demo snappy.
@@ -141,14 +147,15 @@ bool RtspStreamer::initialize_pipeline(bool use_hardware_encoder) {
                 << "! video/x-h264,stream-format=byte-stream,alignment=au "
                 // rtspclientsink creates the RTP payloader itself. Feeding it
                 // rtph264pay output would make the sink reject the link.
-                << "! rtspclientsink location=rtsp://" << host_ << ':' << port_ << path_ << " protocols=tcp latency=0";
+                << "! rtspclientsink location=rtsp://" << host_ << ':' << port_ << path_
+                << " protocols=tcp latency=0";
 
     std::cerr << "[RTSP] GStreamer publish pipeline: " << description.str() << "\n";
     GError* parse_error = nullptr;
     pipeline_ = gst_parse_launch(description.str().c_str(), &parse_error);
     if (!pipeline_) {
         std::cerr << "[RTSP] pipeline creation failed: " << gst_error_text(parse_error) << "\n"
-                    << "[RTSP] make sure the GStreamer rtspclientsink plugin is installed\n";
+                  << "[RTSP] make sure the GStreamer rtspclientsink plugin is installed\n";
         return false;
     }
 
@@ -194,8 +201,9 @@ void RtspStreamer::encoder_loop() {
         cv::Mat frame;
         {
             std::unique_lock<std::mutex> lock(frame_mutex_);
-            frame_cv_.wait_for(lock, std::chrono::milliseconds(50),
-                [&] { return stopping_.load() || frame_sequence_ != consumed_sequence; });
+            frame_cv_.wait_for(lock, std::chrono::milliseconds(50), [&] {
+                return stopping_.load() || frame_sequence_ != consumed_sequence;
+            });
             if (stopping_.load()) break;
             if (frame_sequence_ != consumed_sequence && !latest_frame_.empty()) {
                 frame = latest_frame_.clone();
@@ -220,8 +228,8 @@ void RtspStreamer::encoder_loop() {
         gst_buffer_unmap(buffer, &mapping);
 
         const auto elapsed = std::chrono::steady_clock::now() - start_time_;
-        GST_BUFFER_PTS(buffer) =
-            static_cast<GstClockTime>(std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count());
+        GST_BUFFER_PTS(buffer) = static_cast<GstClockTime>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count());
         GST_BUFFER_DTS(buffer) = GST_BUFFER_PTS(buffer);
         GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, fps_);
 
@@ -237,16 +245,18 @@ void RtspStreamer::check_bus() {
     if (!pipeline_) return;
     GstBus* bus = gst_element_get_bus(pipeline_);
     GstMessage* message = nullptr;
-    while (
-        (message = gst_bus_pop_filtered(bus, static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_WARNING)))) {
+    while ((message = gst_bus_pop_filtered(
+                    bus, static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_WARNING)))) {
         GError* error = nullptr;
         gchar* debug = nullptr;
         if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_ERROR) {
             gst_message_parse_error(message, &error, &debug);
-            std::cerr << "[RTSP] GStreamer error: " << (error && error->message ? error->message : "unknown") << "\n";
+            std::cerr << "[RTSP] GStreamer error: "
+                      << (error && error->message ? error->message : "unknown") << "\n";
         } else {
             gst_message_parse_warning(message, &error, &debug);
-            std::cerr << "[RTSP] GStreamer warning: " << (error && error->message ? error->message : "unknown") << "\n";
+            std::cerr << "[RTSP] GStreamer warning: "
+                      << (error && error->message ? error->message : "unknown") << "\n";
         }
         if (error) g_error_free(error);
         if (debug) g_free(debug);
@@ -281,4 +291,6 @@ void RtspStreamer::stop() {
     if (was_running) std::cerr << "[RTSP] publisher stopped\n";
 }
 
-std::string RtspStreamer::url() const { return "rtsp://" + host_ + ':' + std::to_string(port_) + path_; }
+std::string RtspStreamer::url() const {
+    return "rtsp://" + host_ + ':' + std::to_string(port_) + path_;
+}

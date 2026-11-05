@@ -59,7 +59,9 @@ class Handler(BaseHTTPRequestHandler):
             "script-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'",
         )
         if cookie:
-            self.send_header("Set-Cookie", f"calib_session={cookie}; HttpOnly; SameSite=Strict; Path=/")
+            self.send_header(
+                "Set-Cookie", f"calib_session={cookie}; HttpOnly; SameSite=Strict; Path=/"
+            )
         self.end_headers()
         try:
             self.wfile.write(payload)
@@ -88,19 +90,23 @@ class Handler(BaseHTTPRequestHandler):
             if path.path == "/api/status":
                 snapshot = self.server.service.snapshot(owner)
                 snapshot.update(
-                    csrf=session["csrf"], engineer_unlocked=session["engineer_until"] > __import__("time").monotonic()
+                    csrf=session["csrf"],
+                    engineer_unlocked=session["engineer_until"] > __import__("time").monotonic(),
                 )
                 self.send(200, snapshot, cookie=token)
             elif path.path == "/api/image":
                 query = parse_qs(path.query)
-                file = self.server.service.image_path(query.get("kind", ["preview"])[0], query.get("job", [None])[0])
+                file = self.server.service.image_path(
+                    query.get("kind", ["preview"])[0], query.get("job", [None])[0]
+                )
                 self.send(200, file.read_bytes(), mimetypes.guess_type(file)[0])
             elif path.path == "/api/samples":
                 self.send(200, gallery.catalog(self.server.service), cookie=token)
             elif path.path == "/api/sample-file":
                 query = parse_qs(path.query)
                 file = gallery.asset(
-                    self.server.service, **{key: query.get(key, [""])[0] for key in ("sample", "frame", "key", "kind")}
+                    self.server.service,
+                    **{key: query.get(key, [""])[0] for key in ("sample", "frame", "key", "kind")},
                 )
                 self.send(200, file.read_bytes(), mimetypes.guess_type(file)[0])
             elif path.path == "/api/result":
@@ -174,11 +180,17 @@ def main(argv=None):
     parser.add_argument("--port", type=int, default=8091)
     parser.add_argument("--config", type=Path, default=CONFIG)
     parser.add_argument("--data", type=Path, default=SITE / "calibration/web")
-    parser.add_argument("--readonly", action="store_true", help="UI preview only; jobs and writes disabled")
-    parser.add_argument("--heartbeat-timeout", type=float, default=10.0)
-    parser.add_argument("--set-pin", action="store_true", help="Set engineer PIN from the K3 terminal")
     parser.add_argument(
-        "--init-pin", action="store_true", help="Create a random PIN in a private local file if missing"
+        "--readonly", action="store_true", help="UI preview only; jobs and writes disabled"
+    )
+    parser.add_argument("--heartbeat-timeout", type=float, default=10.0)
+    parser.add_argument(
+        "--set-pin", action="store_true", help="Set engineer PIN from the K3 terminal"
+    )
+    parser.add_argument(
+        "--init-pin",
+        action="store_true",
+        help="Create a random PIN in a private local file if missing",
     )
     args = parser.parse_args(argv)
     args.data.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -200,7 +212,9 @@ def main(argv=None):
         os.chmod(target, 0o600)
         print("工程师 PIN 已配置；PIN 不输出到日志。")
         return
-    service = Service(args.config, args.data, readonly=args.readonly, heartbeat_timeout=args.heartbeat_timeout)
+    service = Service(
+        args.config, args.data, readonly=args.readonly, heartbeat_timeout=args.heartbeat_timeout
+    )
     server = Server((args.host, args.port), Handler)
     server.service = service
 
@@ -209,7 +223,9 @@ def main(argv=None):
 
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
-    print(f"标定服务 http://{args.host}:{args.port}，应用目录 {ROOT}；启动未连接任何设备", flush=True)
+    print(
+        f"标定服务 http://{args.host}:{args.port}，应用目录 {ROOT}；启动未连接任何设备", flush=True
+    )
     try:
         server.serve_forever(poll_interval=0.25)
     finally:

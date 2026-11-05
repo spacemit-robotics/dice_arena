@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 # SPDX-License-Identifier: Apache-2.0
-"""Check separately distributed runtime resources without opening hardware or network connections."""
+"""Check separately distributed runtime resources without opening hardware or network
+connections."""
 
 import argparse
 import hashlib
@@ -52,13 +53,20 @@ def check_assets(root, manifest, verify=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT, help="application resource root")
-    parser.add_argument("--verify", action="store_true", help="verify SHA-256 in addition to size and existence")
+    parser.add_argument(
+        "--verify", action="store_true", help="verify SHA-256 in addition to size and existence"
+    )
     args = parser.parse_args()
     manifest = json.loads((ROOT / "runtime_assets.json").read_text())
     missing, mismatched = check_assets(args.root, manifest, args.verify)
     print(
         json.dumps(
-            dict(assets=len(manifest["files"]), missing=missing, mismatched=mismatched, sha256_verified=args.verify),
+            dict(
+                assets=len(manifest["files"]),
+                missing=missing,
+                mismatched=mismatched,
+                sha256_verified=args.verify,
+            ),
             ensure_ascii=False,
         )
     )

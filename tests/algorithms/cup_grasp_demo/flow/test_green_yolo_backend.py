@@ -14,7 +14,9 @@ class BackendTests(unittest.TestCase):
 
     def fake_ort(self, providers):
         model = Mock()
-        model.get_inputs.return_value = [SimpleNamespace(shape=[1, 3, 640, 640], type="tensor(float)")]
+        model.get_inputs.return_value = [
+            SimpleNamespace(shape=[1, 3, 640, 640], type="tensor(float)")
+        ]
         model.get_modelmeta.return_value = SimpleNamespace(
             custom_metadata_map={"task": "segment", "names": "{0: 'cap', 1: 'ground'}"}
         )
@@ -29,7 +31,9 @@ class BackendTests(unittest.TestCase):
         with patch.object(y.importlib, "import_module", return_value=ort) as imp:
             y.session("model", "sha", "package", 4)
         imp.assert_called_once_with("onnxruntime")
-        self.assertEqual(ort.InferenceSession.call_args.kwargs["providers"], ["CPUExecutionProvider"])
+        self.assertEqual(
+            ort.InferenceSession.call_args.kwargs["providers"], ["CPUExecutionProvider"]
+        )
         self.assertEqual(ort.SessionOptions.return_value.intra_op_num_threads, 4)
 
     def test_ai_two_threads_and_affinity(self):
@@ -43,11 +47,16 @@ class BackendTests(unittest.TestCase):
 
     def test_no_silent_cpu_fallback(self):
         ort = self.fake_ort(["CPUExecutionProvider"])
-        with patch.object(y.importlib, "import_module", return_value=ort), self.assertRaises(RuntimeError):
+        with (
+            patch.object(y.importlib, "import_module", return_value=ort),
+            self.assertRaises(RuntimeError),
+        ):
             y.session("model", "sha", "package", 2, "spacemit", (8, 9))
 
     def test_bad_options(self):
         for cpus in ([0, 1], [8], [8, 8], [8, 16], [True, 9]):
             with self.assertRaises(ValueError):
-                y.runtime_settings(dict(inference_threads=2, inference_provider="spacemit", inference_cpu_ids=cpus))
+                y.runtime_settings(
+                    dict(inference_threads=2, inference_provider="spacemit", inference_cpu_ids=cpus)
+                )
         self.assertEqual(y.runtime_settings({}), (1, "cpu", ()))

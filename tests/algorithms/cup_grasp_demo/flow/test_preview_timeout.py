@@ -10,16 +10,26 @@ from cup_grasp_demo.flow import debug
 
 
 class PreviewTest(unittest.TestCase):
-    def run_preview(self, key=-1, visible=1, interrupted=None, property_error=None, cleanup_error=None):
+    def run_preview(
+        self, key=-1, visible=1, interrupted=None, property_error=None, cleanup_error=None
+    ):
         with ExitStack() as stack:
             stack.enter_context(patch.dict(debug.os.environ, {"DISPLAY": ":test"}))
-            stack.enter_context(patch.object(debug.cv2, "imread", return_value=np.zeros((3, 3, 3), np.uint8)))
-            stack.enter_context(patch.object(debug.cv2, "imshow"))
-            wait = stack.enter_context(patch.object(debug.cv2, "waitKey", return_value=key, side_effect=interrupted))
             stack.enter_context(
-                patch.object(debug.cv2, "getWindowProperty", return_value=visible, side_effect=property_error)
+                patch.object(debug.cv2, "imread", return_value=np.zeros((3, 3, 3), np.uint8))
             )
-            close = stack.enter_context(patch.object(debug.cv2, "destroyAllWindows", side_effect=cleanup_error))
+            stack.enter_context(patch.object(debug.cv2, "imshow"))
+            wait = stack.enter_context(
+                patch.object(debug.cv2, "waitKey", return_value=key, side_effect=interrupted)
+            )
+            stack.enter_context(
+                patch.object(
+                    debug.cv2, "getWindowProperty", return_value=visible, side_effect=property_error
+                )
+            )
+            close = stack.enter_context(
+                patch.object(debug.cv2, "destroyAllWindows", side_effect=cleanup_error)
+            )
             stack.enter_context(patch.object(debug.time, "monotonic", side_effect=[0, 0, 4]))
             try:
                 debug.show("/unused.png", True, timeout_s=3)
@@ -37,7 +47,9 @@ class PreviewTest(unittest.TestCase):
 
     def test_interrupt_survives_missing_window_cleanup(self):
         with self.assertRaises(KeyboardInterrupt):
-            self.run_preview(interrupted=KeyboardInterrupt(), cleanup_error=debug.cv2.error("NULL guiReceiver"))
+            self.run_preview(
+                interrupted=KeyboardInterrupt(), cleanup_error=debug.cv2.error("NULL guiReceiver")
+            )
 
     def test_timeout(self):
         self.run_preview()

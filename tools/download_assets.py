@@ -28,7 +28,9 @@ def validate_downloads(manifest, base_url):
         or parsed.query
         or parsed.fragment
     ):
-        raise ValueError("base URL must be an HTTP(S) directory without credentials, query or fragment")
+        raise ValueError(
+            "base URL must be an HTTP(S) directory without credentials, query or fragment"
+        )
     for record in manifest["files"]:
         for key in ("path", "remote_path"):
             value = record.get(key)
@@ -50,7 +52,9 @@ def fetch_asset(url, destination, record, timeout):
     temporary = None
     try:
         digest, size = hashlib.sha256(), 0
-        with tempfile.NamedTemporaryFile(dir=destination.parent, prefix=".asset-", delete=False) as stream:
+        with tempfile.NamedTemporaryFile(
+            dir=destination.parent, prefix=".asset-", delete=False
+        ) as stream:
             temporary = Path(stream.name)
             with urlopen(url, timeout=timeout) as response:
                 for chunk in iter(lambda: response.read(1024 * 1024), b""):
@@ -77,7 +81,9 @@ def download_assets(root, manifest, base_url=None, timeout=30, attempts=3):
     if timeout <= 0 or attempts < 1:
         raise ValueError("timeout and attempts must be positive")
     if mismatched:
-        raise ValueError("existing resources differ; move them aside before retrying: " + ", ".join(mismatched))
+        raise ValueError(
+            "existing resources differ; move them aside before retrying: " + ", ".join(mismatched)
+        )
     missing = set(missing)
     downloaded = 0
     for record in manifest["files"]:
@@ -101,19 +107,32 @@ def download_assets(root, manifest, base_url=None, timeout=30, attempts=3):
             except FileExistsError:
                 raise
             except (OSError, ValueError) as error:
-                permanent_http_error = isinstance(error, HTTPError) and error.code not in (408, 429, 500, 502, 503, 504)
+                permanent_http_error = isinstance(error, HTTPError) and error.code not in (
+                    408,
+                    429,
+                    500,
+                    502,
+                    503,
+                    504,
+                )
                 if isinstance(error, HTTPError):
                     error.close()
                 if attempt == attempts or permanent_http_error:
                     raise
                 print(f"Retry {attempt}/{attempts}: {error}", file=sys.stderr, flush=True)
         downloaded += 1
-    return dict(assets=len(manifest["files"]), downloaded=downloaded, skipped=len(manifest["files"]) - downloaded)
+    return dict(
+        assets=len(manifest["files"]),
+        downloaded=downloaded,
+        skipped=len(manifest["files"]) - downloaded,
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=ROOT, help="destination application resource root")
+    parser.add_argument(
+        "--root", type=Path, default=ROOT, help="destination application resource root"
+    )
     parser.add_argument("--base-url", help="override archive directory URL for a mirror")
     args = parser.parse_args()
     try:

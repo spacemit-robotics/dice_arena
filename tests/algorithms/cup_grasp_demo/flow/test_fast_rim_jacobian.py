@@ -18,7 +18,9 @@ class JacobianTest(unittest.TestCase):
         origin = np.array([0, 0, 0.6])
         views = []
         for angle, baseline in [(0, 0), (0.07, 0.05)]:
-            rotation = np.array([[np.cos(angle), 0, np.sin(angle)], [0, 1, 0], [-np.sin(angle), 0, np.cos(angle)]])
+            rotation = np.array(
+                [[np.cos(angle), 0, np.sin(angle)], [0, 1, 0], [-np.sin(angle), 0, np.cos(angle)]]
+            )
             views.append(
                 dict(
                     R=rotation,
@@ -33,10 +35,17 @@ class JacobianTest(unittest.TestCase):
             expected = []
             for v in views:
                 uv = project(points, v)
-                expected.extend(map_coordinates(v["distance"], [uv[:, 1], uv[:, 0]], order=1, mode="constant", cval=50))
+                expected.extend(
+                    map_coordinates(
+                        v["distance"], [uv[:, 1], uv[:, 0]], order=1, mode="constant", cval=50
+                    )
+                )
             np.testing.assert_allclose(fun(q), expected, atol=1e-9)
             finite = np.column_stack(
-                [(fun(q + np.eye(3)[i] * 1e-9) - fun(q - np.eye(3)[i] * 1e-9)) / 2e-9 for i in range(3)]
+                [
+                    (fun(q + np.eye(3)[i] * 1e-9) - fun(q - np.eye(3)[i] * 1e-9)) / 2e-9
+                    for i in range(3)
+                ]
             )
             np.testing.assert_allclose(jac(q), finite, rtol=2e-5, atol=0.001)
 

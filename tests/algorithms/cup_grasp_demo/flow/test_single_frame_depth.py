@@ -15,25 +15,35 @@ class SingleFrameDepthTests(unittest.TestCase):
     def dataset(self, root, depths):
         folder = root / "rgbd"
         folder.mkdir()
-        meta = dict(serial="test", intrinsics={}, depth_scale_m=0.001, depth_registered_to="color_optical")
+        meta = dict(
+            serial="test", intrinsics={}, depth_scale_m=0.001, depth_registered_to="color_optical"
+        )
         for i, depth in enumerate(depths):
             prefix = folder / f"frame_{i:03d}"
             prefix.with_suffix(".json").write_text(json.dumps(meta))
-            np.savez(prefix.with_suffix(".npz"), depth=depth, color=np.zeros((*depth.shape, 3), np.uint8))
+            np.savez(
+                prefix.with_suffix(".npz"), depth=depth, color=np.zeros((*depth.shape, 3), np.uint8)
+            )
 
     def test_single_frame_filters_invalid_depth_without_computing_median(self):
         depth = np.array([[0, 123, 65535], [np.nan, np.inf, -np.inf]], dtype=float)
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             self.dataset(root, [depth])
-            with patch("numpy.nanmedian", side_effect=AssertionError("single frame needs no median")):
+            with patch(
+                "numpy.nanmedian", side_effect=AssertionError("single frame needs no median")
+            ):
                 _, actual, _, _ = load_batch(root, min_frames=1)
             np.testing.assert_array_equal(actual, [[0, 123, 0], [0, 0, 0]])
             with self.assertRaises(ValueError):
                 load_batch(root)
 
     def test_multiple_frames_still_ignore_missing_depth(self):
-        depths = [np.array([[0, 10], [0, 100]]), np.array([[0, 20], [30, 200]]), np.array([[0, 0], [50, 300]])]
+        depths = [
+            np.array([[0, 10], [0, 100]]),
+            np.array([[0, 20], [30, 200]]),
+            np.array([[0, 0], [50, 300]]),
+        ]
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             self.dataset(root, depths)

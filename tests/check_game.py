@@ -1,6 +1,7 @@
 # Copyright (C) 2026 SpacemiT (Hangzhou) Technology Co. Ltd.
 # SPDX-License-Identifier: Apache-2.0
-"""Exercise the installed game's registry and robot provider with the Mock cup application; no hardware."""
+"""Exercise the installed game's registry and robot provider with the Mock cup application; no
+hardware."""
 
 import argparse
 import json
@@ -26,10 +27,20 @@ def main():
     config = json.loads((game / "backend/config.json").read_text())
     assert config["providers"]["robot_arm"] == "robot_arm_spacemit"
     assert config["robot_home_patrol"] is False and "asr" not in config["providers"]
-    assert not (game / "backend/components/robot_arm_nero").exists() and not (game / "backend/games/rps").exists()
+    assert (
+        not (game / "backend/components/robot_arm_nero").exists()
+        and not (game / "backend/games/rps").exists()
+    )
     # `dice-arena serve` starts the voice the game references, local MOSS-TTS first (start_web.sh).
     referenced = subprocess.run(
-        [sys.executable, str(game / "backend/componentctl.py"), "--game", "dice", "referenced", "tts"],
+        [
+            sys.executable,
+            str(game / "backend/componentctl.py"),
+            "--game",
+            "dice",
+            "referenced",
+            "tts",
+        ],
         cwd=game,
         capture_output=True,
         text=True,
@@ -59,7 +70,16 @@ def main():
         assert provider.app.policy.state == "fault"
     finally:
         provider.shutdown()
-    print(json.dumps(dict(provider_contract="passed", mock_cycle="passed", fault_latch="passed", events=len(events))))
+    print(
+        json.dumps(
+            dict(
+                provider_contract="passed",
+                mock_cycle="passed",
+                fault_latch="passed",
+                events=len(events),
+            )
+        )
+    )
 
 
 if __name__ == "__main__":

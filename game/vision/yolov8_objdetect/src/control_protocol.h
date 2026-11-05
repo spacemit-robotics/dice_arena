@@ -17,13 +17,16 @@ namespace vision_control {
 // coalesce adjacent JSONL writes, so callers must drain every complete line
 // before polling the kernel fd again.
 class CommandReader {
-    public:
+public:
     std::vector<std::string> read_ready(int fd, int timeout_ms) {
         std::vector<std::string> commands;
         drain_complete_lines(commands);
         if (!commands.empty() || fd < 0 || closed_) return commands;
 
-        struct pollfd pfd{fd, POLLIN | POLLHUP | POLLERR, 0};
+        struct pollfd pfd {
+            fd, POLLIN | POLLHUP | POLLERR, 0
+        };
+
         int ready = 0;
         do {
             ready = ::poll(&pfd, 1, timeout_ms);
@@ -50,7 +53,7 @@ class CommandReader {
 
     bool closed() const { return closed_; }
 
-    private:
+private:
     void drain_complete_lines(std::vector<std::string>& commands) {
         std::size_t newline = std::string::npos;
         while ((newline = buffer_.find('\n')) != std::string::npos) {

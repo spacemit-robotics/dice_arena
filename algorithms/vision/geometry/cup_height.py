@@ -10,7 +10,12 @@ from vision.geometry.workspace import workspace_masks, workspace_options
 
 def rim_geometry(points, table, normal, opts):
     points, table, normal = map(lambda x: np.asarray(x, dtype=float), (points, table, normal))
-    if points.ndim != 2 or points.shape[1] != 3 or len(points) < 100 or not np.isfinite(points).all():
+    if (
+        points.ndim != 2
+        or points.shape[1] != 3
+        or len(points) < 100
+        or not np.isfinite(points).all()
+    ):
         raise ValueError("绿色杯有效深度点不足")
     heights = (points - table) @ normal
     selected = heights > 0.02
@@ -83,9 +88,13 @@ def detect(depth, image, meta, opts, plane_tolerance_mm, *, instances, diagnosti
         if mask.shape != depth.shape:
             raise ValueError("YOLO mask resolution mismatch")
         area = int(np.count_nonzero(mask))
-        fraction_in_workspace = float(np.count_nonzero((mask > 0) & (workspace > 0)) / area) if area else 0.0
+        fraction_in_workspace = (
+            float(np.count_nonzero((mask > 0) & (workspace > 0)) / area) if area else 0.0
+        )
         accepted = area >= opts["min_area_px"] and fraction_in_workspace >= admission
-        selection.append(dict(area_px=area, workspace_fraction=fraction_in_workspace, accepted=accepted))
+        selection.append(
+            dict(area_px=area, workspace_fraction=fraction_in_workspace, accepted=accepted)
+        )
         if not accepted:
             continue
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -98,7 +107,9 @@ def detect(depth, image, meta, opts, plane_tolerance_mm, *, instances, diagnosti
             if opts.get("geometry_method", "depth_band") == "image_rim_depth":
                 from cup_grasp_demo.flow.green_image_rim import estimate
 
-                geometry, contour = estimate(depth, image, meta, mask > 0, table, normal, opts, diagnostic)
+                geometry, contour = estimate(
+                    depth, image, meta, mask > 0, table, normal, opts, diagnostic
+                )
             else:
                 geometry = rim_geometry(
                     deproject(depth, mask > 0, meta["intrinsics"], meta["depth_scale_m"]),
@@ -112,7 +123,9 @@ def detect(depth, image, meta, opts, plane_tolerance_mm, *, instances, diagnosti
             continue
         candidates.append((geometry, mask, contour))
     if len(candidates) != 1:
-        raise ValueError(f"需要唯一绿色开口杯，合格候选数：{len(candidates)}；深度拒绝原因：{rejected}")
+        raise ValueError(
+            f"需要唯一绿色开口杯，合格候选数：{len(candidates)}；深度拒绝原因：{rejected}"
+        )
     diagnostics["valid"] = True
     geometry, mask, contour = candidates[0]
     geometry["table_fit"] = dict(inlier_fraction=fraction, rms_mm=rms * 1000)

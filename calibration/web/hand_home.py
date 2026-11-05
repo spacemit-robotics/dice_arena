@@ -18,7 +18,12 @@ def reset_hand(arm, job):
 
         def monitor():
             state = arm.state()
-            if state["fault"] or state["moving"] or not state["enabled"] or not state.get("position_mode", True):
+            if (
+                state["fault"]
+                or state["moving"]
+                or not state["enabled"]
+                or not state.get("position_mode", True)
+            ):
                 raise RuntimeError("灵巧手归零时机械臂控制状态异常")
             q = arm.read_joints()["joints_rad"]
             if max(abs(a - b) for a, b in zip(q, baseline)) > math.radians(0.2):

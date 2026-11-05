@@ -52,7 +52,10 @@ class ReferenceTests(unittest.TestCase):
             "board": copy.deepcopy(self.board),
             "T_camera_board": cb.tolist(),
             "records": [
-                {"T_camera_board": cb.tolist(), "quality": {"corners": 12, "reprojection_rms_px": 0.15}}
+                {
+                    "T_camera_board": cb.tolist(),
+                    "quality": {"corners": 12, "reprojection_rms_px": 0.15},
+                }
                 for _ in range(10)
             ],
         }
@@ -127,7 +130,11 @@ class ReferenceTests(unittest.TestCase):
         records = self.observation(self.bc)["records"]
         with self.assertRaises(ValueError):
             summarize(records[:9])
-        for key, value in [("corners", 11), ("reprojection_rms_px", float("nan")), ("reprojection_rms_px", 0.6)]:
+        for key, value in [
+            ("corners", 11),
+            ("reprojection_rms_px", float("nan")),
+            ("reprojection_rms_px", 0.6),
+        ]:
             changed = copy.deepcopy(records)
             changed[0]["quality"][key] = value
             with self.assertRaises(ValueError):
@@ -169,7 +176,10 @@ class ReferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             board = Path(tmp) / "board.json"
             board.write_text(json.dumps(self.board))
-            with patch("sensors.RealSenseCamera", Camera), patch("sensors.CharucoDetector", Detector):
+            with (
+                patch("sensors.RealSenseCamera", Camera),
+                patch("sensors.CharucoDetector", Detector),
+            ):
                 return observe(board, "test", "table", Path(tmp) / "out", frames)
 
     def test_occasional_missed_frame_is_skipped_not_fatal(self):

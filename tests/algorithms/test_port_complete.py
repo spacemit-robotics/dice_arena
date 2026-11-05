@@ -30,7 +30,8 @@ def test_every_local_import_resolves():
             for module, name in imported:
                 if module.split(".")[0] not in LOCAL or module in NOT_PORTED:
                     continue
-                # `from package import name` may name a submodule; `from module import name` an attribute.
+                # `from package import name` may name a submodule; `from module import name` an
+                # attribute.
                 package = ROOT.joinpath(*module.split(".")).is_dir()
                 target = f"{module}.{name}" if name and package else module
                 if target not in NOT_PORTED and not module_exists(target):
@@ -43,7 +44,9 @@ def test_planner_paths_never_reach_the_sdk_bridge():
     # snapshot() with framework feedback; nothing else on those paths may open an arm SDK client.
     source = (ROOT / "cup_grasp_demo/flow/green_pipeline.py").read_text()
     workflow = next(
-        node for node in ast.parse(source).body if isinstance(node, ast.ClassDef) and node.name == "Workflow"
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.ClassDef) and node.name == "Workflow"
     )
     methods = {node.name: node for node in workflow.body if isinstance(node, ast.FunctionDef)}
     seen, todo = set(), ["capture", "plan", "table", "held_geometry"]

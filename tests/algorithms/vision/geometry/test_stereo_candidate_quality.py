@@ -47,7 +47,11 @@ class CandidateQualityTests(unittest.TestCase):
                 [[0.0, 0.0, 0.6, 0.038], [0.02, 0.0, 0.6, 0.0445]],
                 [0.025, 0.075],
                 [0.04, 0.18],
-                dict(max_mean_edge_error_px=1.0, max_view_edge_error_px=1.2, ambiguity_score_margin_px=0.1),
+                dict(
+                    max_mean_edge_error_px=1.0,
+                    max_view_edge_error_px=1.2,
+                    ambiguity_score_margin_px=0.1,
+                ),
             )
 
     def test_lower_mean_but_insufficient_single_view_support_does_not_win(self):
@@ -56,18 +60,26 @@ class CandidateQualityTests(unittest.TestCase):
         self.assertAlmostEqual(result["radius_m"] * 2000, 76.0)
         self.assertEqual(result["qualified_candidate_count"], 1)
         self.assertIn("min_edge_support", result["rejected_candidate_quality"][0]["failed_checks"])
-        self.assertLess(result["rejected_candidate_quality"][0]["mean_edge_error_px"], result["mean_edge_error_px"])
+        self.assertLess(
+            result["rejected_candidate_quality"][0]["mean_edge_error_px"],
+            result["mean_edge_error_px"],
+        )
 
     def test_nearby_score_but_insufficient_support_cannot_veto_valid_rim(self):
         unsupported = np.r_[np.full(20, 4.0), np.full(100, 0.55)]
         result = self.fit_candidates([0.95, 0.95], [unsupported, 0.8])
         self.assertAlmostEqual(result["radius_m"] * 2000, 76.0)
-        self.assertGreater(result["rejected_candidate_quality"][0]["mean_edge_error_px"], result["mean_edge_error_px"])
+        self.assertGreater(
+            result["rejected_candidate_quality"][0]["mean_edge_error_px"],
+            result["mean_edge_error_px"],
+        )
 
     def test_single_view_mean_gate_is_not_hidden_by_good_other_view(self):
         result = self.fit_candidates([0.7, 0.7], [1.21, 0.1])
         self.assertEqual(result["qualified_candidate_count"], 1)
-        self.assertEqual(result["rejected_candidate_quality"][0]["failed_checks"], ["max_view_edge_error_px"])
+        self.assertEqual(
+            result["rejected_candidate_quality"][0]["failed_checks"], ["max_view_edge_error_px"]
+        )
 
     def test_two_qualified_distinct_circles_are_still_ambiguous(self):
         with self.assertRaisesRegex(ValueError, "ambiguous competing circles"):

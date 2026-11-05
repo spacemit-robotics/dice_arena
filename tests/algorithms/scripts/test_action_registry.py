@@ -12,7 +12,8 @@ from scripts.action_registry import load_registry
 
 def gesture(joints=None, hand=None):
     return dict(
-        joints_deg=joints or [0.1, -80.3, -90.4, 110.0, 155.2, -5.0, 5.3], hand_0_100=hand or [0, 0, 0, 0, 0, 0]
+        joints_deg=joints or [0.1, -80.3, -90.4, 110.0, 155.2, -5.0, 5.3],
+        hand_0_100=hand or [0, 0, 0, 0, 0, 0],
     )
 
 

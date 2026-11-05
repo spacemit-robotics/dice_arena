@@ -31,26 +31,48 @@ from cup_grasp_demo.flow.core import (  # noqa: E402
     read_json,
     write_json as write_json,
 )
-from cup_grasp_demo.flow.contact_geometry import contact_direction as contact_direction  # noqa: E402
+from cup_grasp_demo.flow.contact_geometry import (  # noqa: E402
+    contact_direction as contact_direction,
+)
 from cup_grasp_demo.flow.session_storage import dispatch  # noqa: E402
 from cup_grasp_demo.planning import load_calibration  # noqa: E402
 from vision.capture.frame_io import load_batch as load_batch  # noqa: E402
-from vision.geometry.table_plane import Config as Config, _plane as _plane, deproject as deproject  # noqa: E402
-from cup_grasp_demo.flow.transforms import inverse as inverse, matrix, pose_matrix as pose_matrix  # noqa: E402
+from vision.geometry.table_plane import (  # noqa: E402
+    Config as Config,
+    _plane as _plane,
+    deproject as deproject,
+)
+from cup_grasp_demo.flow.transforms import (  # noqa: E402
+    inverse as inverse,
+    matrix,
+    pose_matrix as pose_matrix,
+)
 from nero_revo2_control.kinematics import load_model as load_model  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 
 
 def new_run(session, name):
-    directory = Path(session) / "runs" / (time.strftime("%Y%m%d_%H%M%S") + "_" + name + "_" + uuid.uuid4().hex[:6])
+    directory = (
+        Path(session)
+        / "runs"
+        / (time.strftime("%Y%m%d_%H%M%S") + "_" + name + "_" + uuid.uuid4().hex[:6])
+    )
     directory.mkdir(parents=True, exist_ok=False)
     return directory
 
 
 def bridge(command, output, cfg, request=None):
     python = os.environ.get("DICE_SDK_PYTHON", "/usr/bin/python3")
-    argv = [python, str(HERE / "hardware.py"), command, "--channel", cfg["channel"], "--output", str(output)]
+    argv = [
+        python,
+        str(HERE / "hardware.py"),
+        command,
+        "--channel",
+        cfg["channel"],
+        "--output",
+        str(output),
+    ]
     if request:
         argv += ["--request", str(request), "--sha256", digest(request)]
     with Path(output).with_suffix(".log").open("x") as log:
@@ -188,9 +210,13 @@ def main(argv=None):
         help="默认 step/auto 到 grip，fast 到 shake",
     )
     p.add_argument("--execute", action="store_true", help="允许执行；省略时只显示流程，不访问硬件")
-    p.add_argument("--resume", action="store_true", help="继续正常暂停的流程；失败或中断后不自动重放")
+    p.add_argument(
+        "--resume", action="store_true", help="继续正常暂停的流程；失败或中断后不自动重放"
+    )
     p.add_argument("--status", action="store_true", help="只读查看最近一次流程状态")
-    p.add_argument("--show", action="store_true", help="仅 STEP 模式弹出 X11 图像；auto/fast 只保存图像")
+    p.add_argument(
+        "--show", action="store_true", help="仅 STEP 模式弹出 X11 图像；auto/fast 只保存图像"
+    )
     args = parser.parse_args(argv)
     for key, value in vars(args).items():
         if isinstance(value, Path):

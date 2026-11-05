@@ -12,7 +12,9 @@ import tempfile
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source_root")
-    parser.add_argument("--config", type=Path, help="site configuration with registered calibration and table")
+    parser.add_argument(
+        "--config", type=Path, help="site configuration with registered calibration and table"
+    )
     args = parser.parse_args()
     from cup_shake.green_cup import GreenCupPlanner
     from spacemit_manipulation.urdf_fk import UrdfKinematics
@@ -20,7 +22,9 @@ def main():
     source = Path(args.source_root).resolve()
     with tempfile.TemporaryDirectory(prefix="planning-port-") as temporary:
         configuration = args.config.resolve() if args.config else source / "configs/green_cup.json"
-        config = dict(source_root=str(source), config=str(configuration), session_directory=temporary)
+        config = dict(
+            source_root=str(source), config=str(configuration), session_directory=temporary
+        )
         planner = GreenCupPlanner(config, lambda: dict(joints_rad=[0] * 7))
         try:
             if "pyAgxArm" in sys.modules or planner.workflow._vision is not None:
@@ -34,7 +38,9 @@ def main():
             )
             maximum = 0
             for index in range(11):
-                joints = [low + (high - low) * (0.25 + 0.05 * index) for low, high in old.limits_rad]
+                joints = [
+                    low + (high - low) * (0.25 + 0.05 * index) for low, high in old.limits_rad
+                ]
                 actual = model.forward(joints)
                 expected = [value for row in old.fk(joints) for value in row]
                 maximum = max(maximum, max(abs(a - b) for a, b in zip(actual, expected)))
