@@ -119,7 +119,8 @@ dice-arena configure
 
 - 配置保存到 `SITE/cup_application.json`，已有文件不覆盖。
 - HOME、TCP、杯体尺寸和手型须与当前安装一致。
-- 抓取手型、张开手型和手指动作时长取自 `SITE/green_cup.json` 的 `grip_targets_0_100`、`open_targets_0_100`、`fast_finger_duration_s`，使用灵巧手刻度（`0` 为张开，`100` 为闭合）。
+- 抓取手型和张开手型的默认值在抓杯策略 `algorithms/vision/strategy/green_cup.json` 中（`grip_targets_0_100`、`open_targets_0_100`），使用灵巧手刻度（`0` 为张开，`100` 为闭合）；张开手型须全为 `0`。
+- 手指动作时长为 `SITE/green_cup.json` 中的 `fast_finger_duration_s`。在该文件的 `green_cup` 段写入抓杯策略的同名字段，可覆盖策略默认值，重新安装不覆盖。
 
 ### 单次抓杯、摇杯和放杯
 
