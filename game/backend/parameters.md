@@ -1,131 +1,88 @@
-# 全局配置 backend/config.json 参数说明
+# 全局配置参数
 
-`backend/config.json` 是**项目级部署配置**（JSON 无注释，本文档就是它的注释）：描述"这台演示台跑什么引擎"，对所有游戏生效。游戏自身的玩法配置在 `backend/games/<游戏>/manifest.json`（见各游戏的 `parameters.md`），引擎内部参数在 `backend/components/<组件>/config.json`。
+全局配置描述部署级设置：组件选择、语音默认值、视频地址、待机与输入方式、屏幕方向，对所有游戏生效。
+游戏玩法见 [摇骰子游戏参数](games/dice/parameters.md)，组件参数见 [组件包说明](components/README.md)。
 
-```json
-{
-  "schema_version": 1,
-  "providers": {
-    "tts_local": "tts_moss_nano",
-    "vision_adjudicator": "vision_yolov8_objdetect",
-    "robot_arm": "robot_arm_spacemit"
-  },
-  "voice": "default",
-  "speed": 1.0,
-  "video": {
-    "webrtc_base_url": "http://127.0.0.1:8889"
-  },
-  "asr_enabled": true,
-  "vision_always_on": true,
-  "game_select": {
-    "phrases": { "dice": ["摇骰子", "骰子", "dice"] },
-    "confirm_phrases": ["进入游戏", "玩这个", "play this", "enter the game"]
-  }
-}
+下文 `SITE` 表示现场目录，默认 `~/.local/share/spacemit-manipulation/site/`。
+
+## 配置文件与生效方式
+
+| 文件 | 作用 |
+| --- | --- |
+| `SITE/dice_arena/config.json` | 现场配置，游戏运行时读取的唯一副本 |
+| `game/backend/config.json` | 安装默认值，`mm` 安装到 `share/dice_arena/game/backend/config.json` |
+
+- `dice-arena serve` 启动时，若现场配置不存在，则从安装默认值复制一份；启动时打印 `game configuration: <路径>`。
+- 后端通过环境变量 `DICE_ARENA_CONFIG` 读取现场配置。重新安装不覆盖现场配置；修改安装默认值只影响新生成的现场配置。
+- 直接编辑现场配置，保存后自动重载。内容无效时保留上一份有效配置，服务输出 `[arena] keep last good config: ...`。
+- `providers.tts_local` 在服务启动时确定，修改后需重启 `dice-arena serve`；其余字段的生效时机见字段说明。
+- 恢复默认值时，停止 `dice-arena serve`，删除现场配置后重新启动：
+
+```bash
+rm "$HOME/.local/share/spacemit-manipulation/site/dice_arena/config.json"
+dice-arena serve
 ```
 
 ## 字段说明
 
-| 字段 | 当前值 | 说明 |
-|---|---|---|
-| `schema_version` | `1` | 固定值 |
-| `providers.tts_local` | `tts_moss_nano` | 本地 TTS 引擎槽位（台词 `mode: tts_local` 走这里）。合法值：`tts_matcha`（轻量，≈240–360 MB）/ `tts_moss_nano`（默认）/ `tts_qwen3`；**启动时钉死 + 强制预热（失败拒启）**。分发主包同时带 MOSS 与 Matcha 两套引擎资产，这两者互换不必再补文件（`tts_qwen3` 的模型不在包里） |
-| `providers.tts_remote` | 未配置（SDK 未包含远程 TTS；骰子台词全部为 `tts_local`） | 远程 TTS 引擎槽位（`mode: tts_remote`） |
-| `providers.asr` | 未配置（SDK 未包含语音识别引擎，`asr_enabled: false`） | 语音识别引擎槽位（**全局唯一**：启用游戏覆盖必须与全局一致，否则启动拒绝/热加载拒换——引擎独占麦克风）。可选：`asr_sensevoice`（SenseVoice 非流式+VAD 断句，X100 通用核，待机≈0 CPU，端到端慢 ~0.5s）/ `asr_zipformer`（流式，EP 加速，待机 ~0.6 核）；**切换 = 改槽值 + 重启** |
-| `providers.vision_adjudicator` | `vision_yolov8_objdetect` | 视觉裁决器槽位（引擎选择在此；游戏语义的 vision_profile 仍在游戏 manifest） |
-| `providers.robot_arm` | `robot_arm_spacemit` | **机械臂槽位**（摇骰动作执行器）：SDK 中的实现为 `robot_arm_spacemit`（manipulation 框架 × Dice Arena 内部抓杯模块，应用配置为 `SITE/cup_application.json`）。槽缺失/坏槽位时机械臂命令返回失败 → 游戏走 `arm_failed` 兜底，**不炸回合**；游戏 manifest 可覆盖本槽（与 vision 同款优先级） |
-| `display` | 玩家左、Agent 右 | 两款游戏共用的网页视频与结果卡片方向，详见本文「屏幕方向」。 |
-| `games_enabled` | `dice→true`、`rps→true` | **游戏启停宏控**（2026-09-29）：按游戏 id 集中开关，客户现场只开一个游戏时用这里。**写了键就以本表为准**（压过游戏 manifest 的 `enabled`），没写的游戏回落 manifest 自己的值。关闭 = 前端列表**彻底不显示**该游戏卡片（不灰显），键盘/语音/点击均不可进入；`/api/games` 仍会列出（带 `enabled: false`，便于运维核对）。**热加载**：改值保存后刷新页面生效，无需重启 |
-| `input_board_enable` | `false` | **板端物理键盘和共享对局总开关**：true 时服务端直读 `/dev/input`（原生解析，零依赖），并通过共享会话统一处理板端按键、网页点击、网页键盘和语音输入。多个网页订阅同一个 `/api/session/stream`，共享同一选中游戏、`round_id`、状态、结果和进度；并发确认只创建一个回合，刷新或关闭单个网页只断开显示，不会取消其他网页的回合。每条语音按 `round_id + directive_id` 只合成一次，板端默认扬声器和远程网页共同播放；远程网页静音或自动播放被拦截不会推进后端状态，板端播放失败时前端静默，游戏继续。全部网页断开后保留 45 秒重连宽限。false 时保留原有网页独立控制模式。热加载（监督线程 2s 轮询读取线程；正在运行的共享回合在返回大厅后应用开关变化）。前置条件：`spacemit` 加入 `input` 组（`sudo usermod -aG input spacemit`，一次配置）；**服务必须从具备 input 组的会话启动**——usermod 之后新开的 ssh/终端都行，老的桌面会话要先注销重登，否则读取器报无权限（health 的 `board_input.permission_denied` 可查）；`/api/health` 的 `board_input` 和 `shared_audio` 段可查设备、权限、最近按键及板端播报状态 |
-| `voice` / `speed` | `default` / `1.0` | TTS 默认音色/语速（游戏 manifest 与单条台词可逐级覆盖） |
-| `video.webrtc_base_url` | `http://127.0.0.1:8889` | **浏览器实时画面的 WebRTC 基址**（板子 IP + mediamtx 端口；`http(s)://主机:端口`，不许带路径/查询）。2026-10-09 从各游戏 `adjudicator_config.json` **上浮**——板子 IP 是部署属性、与游戏无关，所有游戏共用一份；游戏 manifest 的 `vision_profile.video.webrtc_base_url` 声明了则覆盖本值（例外场景）。**热加载**且不参与视觉 runtime 签名：改完保存，下一局起浏览器画面 URL 即用新值，**摄像头进程不重建**（这正是上浮的动机——原先住在 runtime 配置里，改个 IP 也会触发 runtime 拆建）。客户现场把板子接到局域网时改这里（浏览器与本机同板用默认回环即可） |
-| `asr_enabled` | `true` | **语音输入总闸，也是唯一开关**：true 时 ASR 引擎开机常驻预热（与本地 TTS 预热并行，失败拒绝启动）；false 时引擎不拉起、语音输入全部失效，运行期翻闸由下次路由切换懒恢复。游戏 manifest 不再参与这个决定（`asr.enabled` 已移除，残留的键会被静默忽略） |
-| `vision_always_on` | `true` | **视觉推流生命周期**。无论取值如何，**进入游戏（创建回合）时**都会以 prewarm 模式拉起视觉 runtime——摄像头和 RTSP 立即就绪、检测器会话一并载入，但**不跑推理**（裁决阶段才发 `START_ADJUDICATION`）。本开关只决定这条流**什么时候结束**：`true` = 不设拆除者，跨回合、跨游戏常驻到进程退出；`false` = 跟随游戏生命周期，回合进入终态（`exited`/`cancelled`/`error`）即停流。**每回合开始时读取**：改 `true→false` 从下一局结束生效，`false→true` 从下一局开始生效。缺省 `true`（既有部署行为不变）。注意「再来一局」在同一回合内，不触发拆除 |
-| `robot_home_patrol` | `true` | **空闲姿态巡检总开关**（2026-09-24 归位不变量的巡检档）：true 时后台每周期探一次机械臂是否在 home 手势（`query_pose` 只读探针），**探测到不在 home 且桌面无 running 回合、无活跃裁决**才执行归位。补的是事件驱动归位（终态/失败页/开机）覆盖不到的位移：现场掰臂、归位失败残留、断电后被摆走。探针失败/常驻死亡一律不猜不动；`false` = 完全不巡检（行为与纯事件驱动一致）。**热加载**（每周期现读） |
-| `robot_home_patrol_seconds` | `30` | 巡检周期秒（生效下限 0.05，缺省 30）。注意每轮探针走一次 CAN 只读查询——周期别调太密，总线忙时（见 LOWER 超时前科）会添负担 |
-| `standby.enabled` | `true` | 待机页功能总开关（false = 永不待机） |
-| `standby.idle_seconds` | `120` | 游戏列表页空闲多少秒进入待机（5~3600，热加载） |
-| `standby.boot_standby` | `true` | **刷新页面默认进待机页**（true）或游戏列表（false） |
-| `standby.wake_phrases` | `游戏`/`你好`/`开始游戏`/`hello`/`wake up`/`start the game`（中英混排） | 待机页**语音唤醒词**：待机时服务端单独开麦监听，说到任一唤醒词即唤醒回列表（唤醒只回列表不进游戏；游戏名词优先于唤醒词；按键/触摸唤醒始终可用）；不配置则纯按键唤醒 |
-| `game_select.phrases` | `dice→["摇骰子", "骰子", "dice"]` | **语音选游戏词表**（列表页/待机页点名游戏直达对局，中英皆可）：按游戏 id 显式声明触发词；**未声明的游戏不参与语音选择**。游戏列表是部署面——词表在这里，不在游戏 manifest（热加载） |
-| `game_select.confirm_phrases` | `["进入游戏", "玩这个", "play this", "enter the game", …]`（中英混排） | **语音确认进入**（仅列表页）：上下键/点选高亮某个游戏后，说出这些词即进入**当前选中的**游戏，等同绿色确认键。匹配优先级：游戏名 > 确认词；待机页不生效（那里没有选中态）；空/缺省 = 关闭该功能（热加载） |
+默认值为 `game/backend/config.json` 中的值。
 
-## 优先级阶梯（全局是默认层，越靠近使用点优先级越高）
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `schema_version` | `1` | 固定为 `1` |
+| `games_enabled` | `{"dice": true}` | 按游戏 id 启停，优先于游戏 manifest 的 `enabled`；未列出的游戏使用 manifest 的值。停用的游戏不在网页列表显示，也不能进入。刷新网页后生效 |
+| `providers.tts_local` | `tts_moss_nano` | 本地语音合成组件，台词 `mode: tts_local` 使用。所有启用游戏只能引用同一个本地语音组件，否则服务拒绝启动。修改后重启 `dice-arena serve` |
+| `providers.vision_adjudicator` | `vision_yolov8_objdetect` | 视觉裁决组件，下一次裁决生效 |
+| `providers.robot_arm` | `robot_arm_spacemit` | 机械臂组件，读取 `SITE/cup_application.json`（由 `dice-arena configure` 生成）。未配置或组件不可用时机械臂命令返回失败，按状态机的失败路由处理 |
+| `providers.tts_remote`、`providers.asr` | 未配置 | 远程语音合成与语音识别槽位；SDK 未包含对应组件 |
+| `voice` | `default` | 默认音色；`default` 表示使用语音组件配置的音色 |
+| `speed` | `1.0` | 默认语速；`tts_moss_nano` 仅支持 `1.0` |
+| `video.webrtc_base_url` | `http://127.0.0.1:8889` | 浏览器播放实时画面的 WebRTC 地址（主机与 MediaMTX 端口），格式为 `http(s)://主机:端口`，不含路径和查询。从其他设备访问网页时改为 K3 的局域网地址。下一次进入游戏生效，不重建识别进程 |
+| `asr_enabled` | `false` | 语音输入总开关。为 `true` 且配置 `providers.asr` 时，服务启动前预热语音识别组件，预热失败则拒绝启动 |
+| `vision_always_on` | `false` | 识别视频流的生命周期。进入游戏时总是启动摄像头与推流（不推理）；`false` 时回合结束（退出、取消或出错）后停止，`true` 时保持到服务退出。每个回合开始时读取 |
+| `standby.enabled` | `true` | 启用待机页 |
+| `standby.idle_seconds` | `120` | 游戏列表页空闲多少秒进入待机，范围 5～3600。共享会话中，停在 `rules`、`ready`、`result`、`analysis_failed`、`arm_failed` 且无播报的回合空闲同样时长后结束，返回游戏列表 |
+| `standby.boot_standby` | `true` | 打开网页时先显示待机页；`false` 时显示游戏列表 |
+| `standby.wake_phrases` | `游戏`、`你好`、`在不`、`开始游戏`、`hello`、`wake up`、`start game`、`start the game` | 待机页语音唤醒词，命中后回到游戏列表；按键和触摸唤醒始终可用 |
+| `game_select.phrases` | `dice`：`摇骰子`、`骰子`、`dice` | 按游戏 id 声明的语音选游戏词，在游戏列表页和待机页命中后直接进入该游戏，优先于唤醒词；未声明的游戏不能语音选择 |
+| `game_select.confirm_phrases` | `进入游戏`、`玩这个`、`进入这个游戏`、`开始这个游戏`、`play this`、`enter the game`、`enter this game`、`start the game`、`start this game` | 游戏列表页进入当前选中游戏的语音词，等同绿色键；空列表表示关闭 |
+| `display.player_side` | `RIGHT` | 网页上玩家所在一侧，见[屏幕方向](#屏幕方向) |
+| `display.video_rotation_deg` | `{"dice": 0}` | 各游戏源画面转为玩家在左所需的网页顺时针旋转角度，取 `0`、`90`、`180`、`270`；未列出的游戏为 `0` |
+| `input_board_enable` | `true` | 板端键盘与共享会话开关，见[板端键盘与共享会话](#板端键盘与共享会话) |
 
-| 参数 | 高 → 低 |
-|---|---|
-| provider 槽位 | 台词级钉死 `provider` 字段 > 游戏 manifest 槽位 > **全局** |
-| voice / speed | 台词动作字段 > 游戏 manifest > **全局** |
-| WebRTC 画面基址 | 游戏 manifest `vision_profile.video` > **全局 `video.webrtc_base_url`**（adjudicator_config.json 中的同名键已随上浮移除，仅作历史兼容回退） |
-| 语音开关 | **全局 `asr_enabled`**（唯一来源，游戏 manifest 不参与） |
-| 推流生命周期 | **全局 `vision_always_on`**（唯一来源，游戏 manifest 不参与；仅决定何时停，启动时机固定为进游戏） |
+`standby.wake_phrases` 和 `game_select` 词表需要语音识别组件并开启 `asr_enabled` 才生效。
+识别文本去除空格、转为小写后按子串匹配。
 
-游戏 manifest 不写某槽位即继承全局——骰子游戏现已完全依赖全局槽位；需要例外时在游戏 manifest 里覆盖对应槽位即可。
+## 屏幕方向
 
-## 生效方式（重要）
+- 识别使用源画面坐标：玩家固定在 `LEFT`，机械臂固定在 `RIGHT`，与屏幕显示方向无关。
+- `player_side: "LEFT"`：网页显示玩家在左、机械臂在右。
+- `player_side: "RIGHT"`：网页显示玩家在右、机械臂在左，视频在 `video_rotation_deg` 的基础上再旋转 180°，结果卡片同步换位。
+- 显示方向只影响网页视频和结果卡片，不改变识别区域、点数归属和胜负播报。
+- 修改后重新进入游戏生效，进行中的回合保持原显示。
 
-- **文件本身热加载**（mtime 检测，坏配置保留最后可用版本），影响下一个回合。
-- **`vision_always_on` 无钉死问题**：每个回合开始时读取，改完保存即可，下一次进游戏就用新值。
-- **例外——本地 TTS 引擎**：启动时解析一次并**钉死整个进程生命周期**。运行期改 `tts_local`（或游戏覆盖）不会切换引擎，只打漂移日志——切换本地 TTS 必须 `stop_web.sh && start_web.sh`。远程 TTS / ASR / 视觉槽位无进程钉死问题，热加载正常生效。
-- **唯一性约束（全面封口）**：引用面（全局槽位 + 各启用游戏槽位 + **台词级 `provider` 钉死**）出现**多个不同的本地 TTS 引擎**时，后端拒绝启动；manifest 热加载时同样拒换（保留最后可用配置）。本地引擎是重量常驻进程，一台演示机只跑一个；远程引擎按句混用不受限。
-- **本地引擎强制预热**：被 pin 的引擎在 HTTP 开监听前完成拉起+预热（tts_matcha 约 3.5 秒），失败即拒绝启动——不会带着哑巴语音上场。
-- 改引擎内部参数（地址/模型/VAD 等）仍去组件各自的 `config.json`，改后重启。
+## 板端键盘与共享会话
 
-## 切换引擎操作示例
+`input_board_enable: true` 时：
 
-```bash
-# 例：本地 TTS 从 MOSS 换到 Qwen3
-# 1. 改 backend/config.json 的 providers.tts_local 为 "tts_qwen3"
-# 2. 重启（本地 TTS 需重启；同时会停旧引擎起新引擎）
-scripts/stop_web.sh && scripts/start_web.sh
-```
+- 服务直接读取 `/dev/input/event*` 的按键：Enter 为绿色确认，Esc 为红色返回，↑ 为黄色，↓ 为蓝色。
+- 运行服务的用户须属于 `input` 组，加入后重新登录：`sudo usermod -aG input "$USER"`。
+- 板端按键、网页点击、网页键盘和语音输入进入同一个共享会话。所有网页通过 `GET /api/session`、`GET /api/session/stream` 和 `POST /api/session/actions` 共享选中游戏、回合状态和结果；并发确认只创建一个回合。
+- 刷新或关闭单个网页不取消回合；全部网页断开 45 秒后结束回合。
+- 台词由服务合成，经板端默认 PipeWire 输出播放，同时发送给网页播放；网页静音或播放失败不影响游戏进度。
+- 待机页的第一次按键只唤醒到游戏列表；之后方向键选择游戏，绿色键进入。
+- `dice-arena status` 输出中的 `board_input` 和 `shared_audio` 显示设备、权限与板端播放状态。
 
+`input_board_enable: false` 时，服务不读取板端按键，各网页直接创建回合，同一时间只保留最新创建的回合。
 
-## 屏幕方向：两款游戏共用的显示配置
+修改该开关后，服务在 2 秒内启停按键读取；共享会话模式在当前回合结束、返回游戏列表后切换。
 
-编辑本目录 `config.json`：
+## 优先级
 
-```json
-"display": {
-  "player_side": "LEFT",
-  "video_rotation_deg": { "dice": 0, "rps": 0 }
-}
-```
-
-- `player_side: "LEFT"`：默认玩家左、Agent 右，适用于摇骰子和猜拳的视频、点数/手势结果卡片。
-- 场地屏幕从另一侧观看时，改为 `"RIGHT"`：玩家右、Agent 左。网页视频在基准方向上额外旋转 180°，结果卡片同步换位。
-- `video_rotation_deg`：各游戏源视频转到「玩家左」所需的**网页顺时针旋转角度**，仅允许 0、90、180、270。当前两款游戏源画面均为玩家左、Agent 右的横屏，用 0。现场只切换观看方向时无需修改这两个角度。没有配置该游戏的角度时为 0。
-- 保存后返回游戏列表并重新进入游戏生效，无需重启服务；正在进行的一局维持原显示配置。首次更新网页代码后请强制刷新一次。后端接口 `/api/games` 的每款游戏 `display` 字段包含最终显示方向与旋转角度，前端统一消费。
-- `display.player_side` 是两款游戏唯一的左右顺序配置；全局配置与游戏 manifest 无需填写 `participants`。后端自动生成蓝色玩家区 `LEFT`、红色机械臂区 `RIGHT` 的检测映射，历史残留的角色映射不会覆盖它。接口中的 `participants` 是内部生成的结果校验数据，不是另一个配置入口。
-- 改显示方向只调整视频和完整结果卡片的位置，不改变检测 ROI、推理旋转、点数/手势归属和胜负播报。猜拳仍只检测蓝色区域的人手，Agent 手势来自机械臂指令。
-- 旧部署不配置 `display` 时，保留原来的源画面方向和由 `participants` 决定的卡片位置。
-
-
-## 猜拳口令与出拳调度
-
-SDK 未包含猜拳游戏（`backend/games/rps`）；以下为原游戏的说明。`preparing` 状态串行完成 HOME 检查和 `rps-ready`，收到成功回执后进入 `play`。失败进入裁决诊断流程，不播口令、不继续亮拳。`play` 同时发出 `throw_gesture(prepared=true)` 和口令 WAV，出拳不会等口令结束，也不再重复预备动作。
-
-机械臂动作参数在抓杯应用的 `algorithms/configs/actions/gestures/rps.json`：
-- `arm_delivery: "controller_endpoint"`：NERO `MoveJ` 单次发送固定关节目标，由控制器规划运动；不是 `MoveJS` 大幅瞬时跳点。限位、反馈、新鲜度、路径包络、到位与超时检查仍保留。
-- `speed_percent: 100`、`finger_speed_mode: "max"`：当前配置的臂/手最大速度档位；实际速度仍受控制器限制。
-- 三种拳形的 `execution.delay_s: 0.9`：从伸臂命令发出起延迟 0.9 秒成形，伸臂先进行。`rps-ready` 的手指延迟为 0。现场可按口令/音频播放延迟微调，不能视为音素级硬实时同步。
-- `arm_delivery: "smooth_profile"` 可切回原有上位机平滑插值的 `MoveJS`；其他动作默认仍使用该模式。
-
-猜拳源流直接发布横屏，`rotate.enabled=false`；`inference_rotate` 和 `inference_roi` 保持原有检测设置。网页 `display.video_rotation_deg.rps=0`，与摇骰子一致；切换观看方向仍只改 `display.player_side`。
-
-
-## 旧大厅接口兼容（2026-10-13）
-
-`GET /api/games` 的 `board_input` 返回 `local_client`、`enabled`、`available`。`local_client` 使用 HTTP 连接的来源与服务端地址判断：回环或来源地址等于连接的服务端地址时视为本机，不使用 Host、转发头或浏览器自报地址。经过反向代理时按代理到后端的连接地址判断。
-
-旧 `POST /api/input/board/selection` 接口仍接受 `{"game":"dice"}`，成功返回相同 `game`。仅本机请求可使用该兼容接口；远程请求返回 `403 / BOARD_SELECTION_LOCAL_ONLY`，未知或禁用游戏不能覆盖已有选择。共享模式下，有效选择会更新统一会话；新网页统一使用下节的会话操作接口，远程选择也会同步到全部网页。
-
-原有 select/standby SSE 保留给旧模式。共享模式中网页不再启动或停止这些全局监听，也不清空事件历史；每页只使用一条共享会话 SSE 接收大厅和局内更新。
-
-## 多网页共享会话（2026-10-13）
-
-共享待机页的第一次实体按键只用于唤醒到游戏列表：绿色、红色、向上、向下都不会在同一次按压中建局或改变选中项。进入列表后，方向键选择游戏，再按绿色确认进入。
-
-`input_board_enable=true` 时使用共享会话接口：`GET /api/session` 获取当前快照，`GET /api/session/stream` 接收大厅和回合状态，`POST /api/session/actions` 提交选择、进入、局内意图和明确退出。旧 `/api/game/rounds` 与 `/api/game/rounds/<id>/intents` 入口仍兼容，但共享模式下会转发到当前会话，不能再创建第二个回合。网页关闭、刷新只断开订阅；明确退出、统一空闲超时，或全部网页断开且 45 秒内无人重连时结束回合。
-
-共享语音由后端缓存并分发：板端默认 PipeWire 输出负责推进唯一的 `speech_started`/`speech_done` 回执，网页只播放和显示，不提交语音回执。网页自动播放被浏览器拦截时使用“点击启用声音”恢复当前台词；网页静音不会影响板端扬声器或游戏状态。语音生成或播放失败时前端不弹提示，后端按音频时钟继续游戏，细节只保留在日志和健康状态中。
+| 参数 | 优先级（高 → 低） |
+| --- | --- |
+| 组件槽位 | 台词的 `provider` 字段 > 游戏 manifest 的 `providers` > 全局 `providers` |
+| `voice`、`speed` | 台词字段 > 游戏 manifest > 全局配置 |
+| WebRTC 地址 | 游戏 manifest 的 `vision_profile.video.webrtc_base_url` > 全局 `video.webrtc_base_url` > 识别进程配置的 `video.webrtc_base_url` |
+| 语音输入开关 | 仅全局 `asr_enabled` |
+| 视频流生命周期 | 仅全局 `vision_always_on` |

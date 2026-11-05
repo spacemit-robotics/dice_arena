@@ -1,214 +1,166 @@
-# 摇骰子游戏（dice）manifest 参数说明
+# 摇骰子游戏参数
 
-`backend/games/dice/manifest.json` 是这个游戏唯一的游戏层配置入口（JSON 不支持注释，本文档就是它的注释）。改参数前先看第 8 节的**生效方式速查**——有的保存即生效，有的要重启。
+`game/backend/games/dice/manifest.json` 定义摇骰子游戏的基本信息、语音触发词、视觉裁决参数和状态机。
+识别进程的模型、检测参数、摄像头与推流在 `game/backend/games/dice/adjudicator_config.json`，见 [视觉裁决组件参数](../../components/vision_yolov8_objdetect/parameters.md)。
+全局设置见 [全局配置参数](../../parameters.md)。
 
-校验兜底：manifest 写坏（JSON 语法错 / 校验不过）时，后端**保留最后一份可用配置**继续跑，日志里打 `[games] skip ...`，不会让游戏消失。
+## 生效方式
 
----
+在源码中修改后，从 SDK 根目录执行 `source build/envsetup.sh`，再安装：
 
-## 1. 游戏基本信息
+```bash
+cd application/native/dice_arena
+mm
+```
 
-| 字段 | 当前值 | 说明 |
-|---|---|---|
-| `id` | `dice` | 游戏 ID，必须与目录名一致（`backend/games/dice/`），加载时强校验 |
-| `name` | `摇骰子` | 游戏选择页显示名 |
-| `icon` | `🎲` | 选择页图标。用彩色 emoji，别用 `⚄` 这类骰子面字符——后者走文字呈现，渲染成黑白字形，和旁边 `✊` 这类彩色 emoji 并排会像两套图标 |
-| `description` | `双方各 5 颗 · 比较点数总和` | 选择页副标题 |
-| `enabled` | `true` | `false` = 不出现在游戏列表（不是删除） |
+- 服务按修改时间自动重载安装后的 manifest，无需重启 `dice-arena serve`。
+- 状态机、台词和触发词在新建回合时生效；进行中的回合（含「再来一局」）沿用创建时的配置，返回游戏列表后重新进入即使用新配置。
+- `vision_profile` 在下一次裁决时读取。
+- 校验失败的 manifest 不替换已加载的配置，服务输出 `[games] skip ...` 和 `[games] reload skipped ...`；服务启动时 manifest 无效则不加载该游戏。
+- 游戏音频放在 `game/backend/games/dice/audio/`，同样由 `mm` 安装。
 
-## 2. providers（组件槽位）—— 可选，不写即继承全局
-
-引擎选择已上收到**全局配置** `backend/config.json`（字段说明见 `backend/parameters.md`），骰子 manifest **不再声明槽位**。需要例外时（某游戏想用不同引擎）在本 manifest 覆盖对应槽位，优先级：台词级钉死 > 本 manifest > 全局。
-
-| 槽位 | 当前全局值 | 用途 |
-|---|---|---|
-| `vision_adjudicator` | `vision_yolov8_objdetect` | 视觉裁决器（纯 YOLO 检测判胜）；引擎选择在全局，游戏语义的 `vision_profile` 在本 manifest |
-| `tts_local` | `tts_moss_nano` | 本地 TTS 槽（台词 `mode: tts_local` 走这里） |
-| `tts_remote` | 未配置 | 远程 TTS 槽（`mode: tts_remote`）；SDK 未包含远程 TTS，台词全部走本地 |
-| `asr` | 未配置 | 语音输入（识别引擎）；SDK 未包含 |
-
-注意：本地 TTS 引擎全局唯一且启动时钉死（运行期不可切换）；换引擎 = 改全局配置 + `stop_web.sh && start_web.sh`。
-
-## 3. asr（语音输入）
-
-**开关不在本 manifest**：是否启用语音由全局配置 `backend/config.json` 的 `asr_enabled` 唯一决定（详见 `backend/parameters.md`）；本 manifest 只声明这个游戏的触发词表。
-
-| 字段 | 说明 |
-|---|---|
-| `asr.phrases` | 意图 → 触发词表。**键必须是本状态机里声明过的意图名**（拼错会在加载时报错），内置意图 `speech_done` 不可映射。**每个可按键触发的意图都应有词表**（有契约测试守护）；同一触发词可挂多个意图（如"确定"同时挂 confirm 和 start_shake），桥接按声明顺序逐个尝试、由当前状态决定哪个生效——一词随游戏阶段自动适配 |
-
-匹配与生效规则：
-
-- **匹配方式**：识别文本去空格、转小写后做**子串匹配**——说"那我就确认了"也能命中"确认"。选词避免日常高频词（如 OK 会命中 coke/joke 等英文串，且口语常见，易误触发）。
-- **词表含英文触发词**：中英混排（confirm=确认/yes/got it、start_shake=开始/start/begin/go、new_round=再来一局/next round/play again、back=返回/back/exit 等）。英文同样按去空格小写子串匹配；注意 `go` 是高频子串（good/going 都会命中），只挂在 start_shake，误触发说 stop/停止 即可停。
-- **播报闸**：TTS 播报期间说的触发词被忽略（防止游戏自己的播报触发自己）。想跳过播报直接转状态就用按键。
-- **生效时机**：`phrases` 热加载（开关见全局 `asr_enabled`），但**下一个回合创建时**才用新值——正在跑的一局、以及结算页"再来一局"（同一回合内跳转）都沿用创建时的快照。退回选择页重进（或刷新页面）即开新回合。
-- **语音选游戏（列表页/待机页）**：常驻引擎上的第三块路由。**词表在全局配置 `backend/config.json` 的 `game_select.phrases`（按游戏 id 声明，当前 `dice: ["摇骰子", "骰子"]`）——游戏列表是部署面，manifest 不管这件事**。列表页轮询 `/api/asr/select/events`，命中走与绿色按钮同一条进对局路径；待机页唤醒词与游戏词并存，**游戏词优先**（唤醒词"游戏"是"摇骰子游戏"的子串，点名句必须选游戏而非回列表）。进对局后由回合路由自动顶掉，宣报闸保证规则宣报不会误触发选择。
-- 识别引擎参数（麦克风设备、VAD 灵敏度等）不在这里，在 `backend/components/asr_sensevoice/config.json`（改后重启）。
-
-## 4. voice / speed（TTS 默认参数）—— 可选，默认继承全局
-
-默认值在全局配置 `backend/config.json`（当前 `voice: "default"`、`speed: 1.0`）。本 manifest 可顶层覆盖，单条 speech 动作可再覆盖——三层阶梯：台词 > 游戏 manifest > 全局。实际效果取决于 provider：MOSS 固定克隆音色且只支持 1.0；GPT-SoVITS 支持速度 0.5~2.0 与服务端注册音色名。
-
-## 5. vision_profile（视觉裁决）
-
-`schema_version: 1` 固定；`game_id` 必须等于游戏 `id`。
-
-| 顶层字段 | 当前值 | 说明 |
-|---|---|---|
-| `runtime_config` | `backend/games/dice/adjudicator_config.json` | **dice 专属的 C++ runtime 硬件配置**（仓库相对路径，**必填**——共享部署默认已于 2026-09-20 删除）。路径必须留在仓库内，读不到会直接报错 |
-
-> **这是"每个游戏各写一份"的裁决参数入口**（2026-09-15 起多游戏架构）。本节所有字段都
-> 属于**这个游戏**，与别的游戏互不影响。
-> **dice 的硬件配置独立**：`runtime_config` 指向 `backend/games/dice/adjudicator_config.json`
-> （共享默认文件已删除，`runtime_config` 是必填项）。硬件文件是**整份替换、不做字段级合并**：
-> 里面没写的键会回落到 C++ 编译期默认值，要加字段请整份补齐。声明的路径是**强制**的：读不到
-> 会直接报错，不会静默起 runtime。
-> 改本节任一字段保存后**下一回合自动重建 resident runtime 生效**；硬件文件改动同样即时生效。
-> 切换游戏必然重建一次 runtime——共用同一个摄像头，不允许两个 runtime 同时存在。接入新游戏的
-> 完整清单见仓库根 `FRAMEWORK_DISPATCH.md` 的 §3.3。
-
-### vision（检测）
-
-> **模型与检测参数已迁至 `backend/games/dice/adjudicator_config.json`**（2026-09-20）：
-> `model`/`conf`（检测阈值）/`stable_frames`（稳定帧数）/`divider_detection`（分界线检测）
-> 都是 C++ runtime 消费的参数，住在那个文件里；manifest 写这些键会被校验器拒载。
-> 本节只剩 Python 规则引擎消费的游戏语义。
+## 1. 基本信息
 
 | 字段 | 当前值 | 说明 |
-|---|---|---|
-| `class_map` | `0→1 … 5→6` | YOLO 类别 ID → 骰子点数（Python 规则引擎消费，故留在 manifest） |
-| `participants` | `["LEFT","RIGHT"]` | 画面两侧标签 |
-| `expected_count` | `5` | 每方期望骰子数，不足时诊断 `INCOMPLETE_OBJECTS`（provider 与 runtime 双消费，故留在 manifest） |
-| `grouping` | `divider_regions` | 骰子归属左右的方式：`divider_regions`（按分界线）/ `x_midpoint`（按画面中线） |
-| `divider.position` | 未设置（≈0.5） | **仅在当帧未定位到分界线时的兜底切分比例**，不是常规切分位置；`divider.orientation` 同理（缺省 `vertical`）。正常判分依赖检出的接缝，无需为此调参 |
+| --- | --- | --- |
+| `id` | `dice` | 游戏 id，须与目录名一致 |
+| `name` | `摇骰子` | 游戏列表显示名 |
+| `icon` | `🎲` | 游戏列表图标 |
+| `description` | `双方各 5 颗 · 比较点数总和` | 游戏列表副标题 |
+| `enabled` | `true` | 是否启用；全局 `games_enabled` 声明了该游戏时以全局为准 |
 
-> 稳定帧门控的完整判据（分界线定位 + 每侧恰好 `expected_count` + 分侧点数与上帧一致）见
-> `adjudicator_config.json` 的 `stable_frames`；分界线检测的“配置配色优先、黑线回退”语义（`divider_colors` 可选 `red_blue` 或 `green_gray`）
-> 见组件参数说明的 `divider_detection` 行——这两个键现在住在 `adjudicator_config.json`。
+`providers`、`voice`、`speed` 未声明，使用全局配置。声明后覆盖全局值，单条台词可再覆盖。
 
-### multi_view（多机位，当前关闭）
+## 2. asr（语音触发词）
 
-`enabled: false`；开启时 `min_views` 要求最少机位数，`yolo_fusion: majority_vote` 为多视角多数票融合（平票 = 无赢家）。
+`asr.phrases` 把状态机意图映射到触发词。键须是状态机 `on_intent` 中声明的意图，词表非空且不重复。
 
-### rule（胜负规则）
+| 意图 | 触发词 |
+| --- | --- |
+| `confirm` | `确认`、`确定`、`OK`、`明白了`、`准备好了`、`yes`、`confirm`、`got it`、`start` |
+| `start_shake` | `开始`、`确定`、`start`、`OK`、`begin`、`go` |
+| `repeat` | `重复`、`再来一遍`、`再听一次`、`repeat`、`again`、`say it again`、`one more time` |
+| `retry` | `重试`、`重新`、`重新来一遍`、`retry`、`try again`、`again` |
+| `new_round` | `再来一局`、`再来一句`、`下一局`、`下一句`、`next round`、`play again`、`new round`、`one more round`、`one more game` |
+| `back` | `返回`、`退出`、`back`、`go back`、`exit`、`quit` |
 
-`kind: numeric_compare` + `aggregation: sum`：双方点数求和比大小；`higher_wins: true` 大者胜；`tie_value: TIE` 平局输出值（**平局是算术事实，LLM 也无法推翻**）。
+- 识别文本去除空格、转为小写后按子串匹配。
+- 同一个词可对应多个意图，由当前状态接受的意图生效。
+- 台词播放期间的识别结果被忽略。
+- 语音输入由全局 `asr_enabled` 和 `providers.asr` 决定；SDK 未包含语音识别组件。
 
-### llm（已移除）
-
-**2026-09-30 起本节整体移除**：LLM 大模型复核链（组件、配置段、复核/复问判定）已全部删除，裁决为纯 YOLO 单出口（`decision_source` 恒 `yolo_only`，平局=YOLO 判 TIE）。**manifest 写回 `llm` 段会在加载期被拒载该游戏**（含 `diagnosis_*` 旧键同理）。失败诊断仍由本地规则产生（四原因码不变）。
-
-### video（浏览器画面）
-
-`enabled: true` + `path: /dice/`（2026-09-24 PiP 常驻起两游戏都翻开，用户拍板）：进游戏建局即收到 video 事件，画面以**右上角小窗常驻**（贯穿局内全部状态），进裁决页**展开居中**，退出游戏消失——纯显示层，摄像头生命周期仍由全局 `vision_always_on=false` 管（随游戏、退出释放）。WebRTC 基础地址在全局 `backend/config.json` 的 `video.webrtc_base_url`（2026-10-09 上浮，改 IP 热生效且不重建摄像头进程）。`protocol` 字段为历史保留。
-
-### lifecycle（节奏）
-
-| 字段 | 当前值 | 说明 |
-|---|---|---|
-| `pre_adjudication_wait_seconds` | `0` | 进入裁决前等待（秒），范围 0~300（2026-09-24 用户板端调为 0——摇完喊停即裁决） |
-| `post_result_hold_seconds` | `0` | 结果画面保持时长（秒），范围 0~300（同上批调为 0） |
-
-### timeouts（预算熔断）
+## 3. vision_profile（视觉裁决）
 
 | 字段 | 当前值 | 说明 |
-|---|---|---|
-| `yolo_detection_seconds` | `8` | YOLO 稳定观测预算，超时走诊断流程。必须容得下 `stable_frames` 个有效帧（分界线缺席的帧不计入，故比理论帧率算出的时间要宽） |
-| `adjudication_seconds` | `30` | **整次裁决的总预算**（惰性熔断，超时终止并诊断） |
+| --- | --- | --- |
+| `schema_version` | `1` | 固定为 `1` |
+| `game_id` | `dice` | 须与游戏 `id` 一致 |
+| `runtime_config` | `backend/games/dice/adjudicator_config.json` | 识别进程配置文件，必填；路径相对 `game/`（安装后为 `share/dice_arena/game/`），不能为绝对路径或含 `..` |
+| `vision.class_map` | `"0"`→`"1"` … `"5"`→`"6"` | 模型类别 id 到骰子点数 |
+| `vision.participants` | `["LEFT", "RIGHT"]` | 源画面左右两侧；玩家为 `LEFT`，机械臂为 `RIGHT` |
+| `vision.expected_count` | `5` | 每侧骰子数；稳定观测中任一侧数量不符时裁决失败 |
+| `vision.grouping` | `divider_regions` | `divider_regions` 按识别进程检出的分界线分左右；`x_midpoint` 按画面中线 |
+| `vision.divider.position` | 未设置（`0.5`） | 当帧未检出分界线时的切分比例，范围 (0, 1) |
+| `vision.divider.orientation` | 未设置（`vertical`） | 兜底切分方向：`vertical` 或 `horizontal` |
+| `multi_view.enabled` | `true` | 多机位开关 |
+| `multi_view.min_views` | `1` | 裁决所需的最少稳定机位数 |
+| `multi_view.views` | 未设置 | 机位列表，每项含 `id`、`camera`、`video.path`、`video.enabled`；未设置时使用单机位 `default`，摄像头取 `adjudicator_config.json` 的 `camera` |
+| `rule.kind` | `numeric_compare` | 双方点数求和比较；可选 `higher_wins`（缺省 `true`）、`tie_value`（缺省 `TIE`） |
+| `video.enabled` | `true` | 向网页发送实时画面 |
+| `video.path` | `/dice/det` | 识别进程向 MediaMTX 推流的路径，也是网页播放路径。网页地址为全局 `video.webrtc_base_url` 加该路径，默认 `http://127.0.0.1:8889/dice/det` |
+| `lifecycle.pre_adjudication_wait_seconds` | `0` | 开始识别前的等待时间，0～300 秒，不计入裁决预算 |
+| `lifecycle.post_result_hold_seconds` | `0` | 得出结果后、进入 `result` 前保持实时画面的时间，0～300 秒 |
+| `timeouts.yolo_detection_seconds` | `8` | 等待稳定观测的时间，须容纳 `stable_frames` 个连续有效帧；超时后按最近画面生成失败诊断 |
+| `timeouts.adjudication_seconds` | `30` | 整次裁决的总预算 |
 
-## 6. state_machine（状态机）
+- `vision` 中不接受 `model`、`conf`、`confidence`、`stable_frames`、`divider_detection`，这些参数在 `adjudicator_config.json` 中配置，写入 manifest 时校验失败。
+- 多机位时各机位分别得出胜负，按严格多数确定结果；没有严格多数时回合以错误结束。
+- 裁决失败时进入 `analysis_failed`，失败原因为 `INCOMPLETE_OBJECTS`（数量不符）、`NO_OBJECTS_DETECTED`（未检出目标）、`SCENE_GEOMETRY_UNCLEAR`（分界线不清）或 `UNSTABLE_DETECTION`（检测不稳定）。
 
-`schema_version: 1`；`initial: rules` = 回合起点。悬空的 `to` 引用、不可达状态会在加载时报错。
+## 4. state_machine（状态机）
+
+`schema_version` 固定为 `1`，`initial` 为回合起始状态，当前为 `rules`。
+状态名匹配 `[A-Za-z0-9_-]+`。转换指向未声明的状态时 manifest 校验失败；不可达的状态只输出警告。
 
 ### 状态字段
 
 | 字段 | 说明 |
-|---|---|
-| `ui` | 只允许 `view`/`title`/`copy` 三个键。`view` 是前端视图名（`[a-z][a-z0-9_]*`，对应 index.html 的 data-view），`title`/`copy` 是页面标题与提示文案 |
-| `on_enter` | 进入状态时依次执行的动作序列（专用线程） |
-| `duration` | 计时器时长（秒），范围 (0, 300]；到期执行 `on_expire` |
-| `tick_seconds` | 计时器节拍（秒），范围 (0, 60]。前端按 `ceil(剩余/tick)` 渲染数字——摇骰前倒计时 2.4s÷0.8s = 三、二、一（2026-09-24 后这是唯一的屏幕倒计时；原摇后 `vision_countdown` 与开盖 `open_reveal` 已删） |
-| `on_expire` | 计时器到期的转换（必须与本状态 `duration` 同在） |
-| `on_intent` | 按键/语音意图 → 转换表。意图名 `[a-z][a-z0-9_]*`；`speech_done` 是内置回执意图，不可在此声明 |
-| `on_event` | 后端内部事件路由：`adjudication.result`（裁决成功）/ `adjudication.diagnosis`（诊断失败）/ **`robot.<command>.completed|.failed`**（机械臂命令完成，按命令命名路由到**完成时所在**状态——见下面 robot 动作） |
+| --- | --- |
+| `ui` | 仅 `view`、`title`、`copy`。`view` 为网页视图名，当前使用 `rules`、`ready`、`game_start`、`countdown`、`shaking`、`analysis`、`result`、`arm_failed`、`rehome` |
+| `on_enter` | 进入状态时按顺序执行的动作 |
+| `duration` | 计时秒数，范围 (0, 300]；`on_enter` 动作发出后开始计时，`await` 台词须先播放完成 |
+| `tick_seconds` | 计时节拍，范围 (0, 60]，缺省 1；网页按「剩余时间 ÷ 节拍」向上取整显示倒计时 |
+| `on_expire` | 计时结束时的转换，须与 `duration` 同时声明 |
+| `on_intent` | 意图到转换的映射。意图名匹配 `[a-z][a-z0-9_]*`；`speech_done`、`speech_started` 为播放回执保留 |
+| `on_event` | 内部事件到转换的映射：`adjudication.result`、`adjudication.diagnosis`、`robot.<command>.completed`、`robot.<command>.failed` |
 
-### robot 动作参数（2026-09-23 机械臂接入）
+### 转换
 
-`{"action":"robot","command":...}` 把机械臂动作挂进 `on_enter`。**禁 `await`**（物理动作
-天生后台执行，加载期校验拒绝）；执行器由全局 `providers.robot_arm` 槽位解析（见
-`backend/parameters.md`），缺槽/坏件 = 命令失败 → `arm_failed` 兜底，不炸回合。
+每个转换只能含以下一项：
 
-| 字段 | 说明 |
-|---|---|
-| `command` | 四选一：`grasp_cup`（识别+抓取**不摇**）/ `shake_dice`（摇+放杯+张手+归位一条链）/ `feedback`（胜负手势）/ `reset_home`（归位，best-effort） |
-| `timeout_seconds` | 可选，仅 grasp_cup/shake_dice 接受；总预算含进程死亡后的自动重启预热 |
-| `select_by` + `cases` | 仅 `feedback`：必须 `select_by: winner_role` 且三键齐，case 值 ∈ `win/lose/draw`（**机械臂视角**——PLAYER 赢 = 臂做 `lose`） |
+- `{"to": "<状态>"}`：进入指定状态。
+- `{"exit": true}`：结束回合，返回游戏列表。
+- `{"actions": [...]}`：停留在当前状态并播放其中的 `speech`，例如 `rules` 的 `repeat`。
 
-当前接线：**`game_start` 过场态**（2026-09-23 晚拍板）入口即刻下发抓取，屏显"游戏开始！"大字动画 + 臂进度行；**`duration` 就是过场秒数的唯一旋钮**（用户已调 2.0，热加载可调——抓取+抬杯链实测 4.2-4.6s，过场+2.4s 倒计时结束时臂已**举杯在空中**待命）；抓取只声明失败路由（提前完成不打断过场）。`shake_countdown` 只剩三二一口令，保留 grasp 失败路由兜底偶发偏慢；`shaking` 入口摇（完成/失败双路由，无定时无停止按钮）；`result` 播报后挂手势；`arm_failed`（蓝=重试→game_start/黄=人工模式/红=退出）与 `manual_shaking`（30s 兜底+停止按钮）为失败兜底。**离开 result 必先归位（rehome 过场态，2026-09-23 晚拍板）**：结果页「再来一局」→ rehome（下发 reset_home；完成/失败/6s 兜底三路都回 ready，事件驱动不等固定时长）；「返回列表」→ 服务端终态归位 watcher 兜底。**ready 刻意不挂任何 robot 动作**（2026-09-23 拍板）：归位挂在所有进 ready 的路径上会占臂锁 ~1.8s，玩家快点开始时抓取被迫排队、整个抓取动作会挪到 shaking 里才执行。机械臂命令由 `backend/components/robot_arm_spacemit` 交给 Dice Arena 内部抓杯模块执行。
+`on_intent` 的转换可加 `"after_speech": true`：当前状态 `on_enter` 台词播放完成前拒绝该意图。当前状态机未使用。
 
-### speech 动作参数
+### speech 动作
 
 | 字段 | 说明 |
-|---|---|
-| `mode` | 三选一：`audio`（读游戏目录 WAV）/ `tts_local` / `tts_remote` |
-| `audio` | `audio` 模式必填：游戏目录内**相对** .wav 路径（防目录穿越，不可绝对路径/`..`），如 `audio/停.wav` |
-| `text` | `tts_*` 模式必填；`audio` 模式可附作显示文本 |
-| `await` | `true` = 状态机等前端播完回执（`speech_done`）才继续；引擎 30 秒兜底防死等。**注意它会把本状态的 `duration` 计时器整体后推**（引擎先跑完 `on_enter` 再启动计时器），所以 `duration` 不是"本状态持续多久"而是"这句播完后再等多久"。骰子现状（2026-09-24）：唯一的 audio 台词是 `stop_call` 的 `停.wav`（**故意不 await**——摇完喊停的瞬间就交棒进裁决，语音与判定并行） |
-| `voice` / `speed` | 覆盖游戏级默认（见第 4 节） |
-| `provider` | 显式钉死某 provider（覆盖槽位路由），如某句强制用远程引擎 |
-| `select_by` + `cases` | `select_by: winner_role` 按裁决结果选台词，`cases` **必须覆盖 PLAYER/AGENT/TIE 三种**；case 内同样是 mode/text 等字段 |
+| --- | --- |
+| `mode` | `tts_local`（缺省）、`tts_remote` 或 `audio` |
+| `text` | `tts_*` 模式必填，最多 4000 字符；`audio` 模式为显示文本 |
+| `audio` | `audio` 模式必填：相对 `game/backend/games/dice/` 的 `.wav` 路径，不能为绝对路径或含 `..` |
+| `await` | `true` 时等待播放回执后再执行后续动作和计时，最长等待 30 秒 |
+| `voice`、`speed` | 覆盖默认音色和语速；`speed` 范围 0.25～4，`tts_moss_nano` 仅支持 `1.0` |
+| `provider` | 指定语音组件 id，覆盖槽位选择；`audio` 模式不可用 |
+| `select_by`、`cases` | `select_by: "winner_role"` 时按裁决结果选择台词，`cases` 须含 `PLAYER`、`AGENT`、`TIE`，每项含 `mode`、`text` 等字段；此类台词不能 `await` |
 
-台词占位符：`{player_score}`/`{agent_score}` 等由裁决结果渲染（只支持标量值）。
+台词可使用裁决结果中的标量字段作为占位符，如 `{player_score}`、`{agent_score}`、`{winner_role}`；未知占位符原样输出。
 
-### 转换的三种形态（每个转换三选一）
+### adjudicate 动作
 
-- `{"to": "状态名"}` —— 跳转
-- `{"exit": true}` —— 结束回合（回到游戏选择页）
-- `{"actions": [...]}` —— 不跳状态，原地执行动作（如 `repeat` 重播规则）
+`{"action": "adjudicate"}` 执行一次视觉裁决。成功时按 `adjudication.result` 转换，失败诊断按 `adjudication.diagnosis` 转换；所在状态缺少对应转换时回合以错误结束。
 
-意图转换可额外带 `"after_speech": true`（引擎能力保留，**当前所有游戏都未使用**——dice 的 ready 曾于 2026-09-18 加过、09-21 按用户要求撤销）：**本状态 `on_enter` 台词播完（收到前端 `speech_done` 回执）之前，该意图一律被 409 静默拒绝**——播报中途按绿键/Enter 无效果，前端把这类拒绝当正常游戏行为（不弹窗）。浏览器对每条指令播完/失败/被顶替/静音都会回执，所以按钮不会被卡死；纯 API 驱动（无浏览器回执）需自行补 `speech_done`，或等播报闸超时（90 秒）自动放开。`back` 不受此闸：播报中途仍可退出。不声明该键时，意图可随时打断播报（被顶替的播报由前端停止旧音频并立即回执）。
+### robot 动作
 
-## 7. 当前状态图
+`{"action": "robot", "command": "<命令>"}` 由全局或 manifest 的 `providers.robot_arm` 组件执行。
 
-```
-rules ──confirm──▶ ready ──start_shake──▶ game_start ──expire──▶ shake_countdown ──expire──▶ shaking
-result ──new_round──▶ rehome(归位过场|robot reset_home|完成/失败/6s→ready)
-  ▲                  │                  (过场 3.5s      (2.4s/0.8s 三二一)             │robot shake_dice
-  │repeat=重播        │back=回到rules      │robot grasp_cup  └─grasp失败→arm_failed   ├─完成→ stop_call
-  │back=exit          ▼                   └─grasp失败→arm_failed                     └─失败→ arm_failed
-  └──────────────▶ exit    arm_failed(蓝=重试→game_start/红=exit)
-                             stop_call(0.5s，播 audio/停.wav 不 await) ──expire──▶ analysis
-                            result ◀─adjudication.result│analysis_failed ◀─adjudication.diagnosis
-                          new_round→ready              retry→analysis, new_round→ready, back=exit
-```
+| 命令 | 动作 |
+| --- | --- |
+| `grasp_cup` | 识别杯子、抓取并抬起，不摇动；开始时不在 HOME 则先回 HOME 并张手 |
+| `shake_dice` | 摇动已抬起的杯子，摇动结束即完成 |
+| `settle_dice` | 放回杯子、张手并回 HOME |
+| `feedback` | 按裁决结果做手势并保持，至下一次回 HOME：`win` 为 V 手势，`lose` 为竖拇指，`draw` 为开合手势 |
+| `reset_home` | 回 HOME 并张手；可能持杯时拒绝执行 |
+| `ensure_home` | 已在 HOME 且手张开时不动作，否则同 `reset_home` |
 
-机械臂节奏（2026-09-24 起）：点开始 → `game_start` 过场（"游戏开始！"大字 + 臂进度，
-**入口即刻下发抓取**，duration=过场秒数、热加载可调）→ 抓取在过场+倒计时窗口内完成
-→ `shake_countdown` 三二一（臂已持杯待命）→ `shaking` 立刻下发摇（一条链到 RETURN_HOME：
-摇+放杯+张手+归位），臂放下杯子归位完 → `stop_call` 摇骰收尾态（播 `audio/停.wav` 喊停，
-**不 await**——语音与交棒计时并行，0.5s 后进裁决）→ `analysis` 裁决——骰子就放在敞口
-绿杯里，镜头从上方直接读点数。ready 刻意不挂归位动作（占臂锁 ~1.8s 会让抓取整体后移，
-见第 6 节）。**人工摇骰模式（manual_shaking）、开盖过场（open_reveal）、摇后屏幕倒计时
-（vision_countdown）已于 2026-09-24 整体移除**——游戏只有玩家和 agent 机械臂两条对位，
-摇骰环节不允许人工兜底。
+- 动作在后台执行，不能声明 `await`；状态计时照常进行。命令串行执行，后发命令等待前一条完成。
+- `timeout_seconds` 可选，`feedback` 除外；范围 (0, 180] 秒，缺省 120，包含排队等待。
+- `feedback` 须声明 `select_by: "winner_role"`，`cases` 把 `PLAYER`、`AGENT`、`TIE` 映射到 `win`、`lose`、`draw`（机械臂视角）。
+- 命令结束后，按命令完成时所在状态的 `on_event` 路由 `robot.<command>.completed` 或 `robot.<command>.failed`；未声明的路由被忽略。
+- 动作发出后失败（含超时和回合取消）时，抓杯任务进入故障锁定，此后的机械臂命令均被拒绝，`arm_failed` 中的重试与归位也不执行；动作发出前的失败（如未识别到杯子）不锁定，可重试。故障处理见 [游戏服务与排障](../../../../docs/real_robot.md)。
+- `feedback`、`reset_home`、`ensure_home` 不因回合结束而中断。
+- 进入游戏时机械臂组件在后台连接设备，不运动；回合结束（退出、取消或出错）后执行一次 `ensure_home`。
 
-## 8. 生效方式与配置文件地图
+## 5. 当前状态流程
 
-| 你改的东西 | 生效方式 |
-|---|---|
-| 全局配置（`backend/config.json`：引擎槽位/音色语速默认/语音总闸） | **热加载**，下一回合生效；**唯一例外：本地 TTS 引擎启动时钉死，切换需重启** |
-| 本 manifest（台词/词表/ui/开关/超时等一切字段） | **热加载**：保存后**下一个回合**生效（正在跑的一局用创建时快照） |
-| 组件 config（`backend/components/*/config.json`） | 重启后端（`stop_web.sh && start_web.sh`） |
-| YOLO 硬件 runtime（`backend/games/dice/adjudicator_config.json`：摄像头/焦距变焦/RTSP 端点，见第 5 节） | **改后下一回合生效，无需重启后端**——文件 mtime 已进 runtime 签名，自动重建常驻进程；正在跑的一局仍用旧参数 |
-| ASR 引擎参数（`backend/components/asr_zipformer/config.json`：麦克风/VAD/绑核） | 重启后端 |
-| 游戏音频文件（`backend/games/dice/audio/*.wav`） | 热加载（下一局引用时读取） |
+按键：绿色对应 Enter，蓝色对应 ↓，红色对应 Esc；未列出按键的状态不响应按键。
 
-相关配置文件索引：
+| 状态 | 进入时动作 | 转换 |
+| --- | --- | --- |
+| `rules`（起始） | 播报规则 | `confirm`（绿）→ `ready`；`repeat`（蓝）重播规则；`back`（红）退出 |
+| `ready` | 播报开始提示 | `start_shake`（绿）→ `game_start`；`back`（红）→ `rules` |
+| `game_start` | `grasp_cup`，超时 30 秒 | 3.0 秒后 → `shake_countdown`；`robot.grasp_cup.failed` → `arm_failed` |
+| `shake_countdown` | 播放 `audio/warm_321开始.wav`；计时 2.4 秒，节拍 0.8 秒 | 计时结束 → `shaking`；`robot.grasp_cup.failed` → `arm_failed` |
+| `shaking` | `shake_dice`，超时 90 秒 | `robot.shake_dice.completed` → `stop_call`；`robot.shake_dice.failed` → `arm_failed` |
+| `stop_call` | 播放 `audio/停.wav`（不等待）；`settle_dice`，超时 90 秒 | `robot.settle_dice.completed` → `analysis`；`robot.settle_dice.failed` → `arm_failed` |
+| `analysis` | 视觉裁决 | `adjudication.result` → `result`；`adjudication.diagnosis` → `analysis_failed` |
+| `analysis_failed` | 播报识别失败；`reset_home`，超时 30 秒 | `retry`（蓝）→ `analysis`；`new_round`（绿）→ `ready`；`back`（红）退出 |
+| `result` | 按胜负播报双方点数；`feedback` 手势 | `new_round`（绿）→ `rehome`；`back`（红）退出 |
+| `rehome` | `reset_home`，超时 120 秒 | `robot.reset_home.completed` 或 `robot.reset_home.failed` → `ready` |
+| `arm_failed` | 播报机械臂失败；`reset_home`，超时 30 秒 | `retry`（蓝）→ `game_start`；`back`（红）退出 |
 
-- 视觉组件（LLM endpoint/model/key、resident 模式）：`backend/components/vision_yolov8_objdetect/config.json`
-- 机械臂组件：`backend/components/robot_arm_spacemit`（应用配置 `SITE/cup_application.json`）
-- TTS 引擎：`backend/components/tts_moss_nano/config.json`
-- ASR 引擎：`backend/components/asr_zipformer/config.json`（VAD 断句参数含义见 `asr/zipformer-streaming/README.md`「断句（VAD）参数」节）
-- YOLO C++ runtime（dice 专属硬件，必填声明）：`backend/games/dice/adjudicator_config.json`（共享默认文件已于 2026-09-20 删除，每游戏一份）
-- TTS 使用与切换手册：仓库根目录 `TTS配置与切换指南.md`
+- 抓杯与 `game_start` 过场、`shake_countdown` 倒计时同时进行；`shaking` 下发的 `shake_dice` 在抓杯完成后执行。
+- 「停」的播放与放杯同时进行，放杯完成后开始裁决。
+- `result` 中「再来一局」先经 `rehome` 回 HOME，再进入 `ready`。

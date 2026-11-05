@@ -13,7 +13,7 @@
 | `sample_*.json` | 每个采样姿态的关节和板位姿记录 |
 | `calibration_reference.json` | 生成自动轨迹时使用的参考手眼结果 |
 
-参考结果的质量标志为 `false`，是现场明确接受误差后保留的临时结果，因此生成计划时必须显式传入 `--allow-provisional`。计划文件包含机器绝对路径和源文件哈希，不能跨目录复制；应在目标机器上执行 `bash calibrate.sh plan` 重新生成，见[命令行标定](../../../docs/grasp.md#1-命令行标定)。
+参考结果的质量标志为 `false`，属于临时结果，因此须在 `calibration/config/calibration_workflow.json` 中设置 `allow_provisional: true` 才能用它生成计划。计划文件包含机器绝对路径和源文件哈希，不能跨目录复制；应在目标机器上执行 `bash calibrate.sh plan` 重新生成，见[命令行标定](../../../docs/grasp.md#1-命令行标定)。
 
 ## 使用条件
 

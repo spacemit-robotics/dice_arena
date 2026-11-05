@@ -1,206 +1,85 @@
-# Provider packages
+# 组件包
 
-`backend/components/` is the shared provider registry for all games. A package
-owns its adapter and deployment details; a game owns the semantic parameters
-that describe how that adapter is used. Adding a package does not require
-editing `backend/server.py` or a game pipeline.
+`game/backend/components/` 下每个目录是一个组件包。服务启动时扫描并注册组件，游戏通过槽位选择组件，不直接引用具体实现。
 
-Each runtime adapter is one directory:
+## 当前组件
+
+| 组件 id | 类型 | 槽位 | 功能 | 参数 |
+| --- | --- | --- | --- | --- |
+| `vision_yolov8_objdetect` | `vision`，角色 `adjudicator` | `vision_adjudicator` | YOLOv8 骰子识别与胜负裁决 | [参数](vision_yolov8_objdetect/parameters.md) |
+| `tts_moss_nano` | `tts` | `tts_local` | 本地 MOSS-TTS-Nano 语音合成 | [说明](tts_moss_nano/README.md)、[参数](tts_moss_nano/parameters.md) |
+| `robot_arm_spacemit` | `robot` | `robot_arm` | 执行机械臂命令，读取 `SITE/cup_application.json` | [配置参考](../../../docs/configuration.md) |
+
+`SITE` 表示现场目录，默认 `~/.local/share/spacemit-manipulation/site/`。
+
+## 组件选择
+
+- 全局配置 `providers` 为所有游戏指定默认组件，见 [全局配置参数](../parameters.md)。
+- 游戏 manifest 的 `providers` 覆盖全局值；台词的 `provider` 字段覆盖槽位选择，见 [摇骰子游戏参数](../games/dice/parameters.md)。
+- 所有启用游戏只能引用同一个本地语音组件。
+
+## 目录结构
 
 ```text
-backend/components/<provider_id>/
-├── manifest.json
-├── config.json        # component-local runtime settings (required for TTS)
-├── provider.py
-└── scripts/            # optional; local runtime lifecycle only
+game/backend/components/<组件 id>/
+├── manifest.json   # 组件声明
+├── provider.py     # 入口类
+├── config.json     # 组件参数；语音组件必须提供
+└── scripts/        # 可选，生命周期命令
 ```
 
-The backend scans these packages at process startup. Adding or deleting a
-package therefore requires a backend restart, but does not require editing
-`backend/server.py`, `web/app.js`, or a game pipeline. A local package may
-declare `lifecycle.start/stop`; a cloud or externally managed package omits
-those hooks and is still a valid provider.
+新增或删除组件后，执行 `mm` 安装并重启 `dice-arena serve`。
 
-Minimum TTS manifest:
+## manifest.json 字段
 
-```json
-{
-  "id": "tts_new",
-  "type": "tts",
-  "name": "New TTS",
-  "version": "1.0",
-  "enabled": true,
-  "entry": "provider.py:TtsNew",
-  "config": "config.json"
-}
-```
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 组件 id，只含字母、数字、`_`、`-`，须与目录名一致 |
+| `type` | `vision`、`tts`、`asr`、`robot` 或 `command` |
+| `role` | 仅 `vision` 使用：`adjudicator`（裁决）或 `localizer`（定位） |
+| `name`、`version` | 显示名称与版本 |
+| `enabled` | `false` 时不注册该组件，缺省 `true` |
+| `entry` | 入口，格式 `模块.py:类名`，模块位于组件目录内；入口类的 `id`、`type`、`role` 须与 manifest 一致 |
+| `capabilities` | 能力标签，字符串数组，不重复 |
+| `config` | 组件目录内的参数文件，`tts` 类型必填 |
+| `lifecycle.start`、`lifecycle.stop` | 可选，启停本地进程的命令数组，路径相对 `game/`，在 `game/` 目录下执行 |
 
-TTS providers should keep their model-specific settings in a component-local
-`config.json` and parse them through a package-local `settings.py` (voice,
-model/runtime path, endpoint, generation and startup tuning).
-Use repository-relative paths in checked-in defaults; environment variables may
-override them for board-local deployments.
+## 接口
 
-A provider that owns a local model process may also declare lifecycle commands:
+| 类型 | 基类 | 必须实现 |
+| --- | --- | --- |
+| `vision` / `adjudicator` | `core.vision.VisionAdjudicatorProvider` | `adjudicate(request, *, on_log, on_event, is_cancelled, timeout_seconds)`；可选 `start_streaming`、`stop_streaming` |
+| `vision` / `localizer` | `core.vision.VisionLocalizerProvider` | `locate(request, *, on_log, on_event, is_cancelled, timeout_seconds)` |
+| `tts` | `core.tts.TtsProvider` | `synthesize(payload)`，返回 WAV 与响应头；可选 `stream(payload, write_frame)` 分段输出 |
+| `robot` | `core.robot.RobotProvider` | `grasp_cup`、`shake_dice`、`settle_dice`、`feedback(kind)`；`reset_home`、`ensure_home` 有空操作的缺省实现，接入真机时须实现 |
+| `asr` | `core.asr.AsrProvider` | 麦克风监听会话与识别结果回调；SDK 未包含该类型组件 |
 
-```json
-{
-  "lifecycle": {
-    "start": ["scripts/start_new_tts.sh"],
-    "stop": ["scripts/stop_new_tts.sh"]
-  }
-}
-```
+- 裁决组件返回源画面的物理结果 `LEFT`、`RIGHT` 或 `TIE`，玩家与机械臂的对应由游戏完成。失败时返回含 `"diagnosed": true` 的诊断结果。进度和结果通过 `on_event` 上报，`on_log` 仅输出诊断文本。
+- 语音组件单次文本最多 4000 字符。
+- 机械臂命令返回 `{"status": "completed"}` 或 `{"status": "failed", "reason": "..."}`，不向外抛出异常；收到 `is_cancelled()` 为真时尽快中止并返回失败；进度通过 `on_event({"event": "robot", ...})` 上报。
 
-Commands run from the repository root. Inspect/manage them with:
+## 生命周期与组件命令
+
+`dice-arena serve` 启动游戏前，对配置引用的语音组件执行 `lifecycle.start`。组件命令行工具位于安装目录：
 
 ```bash
-python3 backend/componentctl.py list
-python3 backend/componentctl.py health tts_new
-python3 backend/componentctl.py start tts_new
-python3 backend/componentctl.py stop tts_new
-python3 backend/componentctl.py start-selected tts --game dice
-python3 backend/componentctl.py selected vision_adjudicator --game dice
+export DICE_ARENA_CONFIG="$HOME/.local/share/spacemit-manipulation/site/dice_arena/config.json"
+export DICE_RUNTIME_DIR="$HOME/.local/share/spacemit-manipulation/site/dice_arena"
+cd "$PREFIX/share/dice_arena/game"
+python3 -B backend/componentctl.py list
+python3 -B backend/componentctl.py health tts_moss_nano
+python3 -B backend/componentctl.py selected vision_adjudicator --game dice
+python3 -B backend/componentctl.py referenced tts
 ```
 
-### Package templates
+- `$PREFIX` 为安装目录，从 SDK 根目录执行 `source build/envsetup.sh` 后为 `output/staging`。
+- `DICE_ARENA_CONFIG` 指向现场配置；不设置时读取安装默认值。`DICE_RUNTIME_DIR` 指定语音服务的 pid 与日志目录。
 
-Cloud/external TTS (no process lifecycle):
-
-```text
-backend/components/tts_cloud_xxx/
-├── manifest.json
-├── config.json          # runtime.kind=cloud, absolute runtime.base_url
-├── settings.py
-└── provider.py
-```
-
-Local TTS (optional process lifecycle):
-
-```text
-backend/components/tts_local_xxx/
-├── manifest.json
-├── config.json          # runtime.kind=local
-├── settings.py
-├── provider.py
-└── scripts/start_tts.sh # optional provider-internal lifecycle hook
-```
-
-## TTS interface
-
-Inherit `core.tts.TtsProvider`. The smallest adapter implements `health()` and
-`synthesize(payload)`. The base class automatically exposes it through the
-browser's framed stream protocol as one WAV frame. Override `stream()` only if
-the model can produce lower-latency ordered segments.
-
-## Visual roles
-
-Visual packages are selected by responsibility, not by whether their
-implementation happens to use YOLO.
-
-### Visual adjudicator
-
-Use `type=vision`, `role=adjudicator`, inherit
-`core.vision.VisionAdjudicatorProvider`, and implement:
-
-```python
-def adjudicate(*, on_log, on_event, is_cancelled, timeout_seconds) -> dict:
-    ...
-```
-
-An adjudicator owns the business decision contract: for the dice game this
-includes pip detection, side scoring, winner calculation, and verification.
-Business progress/results go to `on_event({...})`; `on_log(...)` is diagnostic
-text only. A verified result event uses
-`{"event":"result","verified":true,...}`.
-
-The adjudicator returns physical outcomes (`LEFT`, `RIGHT`, or `TIE`). It does
-not decide which side is the human player or the agent. That mapping belongs
-to `backend/games/<game_id>/manifest.json` and is projected by the game
-pipeline.
-
-LLM verification/diagnosis engines are no longer configured inside the vision
-package: the game pipeline resolves the global `llm` provider slot per round
-and hands the engine to the adjudicator on the request object
-(`VisionAdjudicationRequest.llm_provider`). `None` means "verification
-disabled" — the detector-only result stands and the round never fails because
-of a missing LLM.
-
-Current package manifest:
-
-```json
-{
-  "id": "vision_yolov8_objdetect",
-  "type": "vision",
-  "role": "adjudicator",
-  "entry": "provider.py:VisionYolov8Objdetect",
-  "capabilities": [
-    "stable_frame_detection",
-    "multiview_majority_vote",
-    "stateless_multimodal_llm"
-  ]
-}
-```
-
-Since 2026-09-21 there are **two** vision adjudicator packages sharing this
-contract: `vision_yolov8_objdetect` (PPQ v8 models, two-sided rule games like
-dice) and `vision_yolov10_objdetect` (end-to-end v10 models, config-injected
-vocabulary with label folding, rotation + ROI capture, single-sided evidence
-games like rock-paper-scissors — see `FRAMEWORK_DISPATCH.md` §3.3.1).  A game
-selects its provider via the `providers.vision_adjudicator` override in its
-manifest; the global slot stays the v8 default.  The v10 package also exposes
-`observe(...)`, the stable-observation entry single-sided pipelines call
-instead of running the two-sided rule tail; `adjudicate()` remains the
-rule/LLM realization on top of the same observation phase.
-
-## LLM interface
-
-LLM packages use `type=llm`, inherit `core.llm.LlmProvider`, and implement
-the one bounded structured multimodal request `verify(...)`. Prompts, allowed
-outcomes and timeouts arrive with each
-call from the game's vision profile — a provider is a pure transport adapter
-(cloud API, vLLM/llama.cpp server, or a local resident engine) and knows
-nothing about any game's rules.  Failure diagnosis is produced locally by the
-vision provider from detector evidence, so it is not part of this interface.
-
-The vision adjudicator is currently the only consumer; the pipeline resolves
-the engine from the `llm` slot (game manifest override > arena default,
-hot-reloaded per round). A deployment without an `llm` slot simply runs
-detector-only rounds.
-
-### Visual localizer
-
-A future target-coordinate/spatial-perception package must use
-`type=vision`, `role=localizer` and inherit
-`core.vision.VisionLocalizerProvider`. It implements `locate(...)` and returns
-coordinate data; it must not calculate or return a game winner. The object and
-coordinate-frame schema should be finalized with the first actual localizer.
-
-Games select adapters through semantic slots:
-
-```json
-"providers": {
-  "vision_adjudicator": "vision_yolov8_objdetect",
-  "tts": "tts_new"
-}
-```
-
-`DICE_VISION_ADJUDICATOR_PROVIDER=<id>` temporarily overrides the adjudicator.
-The old `providers.vision` key and `DICE_VISION_PROVIDER` variable remain only
-as migration aliases.
-
-## Vision configuration ownership
-
-Game-specific vision settings are embedded in
-`backend/games/<game_id>/manifest.json` under `vision_profile`. They include
-the model, class map, rule, prompts, per-game video path, timeout and
-post-result hold. Do not add a second `vision_profile.json` beside the
-manifest.
-
-The YOLO runtime's hardware lives per game: each manifest's
-`vision_profile.runtime_config` (required) points at that game's
-`backend/games/<id>/adjudicator_config.json` — camera, inference/EP
-settings, RTSP and the MediaMTX WebRTC base URL. The vision component
-config only contains provider lifecycle/runtime paths.
-Games still provide only a safe path such as
-`/dice/`; the deployment WebRTC base URL comes from the runtime config.
+| 命令 | 作用 |
+| --- | --- |
+| `list` | 列出已注册组件及其健康状态 |
+| `health <组件 id>` | 输出组件健康状态 |
+| `start <组件 id>`、`stop <组件 id>` | 执行组件的 `lifecycle.start`、`lifecycle.stop`；未声明时不执行 |
+| `selected <槽位> [--game <游戏 id>]` | 输出游戏在该槽位使用的组件 id |
+| `start-selected <槽位>`、`stop-selected <槽位>` | 对槽位选中的组件执行启停 |
+| `referenced tts` | 输出全局配置与启用游戏引用的全部语音组件 |

@@ -1,105 +1,65 @@
-# vision_yolov8_objdetect 参数说明
+# vision_yolov8_objdetect 参数
 
-视觉裁决器涉及**两类配置文件**，职责分离（JSON 无注释，本文档就是它们的注释）：
+视觉裁决组件启动 YOLOv8 识别进程，读取稳定观测后按游戏规则判定胜负。参数分布在两个文件中：
 
-1. **组件配置** `backend/components/vision_yolov8_objdetect/config.json` —— provider 生命周期
-2. **runtime 硬件配置** `backend/games/<id>/adjudicator_config.json` —— 摄像头、推理线程、RTSP/WebRTC 推流，**每游戏一份**，由游戏 manifest 的 `vision_profile.runtime_config` 必填声明（共享部署默认 `vision/yolov8_objdetect/config.json` 已于 2026-09-20 删除）
+| 文件 | 内容 | 生效方式 |
+| --- | --- | --- |
+| `game/backend/components/vision_yolov8_objdetect/config.json` | 识别程序路径与进程模式 | `mm` 安装后重启 `dice-arena serve` |
+| `game/backend/games/dice/adjudicator_config.json` | 模型、检测参数、摄像头与推流 | `mm` 安装后，下一次进入游戏或下一次裁决时重建识别进程 |
 
-LLM 复核凭证（endpoint/model/api_key）**已迁移到独立的 LLM 组件** `backend/components/llm_openai_compat/`（2026-09-04 大模型模块化），由全局配置 `providers.llm` 槽位指派，见该组件的参数说明。
+类别映射、每侧数量、分组方式、胜负规则、视频路径和超时属于游戏 manifest 的 `vision_profile`，见 [摇骰子游戏参数](../../games/dice/parameters.md)。
+识别程序的命令行、协议和诊断方法见 [YOLOv8 骰子识别程序](../../../vision/yolov8_objdetect/README.md)。
 
-游戏级参数（模型、类别、规则、prompt、超时、稳定帧）**不在这两类文件里**，在游戏 manifest 的 `vision_profile`（见 `backend/games/dice/parameters.md` 第 5 节）。
+## 组件配置
 
-**优先级规则**：实际每局裁决时，游戏 profile 的 `vision.model` / `vision.stable_frames` / `vision.confidence`（缺省取 `conf`）/ `multi_view.views[].camera` 会以命令行参数下发给 runtime，**覆盖**硬件配置里的同名默认值；硬件文件里没写的键回落 C++ 编译期默认值。
-
-两个文件的生效方式不同：
-
-- **组件配置**：改后**重启后端**生效（`stop_web.sh && start_web.sh`）。
-- **runtime 硬件配置**（各游戏 `backend/games/<id>/adjudicator_config.json`，manifest 用 `vision_profile.runtime_config` 必填声明）：保存后**下一回合生效，无需重启后端**——文件的 mtime+size 已纳入 runtime 签名，provider 会自动拆旧建新常驻进程（正在运行的一局仍用旧参数）。
-
----
-
-## 一、组件配置（backend/components/vision_yolov8_objdetect/config.json）
-
-```json
-{
-  "schema_version": 1,
-  "runtime": {
-    "binary": "vision/yolov8_objdetect/bin/yolov8_camera",
-    "working_dir": "vision/yolov8_objdetect",
-    "mode": "resident",
-    "prewarm_camera": true,
-    "terminate_grace_seconds": 5
-  },
-  "events": { "protocol": "jsonl-events-v2" }
-}
-```
+`game/backend/components/vision_yolov8_objdetect/config.json`：
 
 | 字段 | 当前值 | 说明 |
-|---|---|---|
-| `schema_version` | `1` | 固定值 |
-| `runtime.mode` | `resident` | `resident`（进程常驻，裁决任务复用，不重复付模型加载/摄像头启动成本）/ `per_request`（每次任务起一个进程） |
-| `runtime.binary` | `vision/.../bin/yolov8_camera` | C++ runtime 二进制，相对游戏根目录；由 `mm` 在 K3 上编译并安装 |
-| `runtime.working_dir` | `vision/yolov8_objdetect` | 子进程工作目录 |
-| `runtime.prewarm_camera` | `true` | 常驻模式下预启动摄像头，任务来了即采即推流 |
-| `runtime.terminate_grace_seconds` | `5` | 停止 runtime 的优雅退出宽限 |
-| `events.protocol` | `jsonl-events-v2` | 结构化事件走独立 `--event-fd` 管道（stdout/stderr 只作诊断日志） |
+| --- | --- | --- |
+| `schema_version` | `1` | 固定为 `1` |
+| `runtime.binary` | `vision/yolov8_objdetect/bin/yolov8_camera` | 识别程序，相对 `game/`；`mm` 在 K3 上编译安装，缺失时 `dice-arena serve` 拒绝启动 |
+| `runtime.working_dir` | `vision/yolov8_objdetect` | 未设置 `DICE_RUNTIME_DIR` 时的进程工作目录；`dice-arena serve` 下工作目录为 `SITE/dice_arena/vision/`，OpenCL 缓存写在此处 |
+| `runtime.mode` | `resident` | `resident` 与 `prewarm_camera: true` 同时设置时，识别进程跨回合常驻复用；`per_request` 时每次裁决结束后停止 |
+| `runtime.prewarm_camera` | `true` | 常驻模式下保持摄像头与推流 |
+| `runtime.terminate_grace_seconds` | `5` | 代码不读取；停止识别进程时先发送 SIGTERM，2 秒未退出则强制结束 |
+| `events.protocol` | `jsonl-events-v2` | 代码不读取；事件协议固定为 `jsonl-events-v2`，识别程序声明的协议不符时回合以错误结束 |
 
-（`runtime.config` 指针已随共享默认一起删除——写回会被校验器拒载。）
+`SITE` 表示现场目录，默认 `~/.local/share/spacemit-manipulation/site/`。
 
-## 二、runtime 运行配置（backend/games/<id>/adjudicator_config.json，每游戏一份）
+## 识别进程配置
 
-dice 读 `backend/games/dice/adjudicator_config.json`（1080p 广角版本给 rps，在 `backend/games/rps/adjudicator_config.json`）。整份替换语义：没写的键回落 C++ 编译期默认值。**这个文件持有 C++ runtime 消费的全部参数**——模型与检测参数（`model`/`conf`/`stable_frames`/`divider_detection`，2026-09-20 从 manifest 迁入）+ 硬件；`class_map`/`grouping`/`expected_count` 等游戏语义仍在 manifest；浏览器画面基址 `video.webrtc_base_url` **已于 2026-10-09 上浮到全局 `backend/config.json`**（Python 侧消费，非 runtime 参数）。以下示例即 dice 文件的形状：
+`game/backend/games/dice/adjudicator_config.json` 由识别程序通过 `--config` 读取。文件整体生效，不与其他配置合并；未写的键使用识别程序内置值。
 
-```json
-{
-  "model": "models/best.q.onnx",
-  "conf": 0.3,
-  "stable_frames": 30,
-  "divider_detection": true,
-  "camera": "/dev/v4l/by-id/usb-046d_HD_Pro_Webcam_C920_*-video-index0",
-  "device": "",
-  "width": 1280, "height": 720, "fps": 24,
-  "intra_threads": 2,
-  "ep_affinity": "14;15",
-  "queue_depth": 2,
-  "focus": -1, "zoom": 180,
-  "rtsp": { "enabled": true, "host": "127.0.0.1", "port": 8554 }
-}
-```
+| 字段 | 当前值 | 未写时 | 说明 |
+| --- | --- | --- | --- |
+| `_note` | 说明文字 | — | 注释，不参与运行 |
+| `model` | `models/best.q.onnx` | `models/best.q.onnx` | 模型路径，相对本文件所在目录，即 `game/backend/games/dice/models/best.q.onnx`，由 `python3 tools/download_assets.py` 下载 |
+| `conf` | `0.3` | `0.5` | 检测置信度阈值，范围 0～1 |
+| `stable_frames` | `30` | `20` | 连续有效帧达到该数量时发布稳定观测 |
+| `divider_detection` | `true` | `false` | 检测桌面分界线；开启时只有检出分界线的帧计入稳定帧，检出位置用作左右切分点 |
+| `divider_colors` | `green_gray` | `red_blue` | 分界检测配色：`green_gray` 识别绿色 `#B0E237` 与灰色 `#666666` 桌布分区，`red_blue` 识别红蓝分区；配色识别失败时回退为深色分界线识别。只影响分界检测，不改变玩家归属与显示方向 |
+| `camera` | `/dev/v4l/by-id/usb-046d_HD_Pro_Webcam_C920_*-video-index0` | 序号 `1` | 摄像头设备路径或 V4L2 序号。路径可含 `*`、`?`、`[]`，启动时须恰好匹配一个设备 |
+| `device` | `""` | — | 非空时代替 `camera` |
+| `width`、`height`、`fps` | `1280`、`720`、`24` | `1280`、`720`、`25` | MJPEG 采集模式，须为相机支持的模式 |
+| `focus`、`zoom` | `-1`、`180` | `0`、`150` | UVC 对焦与变焦值，`-1` 表示不设置；设置对焦时同时关闭自动对焦。控制设置失败时摄像头打开失败，相机不支持的控制须设为 `-1` |
+| `show_debug_text` | `false` | `true` | 在推流画面上叠加调试文字 |
+| `intra_threads` | `2` | `2` | SpaceMIT EP 推理线程数 |
+| `ep_affinity` | `14;15` | `14;15` | EP 推理线程绑定的核，分号分隔，核数须等于 `intra_threads` |
+| `queue_depth` | `2` | `2` | 帧队列深度，限制在 1～8 |
+| `rtsp.enabled` | `true` | `false` | 向 MediaMTX 推送 H.264 |
+| `rtsp.host`、`rtsp.port` | `127.0.0.1`、`8554` | `0.0.0.0`、`8554` | MediaMTX 的 RTSP 地址；推流路径取游戏 manifest 的 `video.path`（`/dice/det`） |
 
-### 采集与画面
+其他可用键：
 
-| 字段 | 当前值 | 说明 |
-|---|---|---|
-| `camera` | `/dev/v4l/by-id/usb-046d_HD_Pro_Webcam_C920_*-video-index0` | V4L2 采集设备节点（MJPEG 采集 + 硬件解码）。可含通配符 `*`、`?`、`[]`：启动时须恰好匹配一个设备，默认匹配任意一台 C920；也可写固定路径 |
-| `device` | `""` | 摄像头序号备选写法（`camera` 优先） |
-| `width`/`height`/`fps` | 1280/720/24 | 采集分辨率与帧率，须是相机支持的 MJPEG 模式 |
-| `focus` / `zoom` | -1 / 180 | UVC 摄像头的对焦/变焦控制值；`-1` 表示不设置。相机不支持对应控制时必须设为 `-1`，否则无法打开相机 |
-| `display_enabled` | `false` | 板端本地窗口显示（无屏部署保持关闭） |
+- `video.webrtc_base_url`：网页 WebRTC 地址，仅在游戏 manifest 与全局配置均未设置时使用。
+- `display_enabled`、`yolov8_enabled`、`self_test`、`max_frames`、`dump_input`：诊断运行使用；游戏启动时识别程序总是无窗口运行，并由组件控制推理。
 
-### 推理与检测
+写入其他键不影响运行，服务输出 `[vision] runtime config ...: unknown keys are ignored by the C++ runtime: ...`。
 
-| 字段 | 当前值 | 说明 |
-|---|---|---|
-| `model` | `models/best.q.onnx` | 模型路径，**相对本文件所在目录解析**（即 `backend/games/<id>/models/…`；模型文件按游戏存放）。不写回落 C++ 默认 `models/best.q.onnx`——恰是本游戏目录下的同名文件 |
-| `conf` | `0.3` | 检测置信度阈值（2026-09-20 起每游戏在此声明；写进 manifest 会被拒载） |
-| `stable_frames` | `30` | 稳定判定帧数：连续多少个**有效**帧类别多重集一致才发稳定观测（有效帧 = 已定位分界线 + 检测非空 + 与上帧类别组成一致，任一不满足即清零）。游戏级完整性（如骰子每侧 5 个）不在此门控——由 provider 在稳定观测上校验，数量不符立即失败诊断重试 |
-| `divider_detection` | `true` | 分界线检测：先按 `divider_colors` 识别桌布分区（配色抗反光），失败回退印刷深色线。开启时该帧定位到分界线才计稳定帧；检出的线也是 provider 左右归属的切分位置（与分组用同一个像素点），定位不到时归属回落 manifest 的 `divider.position`（缺省 0.5）。`false`（rps）时完全不跑检测、事件不带 `divider` 字段 |
-| `divider_colors` | `"red_blue"` | `red_blue` 识别原红蓝桌布；`green_gray` 识别进迭绿 `#B0E237` 与灰色 `#666666`。只选择分界检测配色，不改变玩家归属或显示方向。 |
-| `intra_threads` | `2` | CPU 侧会话线程数 |
-| `ep_affinity` | `14;15` | SpaceMIT EP 推理线程绑核（**分号分隔**，A100 加速核；实测线程会精确落到这两个核） |
-| `queue_depth` | `2` | 帧队列深度（采集-推理-显示之间的背压） |
+## 运行行为
 
-### 推流
-
-| 字段 | 当前值 | 说明 |
-|---|---|---|
-| `rtsp.enabled/host/port/path` | true / 127.0.0.1 / 8554 / `/dice` | 推流到本机 mediamtx（浏览器不直连 RTSP） |
-| ~~`video.webrtc_base_url`~~ | **已上浮（2026-10-09）** | mediamtx 的 WebRTC 播放基础地址现住**全局 `backend/config.json`** 的 `video.webrtc_base_url`（浏览器页面内嵌画面拼 URL 用；游戏只配自己的 `video.path`）。改 IP 热生效且不重建 runtime；写回本文件仅作历史兼容回退，别再写 |
-
-## 其他须知
-
-- resident 模式的空闲签名：web 日志持续打 `pipeline prepared=… infer=<冻结值>`——`infer` 冻结是设计行为（空闲不推理），不是卡死。
-- 硬件配置写错键名（如 `ep_afinity` 少个 f）**不会拒载**——C++ 与 Python 两侧解析器都静默忽略未知键；provider 加载该文件时会在 web 日志打一条 `[vision] runtime config …: unknown keys …` 警告（同一文件同一组未知键只警一次，键名写错改对了就不再出现）。
-- 改采集/预处理后必须在板上跑自检：`yolov8_camera --config config.json --self-test --no-display` + 短 `--max-frames` 冒烟（详见 `vision/yolov8_objdetect/README.md`）。
-- 裁决是纯 YOLO 单出口（LLM 复核链已整体移除）：稳定帧检测的胜负结果即终局，胜负规则由游戏 manifest 的 `vision_profile` 决定，见 dice 参数说明。
+- 进入游戏时以预热模式启动识别进程：打开摄像头并推流、加载模型，不推理；`analysis` 状态开始裁决后才推理。
+- 一帧计入连续计数须同时满足：开启 `divider_detection` 时检出分界线；至少检出一个目标，且类别组成与上一帧相同。不满足时计数清零。
+- 连续计数达到 `stable_frames` 后发布稳定观测。组件按检出的分界线把骰子分到左右两侧，任一侧数量不等于 `vision.expected_count` 时生成失败诊断。
+- 在 `timeouts.yolo_detection_seconds` 内未得到稳定观测时，组件按最近一帧的检测结果生成失败诊断。
+- 修改采集参数后，按 [YOLOv8 骰子识别程序](../../../vision/yolov8_objdetect/README.md) 的「诊断」一节在 K3 上验证。
