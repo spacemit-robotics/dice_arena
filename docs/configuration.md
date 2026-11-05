@@ -34,7 +34,7 @@
 | 抬杯 | 同上，速度为 `fast_speed_percent`（30%），抬起高度为 `lift_mm` |
 | 摇杯 | 按 `joint_test_config`（`configs/actions/joint_shake.json`）配方执行：关节、幅度、速度、加速度、周期数，200 Hz 混合指令 |
 | 放杯 | `lower_command_mode: controller_endpoint`：控制器规划的点位运动，速度 100%；偏差超过 0.5° 期间每 50 ms 重发同一目标，连续两次反馈在 0.5° 内即张开手部；到位偏差超过 `place_arrival_tolerance_mm` 时，按 `precision_error_action` 记录或中止 |
-| 手指 | `grip_targets_0_100` / `open_targets_0_100`，时长为 `fast_finger_duration_s`；使用灵巧手刻度（`0` 为张开，`100` 为闭合），应用连接时换算为 `0` 闭合、`1` 张开 |
+| 手指 | `grip_targets_0_100` / `open_targets_0_100`，默认值在抓杯策略 `vision/strategy/green_cup.json`，可在 `green_cup.json` 中覆盖；张开手型须全为 `0`。时长为 `fast_finger_duration_s`。使用灵巧手刻度（`0` 为张开，`100` 为闭合），应用连接时换算为 `0` 闭合、`1` 张开 |
 
 - 接近、抬杯、摇杯和返回 HOME 发送完最后一条指令即进入下一阶段，机械臂可继续完成上一阶段的运动。
 - 放杯在 0.5° 内即张开手部。
