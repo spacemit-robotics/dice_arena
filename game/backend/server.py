@@ -56,6 +56,7 @@ from core.shared_audio import SharedAudio
 from core.arena_config import (
     ARENA_CONFIG_PATH,
     ArenaConfigError,
+    DEFAULT_LOCAL_TTS,
     arena_asr_enabled,
     arena_game_select_confirm_phrases,
     arena_game_select_phrases,
@@ -266,7 +267,7 @@ def _prewarm_pinned_local_tts(pin: str | None) -> None:
         raise SystemExit(1) from exc
     prewarm = getattr(provider, "prewarm", None)
     if not callable(prewarm):
-        # HTTP-bridge engines (moss/qwen3) warm up in their lifecycle launcher.
+        # HTTP-bridge engines (MOSS-TTS) warm up in their lifecycle launcher.
         print(f"[arena] local TTS {pin} has no prewarm hook (lifecycle engine)", flush=True)
         return
     try:
@@ -417,7 +418,7 @@ def _selected_tts_id(game_id: str = "dice") -> str:
     try:
         return _tts_dispatcher().provider_id(game_id)
     except DiceArenaError:
-        return "tts_qwen3"
+        return DEFAULT_LOCAL_TTS
 
 
 def _safe_profile_metadata(

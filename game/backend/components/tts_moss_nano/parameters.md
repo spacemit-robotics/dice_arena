@@ -15,7 +15,7 @@
 | `root` | `tts/moss-tts-nano` | MOSS runtime 目录，相对 `game/`；模型与参考音频由 `python3 tools/download_assets.py` 下载，`mm` 安装 |
 | `model_dir` | `models/MOSS-TTS-Nano-100M-ONNX-xslim-dynq` | 模型目录，相对 `root`，须含 `browser_poc_manifest.json`；留空时自动查找 |
 | `host` | `127.0.0.1` | 服务监听地址，只允许回环地址 |
-| `port` | `18082` | 服务端口；`dice-arena serve` 按 18082 检查端口占用并复用语音服务，保持默认值 |
+| `port` | `18082` | 服务端口；`dice-arena serve` 按该端口检查占用并复用语音服务。修改时须同步修改 `base_url` |
 | `base_url` | `http://127.0.0.1:18082` | 后端访问服务的地址，只允许 `http://` 回环地址 |
 
 ## voice（音色）

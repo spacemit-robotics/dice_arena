@@ -31,7 +31,7 @@ dice-arena serve
 | --- | --- | --- |
 | `schema_version` | `1` | 固定为 `1` |
 | `games_enabled` | `{"dice": true}` | 按游戏 id 启停，优先于游戏 manifest 的 `enabled`；未列出的游戏使用 manifest 的值。停用的游戏不在网页列表显示，也不能进入。刷新网页后生效 |
-| `providers.tts_local` | `tts_moss_nano` | 本地语音合成组件，供 `mode: tts_local` 的台词使用。所有启用的游戏只能引用同一个本地语音组件，否则服务拒绝启动。修改后须重新启动 `dice-arena serve` |
+| `providers.tts_local` | `tts_moss_nano` | 本地语音合成组件，供 `mode: tts_local` 的台词使用；全局配置和游戏 manifest 均未指定时使用 `tts_moss_nano`。所有启用的游戏只能引用同一个本地语音组件，否则服务拒绝启动。修改后须重新启动 `dice-arena serve` |
 | `providers.vision_adjudicator` | `vision_yolov8_objdetect` | 视觉裁决组件，下一次裁决生效 |
 | `providers.robot_arm` | `robot_arm_spacemit` | 机械臂组件，读取 `SITE/cup_application.json`（由 `dice-arena configure` 生成）。未配置或组件不可用时，机械臂命令返回失败，按状态机的失败路由处理 |
 | `providers.tts_remote`、`providers.asr` | 未配置 | 远程语音合成与语音识别槽位；SDK 未包含对应组件 |

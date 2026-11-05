@@ -23,6 +23,8 @@ ROOT = Path(__file__).resolve().parents[2]
 # `dice-arena serve` keeps the operator's copy in the site (DICE_ARENA_CONFIG); this file is the
 # default.
 ARENA_CONFIG_PATH = Path(os.environ.get("DICE_ARENA_CONFIG") or ROOT / "backend" / "config.json")
+# The local speech engine shipped with the game, used when no configuration names a tts_local one.
+DEFAULT_LOCAL_TTS = "tts_moss_nano"
 
 
 class ArenaConfigError(ValueError):

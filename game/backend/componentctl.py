@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from core.arena_config import arena_slot_value, load_arena_config
+from core.arena_config import DEFAULT_LOCAL_TTS, arena_slot_value, load_arena_config
 from core.components import build_registry
 from core.errors import DiceArenaError
 from core.games import load_games, require_game, resolve_provider_id
@@ -80,7 +80,7 @@ def _selected_provider_id(provider_slot: str, game_id: str) -> str:
     provider_id = resolve_provider_id(manifest, provider_slot)
     if not provider_id:
         provider_id = arena_slot_value(load_arena_config(), provider_slot)
-    fallbacks = {"tts_local": "tts_qwen3", "vision_adjudicator": "vision_yolov8_objdetect"}
+    fallbacks = {"tts_local": DEFAULT_LOCAL_TTS, "vision_adjudicator": "vision_yolov8_objdetect"}
     return provider_id or fallbacks.get(provider_slot, "")
 
 
@@ -119,7 +119,7 @@ def _referenced_tts_providers_arena(
     The arena slots come first — they are the deployment defaults, so the
     first line stays the primary (local-slot) voice for start scripts —
     followed by each enabled game's own slots and per-speech pins.  The
-    historic builtin default applies only when no local engine is configured
+    shipped default engine applies only when no local engine is configured
     anywhere.
     """
     ids: list[str] = []
@@ -143,7 +143,7 @@ def _referenced_tts_providers_arena(
         for provider_id in _referenced_tts_providers(manifest, local_fallback=""):
             add(provider_id)
     if not local_configured:
-        ids.insert(0, "tts_qwen3")
+        ids.insert(0, DEFAULT_LOCAL_TTS)
     return ids
 
 

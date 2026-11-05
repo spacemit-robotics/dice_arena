@@ -10,8 +10,8 @@ completion is no longer coupled to log wording, and the runtime's PCM callback
 can be forwarded as soon as each decoded text chunk is available.
 
 The source delivery is versioned with the game in ``tts/moss-tts-nano``.
-Board-specific model files, Python wheels, and native libraries remain ignored
-artifacts in that directory, matching the existing ``tts/qwen3-tts`` layout.
+Its models and reference voices are runtime resources, downloaded with the
+other assets (tools/download_assets.py).
 """
 
 from __future__ import annotations

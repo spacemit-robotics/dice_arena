@@ -20,13 +20,13 @@
 
 - 全局配置 `providers.tts_local` 为 `tts_moss_nano` 时使用本组件（默认）。
 - `dice-arena serve` 启动游戏前执行 `scripts/start_tts.sh`：启动语音服务，等待模型加载与预热完成，最长 `startup.start_timeout_seconds`。启动失败时输出 `warning: TTS provider tts_moss_nano is unavailable`，游戏照常运行但无法播报合成台词。
-- 语音服务独立于游戏进程。Ctrl+C 停止游戏后语音服务保留，下次 `dice-arena serve` 直接复用；端口 18082 被其他安装的语音服务占用时，`dice-arena serve` 拒绝启动。
+- 语音服务独立于游戏进程。Ctrl+C 停止游戏后语音服务保留，下次 `dice-arena serve` 直接复用；服务端口（默认 18082）被其他安装的语音服务占用时，`dice-arena serve` 拒绝启动。
 - 运行文件位于 `SITE/dice_arena/`（`SITE` 默认为 `~/.local/share/spacemit-manipulation/site/`）：
 
 | 文件 | 内容 |
 | --- | --- |
-| `moss-tts-18082.pid` | 语音服务进程号 |
-| `moss-tts-18082.log` | 语音服务日志 |
+| `moss-tts-<端口>.pid` | 语音服务进程号，默认端口时为 `moss-tts-18082.pid` |
+| `moss-tts-<端口>.log` | 语音服务日志，默认端口时为 `moss-tts-18082.log` |
 | `moss-tts-outputs/` | runtime 输出目录 |
 
 ## 限制
