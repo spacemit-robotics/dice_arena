@@ -18,6 +18,16 @@ from cup_shake.operator import CUP_COMMANDS, add_commands, execute as execute_cu
 
 VIDEO_PORTS = (8554, 8889)  # RTSP from the dice recognition, WebRTC to the browser (mediamtx.yml).
 TTS_PORT = 18082  # Local MOSS-TTS daemon (game/backend/components/tts_moss_nano/config.json).
+COMPONENT_ACTIONS = (
+    "list",
+    "health",
+    "start",
+    "stop",
+    "selected",
+    "start-selected",
+    "stop-selected",
+    "referenced",
+)
 
 
 def port_in_use(port):
@@ -27,12 +37,39 @@ def port_in_use(port):
 
 
 def own_tts_daemon(runtime, game):
-    """The TTS daemon a previous serve left running (it is reused, as the original game does)."""
+    """The TTS daemon a previous serve left running; the next serve reuses it."""
     try:
         pid = int((runtime / f"moss-tts-{TTS_PORT}.pid").read_text().strip())
         return str(game) in Path(f"/proc/{pid}/cmdline").read_bytes().decode(errors="replace")
     except (OSError, ValueError):
         return False
+
+
+def game_environment(context, runtime, config):
+    """The environment of the game and its components: runtime files (TTS daemon pid and log) and
+    the operator's game configuration stay in the site, out of the installation."""
+    environment = context.environment()
+    environment.update(
+        SPACEMIT_CUP_APPLICATION=str(context.local("cup_application.json")),
+        DICE_RUNTIME_DIR=str(runtime),
+    )
+    if config.is_file():  # Otherwise the components read the installed default.
+        environment["DICE_ARENA_CONFIG"] = str(config)
+    return environment
+
+
+def component(context, args):
+    """The component tool on the site configuration, as serve runs the components."""
+    game = context.data("dice_arena") / "game"
+    runtime = context.local("dice_arena")
+    runtime.mkdir(parents=True, exist_ok=True)
+    arguments = [args.action, *([args.provider] if args.provider else []), "--game", args.game]
+    return subprocess.run(
+        [sys.executable, str(game / "backend/componentctl.py"), *arguments],
+        cwd=game,
+        env=game_environment(context, runtime, runtime / "config.json"),
+        check=False,
+    ).returncode
 
 
 def serve(context, args):
@@ -48,7 +85,6 @@ def serve(context, args):
         raise FileNotFoundError(
             "MediaMTX runtime resource is missing; prepare the files in runtime_assets.json"
         )
-    # TTS daemon pid/log and other runtime files stay in the site, out of the installation.
     runtime = context.local("dice_arena")
     runtime.mkdir(parents=True, exist_ok=True)
     busy = [port for port in (*VIDEO_PORTS, args.port) if port_in_use(port)]
@@ -65,12 +101,7 @@ def serve(context, args):
     if not config.exists():
         shutil.copyfile(game / "backend/config.json", config)
     print(f"game configuration: {config}", flush=True)
-    environment = context.environment()
-    environment.update(
-        SPACEMIT_CUP_APPLICATION=str(application),
-        DICE_RUNTIME_DIR=str(runtime),
-        DICE_ARENA_CONFIG=str(config),
-    )
+    environment = game_environment(context, runtime, config)
     mediamtx = context.data("dice_arena") / "mediamtx"
     with (runtime / "mediamtx.log").open("ab") as log:
         video = subprocess.Popen(
@@ -80,9 +111,9 @@ def serve(context, args):
             stderr=subprocess.STDOUT,
         )
     try:
-        # The voice before the game, as the original start script did: every TTS provider the game
-        # references is started (the local MOSS-TTS daemon loads its models, then stays running for
-        # the next serve); remote-only ones have nothing to start. One that fails leaves a warning.
+        # The voice before the game: every TTS provider the game references is started (the local
+        # MOSS-TTS daemon loads its models, then stays running for the next serve); remote-only
+        # ones have nothing to start. One that fails leaves a warning.
         control = [sys.executable, str(game / "backend/componentctl.py"), "--game", "dice"]
         referenced = subprocess.run(
             control + ["referenced", "tts"],
@@ -138,7 +169,7 @@ def main():
     serve_command.add_argument(
         "--host",
         default="0.0.0.0",
-        help="listen address (default: every interface, as the original)",
+        help="listen address (default: every interface)",
     )
     serve_command.add_argument("--port", type=int, default=8080)
     for name in ("status", "events"):
@@ -159,6 +190,14 @@ def main():
     commands.add_parser(
         "check", help="exercise the game's robot provider with the Mock cup application"
     )
+    component_command = commands.add_parser(
+        "component", help="list, check, start or stop the game components with the site settings"
+    )
+    component_command.add_argument("action", choices=COMPONENT_ACTIONS)
+    component_command.add_argument(
+        "provider", nargs="?", help="component id, or slot for *selected"
+    )
+    component_command.add_argument("--game", default="dice")
     add_commands(commands)
     args = parser.parse_args()
     context = Context(args)
@@ -167,6 +206,8 @@ def main():
         return 0
     if args.operation == "serve":
         return serve(context, args)
+    if args.operation == "component":
+        return component(context, args)
     if args.operation in ("status", "events"):
         suffix = (
             "/api/health"
