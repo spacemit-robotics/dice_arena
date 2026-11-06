@@ -51,7 +51,7 @@ class TerminalCommandsTest(unittest.TestCase):
             "next home",
             "until",
             "action",
-            "action rock paper",
+            "action win lose",
             "home now",
             "ru",
             "stop",

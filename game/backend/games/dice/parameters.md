@@ -100,7 +100,7 @@ mm
 
 - `{"to": "<状态>"}`：进入指定状态。
 - `{"exit": true}`：结束回合，返回游戏列表。
-- `{"actions": [...]}`：停留在当前状态并播放其中的 `speech`，例如 `rules` 的 `repeat`。
+- `{"actions": [...]}`：停留在当前状态并播放其中的台词，例如 `rules` 的 `repeat`。只接受不带 `await` 的 `speech` 动作；机械臂、裁决等动作须放在目标状态的 `on_enter` 中，用 `to` 进入。
 
 `on_intent` 的转换可加 `"after_speech": true`：当前状态 `on_enter` 台词播放完成前拒绝该意图。当前状态机未使用。
 

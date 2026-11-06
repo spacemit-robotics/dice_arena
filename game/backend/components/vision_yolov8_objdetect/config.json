@@ -6,8 +6,5 @@
     "mode": "resident",
     "prewarm_camera": true,
     "terminate_grace_seconds": 5
-  },
-  "events": {
-    "protocol": "jsonl-events-v2"
   }
 }

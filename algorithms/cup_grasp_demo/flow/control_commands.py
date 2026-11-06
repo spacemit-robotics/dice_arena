@@ -10,7 +10,7 @@ HELP = (
     "run / g：连续执行到 RETURN_HOME，完成后可再次 run",
     "until <阶段>：顺序执行到指定阶段，例如 until grip",
     "home：空闲时张手并归位",
-    "action <动作名>：空闲时执行手势，例如 action rock",
+    "action <动作名>：空闲时执行手势，例如 action win",
     "actions：列出可用动作；status：查看状态；query_pose：查询姿态",
     "reload：重载参数；refresh_perception：重新定位",
     "quit / q / close：释放设备并退出（执行中会排队，并非急停）",

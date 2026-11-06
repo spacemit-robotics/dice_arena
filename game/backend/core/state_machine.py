@@ -464,7 +464,7 @@ class GameRound:
                                 is not None
                             ):
                                 raise RuntimeError(
-                                    "口令未开始播放，未执行出拳；请检查声音后再来一局"
+                                    "台词未开始播放，随台词启动的动作没有执行；请检查声音后再来一局"
                                 )
                 elif action.get("action") == "adjudicate":
                     if not self._run_adjudication(generation):

@@ -37,8 +37,6 @@ ROBOT_COMMANDS = {
     "shake_dice",
     "settle_dice",
     "feedback",
-    "throw_gesture",
-    "prepare_throw",
     "reset_home",
     "ensure_home",
 }
@@ -168,27 +166,13 @@ def _validate_robot_action(action: Mapping[str, Any], field: str) -> None:
         "grasp_cup",
         "shake_dice",
         "settle_dice",
-        "throw_gesture",
         "reset_home",
         "ensure_home",
-        "prepare_throw",
     }:
         allowed.add("timeout_seconds")
         if "timeout_seconds" in action:
-            _require_number(action["timeout_seconds"], f"{field}.timeout_seconds", low=0)
-    if command == "throw_gesture":
-        # 出拳时机参数：进入状态起延迟 N 秒再派发（与口令音频/回执解耦）。
-        allowed.update(("delay_seconds", "prepared"))
-        if "prepared" in action and type(action["prepared"]) is not bool:
-            raise _error(field, "prepared must be boolean")
-        if "delay_seconds" in action:
-            _require_number(
-                action["delay_seconds"],
-                f"{field}.delay_seconds",
-                low=0,
-                high=30,
-                low_inclusive=True,
-            )
+            # The robot provider accepts at most 180 s, queueing included.
+            _require_number(action["timeout_seconds"], f"{field}.timeout_seconds", low=0, high=180)
     extra = set(action) - allowed
     if extra:
         raise _error(field, f"robot {command} accepts no extra keys: {sorted(extra)}")
@@ -260,6 +244,17 @@ def _validate_transition(transition: Any, field: str) -> dict[str, Any]:
             raise _error(f"{field}.exit", "must be true")
     else:
         _validate_action_list(transition["actions"], f"{field}.actions")
+        # Transition actions run on the caller's thread and replay speech only; anything else
+        # (robot, adjudicate) belongs in a state's on_enter, reached with 'to'.
+        for index, action in enumerate(transition["actions"]):
+            if action.get("action") != "speech":
+                raise _error(
+                    f"{field}.actions[{index}]",
+                    "transition actions play speech only; move other actions to a state's "
+                    "on_enter and use 'to'",
+                )
+            if action.get("await"):
+                raise _error(f"{field}.actions[{index}].await", "transition speech cannot await")
     return transition
 
 

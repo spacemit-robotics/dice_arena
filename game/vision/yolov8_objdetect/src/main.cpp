@@ -205,7 +205,7 @@ struct Args {
     std::string snapshot_dir;
     bool prewarm = false;
     std::string view_id = "default";
-    std::string rtsp_host = "0.0.0.0";
+    std::string rtsp_host = "127.0.0.1";
     int rtsp_port = 8554;
     std::string rtsp_path = "/dice";
 };
@@ -413,7 +413,7 @@ static void usage(const char* exe) {
             << "  --no-divider-detection disable scene divider assistance\n"
             << "  --focus N          fixed manual focus (-1 unchanged)\n"
             << "  --zoom N           zoom absolute value (-1 unchanged)\n"
-            << "  --intra-threads N  SpaceMIT EP threads\n"
+            << "  --intra-threads N  SpacemiT EP threads\n"
             << "  --ep-affinity LIST bind EP threads to cores, e.g. 14;15\n"
             << "  --no-display       run pipeline without window (config: display_enabled=false)\n"
             << "  --max-frames N     stop after N frames enter preprocess (0=unlimited)\n"
@@ -424,7 +424,7 @@ static void usage(const char* exe) {
             << "  --self-test        initialize OpenCL GPU and model, run one inference\n"
             << "  --image PATH       run the scene divider detector on one image and print JSON "
                "(no camera)\n"
-            << "  --rtsp             publish H.264 to RTSP server with SpaceMIT VPU\n"
+            << "  --rtsp             publish H.264 to RTSP server with SpacemiT VPU\n"
             << "  --event-fd FD      write structured JSONL events to an inherited FD\n"
             << "  --control-fd FD    read vision-control-v1 JSONL commands from an inherited FD\n"
             << "  --snapshot-dir PATH save stable-frame JPEG snapshots under PATH\n"

@@ -4,8 +4,7 @@
 
 A robot provider drives exactly one physical arm.  The state machine calls it
 through short imperative commands — grasp the dice cup, shake the held cup,
-put it back down, perform a result gesture, throw one static game gesture,
-return home — and the
+put it back down, perform a result gesture, return home — and the
 provider owns every process-level detail of the demo runtime behind those
 verbs (resident process lifecycle, protocol framing, retries, interruption).
 
@@ -82,31 +81,6 @@ class RobotProvider(Component):
     ) -> dict[str, Any]:
         """Perform one result gesture; ``kind`` is win/lose/draw."""
         raise NotImplementedError
-
-    def prepare_throw(self, *, on_event, is_cancelled, timeout_seconds=None):
-        """Optional pre-chant ready motion; unsupported hardware must not pretend success."""
-        return {"status": "failed", "reason": "prepare_throw is not implemented"}
-
-    def throw_gesture(
-        self,
-        gesture: str | None = None,
-        *,
-        prepared: bool = False,
-        on_event: RobotEventFn,
-        is_cancelled: RobotCancelledFn,
-        timeout_seconds: float | None = None,
-    ) -> dict[str, Any]:
-        """Throw one static game gesture (e.g. rock/paper/scissors).
-
-        ``gesture`` uses the calling game's own vocabulary; ``None`` means the
-        provider picks randomly (the prefetch flow dispatches before the
-        verdict exists).  The outcome must report the gesture actually played
-        as ``outcome["gesture"]`` — that value is the single source of truth
-        for adjudication.  Non-abstract like reset_home: the floor reports
-        ``skipped`` so arm-optional games keep working, while an arm-required
-        game (rps) treats ``skipped`` as a failure.
-        """
-        return {"status": "completed", "skipped": True}
 
     def reset_home(
         self,

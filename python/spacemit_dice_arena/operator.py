@@ -17,7 +17,6 @@ from spacemit_manipulation.operator_support import Context, argument_parser, run
 from cup_shake.operator import CUP_COMMANDS, add_commands, execute as execute_cup
 
 VIDEO_PORTS = (8554, 8889)  # RTSP from the dice recognition, WebRTC to the browser (mediamtx.yml).
-TTS_PORT = 18082  # Local MOSS-TTS daemon (game/backend/components/tts_moss_nano/config.json).
 COMPONENT_ACTIONS = (
     "list",
     "health",
@@ -36,10 +35,18 @@ def port_in_use(port):
         return probe.connect_ex(("127.0.0.1", port)) == 0
 
 
-def own_tts_daemon(runtime, game):
+def tts_port(game):
+    """The local MOSS-TTS daemon's port, from its component configuration."""
+    config = json.loads(
+        (game / "backend/components/tts_moss_nano/config.json").read_text(encoding="utf-8")
+    )
+    return int(config.get("runtime", {}).get("port", 18082))
+
+
+def own_tts_daemon(runtime, game, port):
     """The TTS daemon a previous serve left running; the next serve reuses it."""
     try:
-        pid = int((runtime / f"moss-tts-{TTS_PORT}.pid").read_text().strip())
+        pid = int((runtime / f"moss-tts-{port}.pid").read_text().strip())
         return str(game) in Path(f"/proc/{pid}/cmdline").read_bytes().decode(errors="replace")
     except (OSError, ValueError):
         return False
@@ -90,9 +97,10 @@ def serve(context, args):
     busy = [port for port in (*VIDEO_PORTS, args.port) if port_in_use(port)]
     if busy:
         raise RuntimeError(f"ports {busy} are in use: stop the other game or video service first")
-    if port_in_use(TTS_PORT) and not own_tts_daemon(runtime, game):
+    speech = tts_port(game)
+    if port_in_use(speech) and not own_tts_daemon(runtime, game, speech):
         raise RuntimeError(
-            f"port {TTS_PORT} is held by another MOSS-TTS daemon (another installation); stop it "
+            f"port {speech} is held by another MOSS-TTS daemon (another installation); stop it "
             "first"
         )
     # The operator's game configuration lives in the site, created from the installed default once,

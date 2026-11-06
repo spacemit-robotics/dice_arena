@@ -4,6 +4,7 @@
 hardware."""
 
 import argparse
+import copy
 import json
 import os
 from pathlib import Path
@@ -23,6 +24,7 @@ def main():
     sys.path.insert(0, str(game / "backend"))
     from core.components import build_registry
     from core.robot import RobotProvider
+    from core.state_schema import StateMachineError, validate_state_machine
 
     config = json.loads((game / "backend/config.json").read_text())
     assert config["providers"]["robot_arm"] == "robot_arm_spacemit"
@@ -47,6 +49,25 @@ def main():
         check=True,
     )
     assert referenced.stdout.split()[0] == "tts_moss_nano", referenced.stdout
+    # The manifest validator refuses what the game would not run as written: a robot timeout the
+    # provider rejects, and transition actions other than plain speech.
+    machine = json.loads((game / "backend/games/dice/manifest.json").read_text())["state_machine"]
+    validate_state_machine(machine, "dice")
+    for state, field, value in (
+        ("game_start", "on_enter", dict(action="robot", command="grasp_cup", timeout_seconds=181)),
+        ("rules", "repeat", dict(action="robot", command="reset_home")),
+        ("rules", "repeat", {"action": "speech", "text": "规则", "await": True}),
+    ):
+        changed = copy.deepcopy(machine)
+        if field == "on_enter":
+            changed["states"][state]["on_enter"][0] = value
+        else:
+            changed["states"][state]["on_intent"][field]["actions"] = [value]
+        try:
+            validate_state_machine(changed, "dice")
+        except StateMachineError:
+            continue
+        raise AssertionError(f"invalid state machine accepted: {value}")
     registry = build_registry(log=False)
     provider = registry.require("robot_arm_spacemit", expected_type="robot")
     assert isinstance(provider, RobotProvider)

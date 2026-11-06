@@ -56,6 +56,7 @@ from core.shared_audio import SharedAudio
 from core.arena_config import (
     ARENA_CONFIG_PATH,
     ArenaConfigError,
+    DEFAULT_LOCAL_TTS,
     arena_asr_enabled,
     arena_game_select_confirm_phrases,
     arena_game_select_phrases,
@@ -266,7 +267,7 @@ def _prewarm_pinned_local_tts(pin: str | None) -> None:
         raise SystemExit(1) from exc
     prewarm = getattr(provider, "prewarm", None)
     if not callable(prewarm):
-        # HTTP-bridge engines (moss/qwen3) warm up in their lifecycle launcher.
+        # HTTP-bridge engines (MOSS-TTS) warm up in their lifecycle launcher.
         print(f"[arena] local TTS {pin} has no prewarm hook (lifecycle engine)", flush=True)
         return
     try:
@@ -417,7 +418,7 @@ def _selected_tts_id(game_id: str = "dice") -> str:
     try:
         return _tts_dispatcher().provider_id(game_id)
     except DiceArenaError:
-        return "tts_qwen3"
+        return DEFAULT_LOCAL_TTS
 
 
 def _safe_profile_metadata(
@@ -1010,14 +1011,8 @@ def _unmatched_broadcast(bus: _AsrEventBus) -> Callable[[str], None]:
 _ROUND_TIMEOUT_FALLBACK_SECONDS = JOB_TIMEOUT_SECONDS
 
 
-def _round_adjudicate_fn(game_id: str, arm_throw: dict | None = None):
-    """Bridge a round's adjudicate action onto the shared provider pipeline.
-
-    ``arm_throw`` is the round's shared robot-throw slot: when the game
-    prefetched the agent gesture (rps throws on the call-out wav instead of
-    after the vision lock), the pipeline reads the same dict the robot_fn
-    filled — the verdict then uses the gesture the arm actually played.
-    """
+def _round_adjudicate_fn(game_id: str):
+    """Bridge a round's adjudicate action onto the shared provider pipeline."""
 
     def adjudicate(manifest, on_event, is_cancelled, on_log):
         return run_game(
@@ -1031,30 +1026,19 @@ def _round_adjudicate_fn(game_id: str, arm_throw: dict | None = None):
             ),
             COMPONENTS,
             defaults=get_arena_config(),
-            arm_throw=arm_throw,
         )
 
     return adjudicate
 
 
-def _round_robot_fn(game_id: str, arm_throw: dict | None = None):
+def _round_robot_fn(game_id: str):
     """Bridge a round's robot actions onto the shared robot-arm provider.
 
     Slot resolution mirrors the other provider slots (game manifest override
     over the arena default).  A missing or broken provider never raises into
     the round: the command returns a failure and the manifest's arm_failed
     route takes over.
-
-    ``arm_throw`` is the round's shared robot-throw slot filled by the
-    ``throw_gesture`` command: the gesture is reset to pending on dispatch
-    (so a rematch never consumes the previous round's throw) and written
-    back on completion, so the adjudication pipeline consumes the exact
-    gesture the arm played (single source of truth for the agent's move).
     """
-
-    def _mark_throw_failed(reason: str = "机械臂预备或出拳动作未完成") -> None:
-        if arm_throw is not None:
-            arm_throw.update(status="failed", gesture=None, reason=reason)
 
     def run_robot(action, on_event, is_cancelled, on_log):
         command = str(action.get("command") or "")
@@ -1062,13 +1046,9 @@ def _round_robot_fn(game_id: str, arm_throw: dict | None = None):
         try:
             provider_id = _game_provider_id(game_id, "robot_arm", "")
             if not provider_id:
-                if command in ("throw_gesture", "prepare_throw"):
-                    _mark_throw_failed("providers.robot_arm slot is not configured")
                 return {"status": "failed", "reason": "providers.robot_arm slot is not configured"}
             provider = COMPONENTS.require(provider_id, expected_type="robot")
         except DiceArenaError as exc:
-            if command in ("throw_gesture", "prepare_throw"):
-                _mark_throw_failed(exc.message)
             return {"status": "failed", "reason": exc.message}
         try:
             if command == "grasp_cup":
@@ -1095,8 +1075,8 @@ def _round_robot_fn(game_id: str, arm_throw: dict | None = None):
                     on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout
                 )
             if command == "ensure_home":
-                # 检查式归位（2026-09-25）：地板 provider 无此方法时退化为
-                # 强制归位，"确保在家"永不静默跳过。
+                # A provider without a checked home falls back to the plain one, so the
+                # post-round home is never skipped.
                 ensure = getattr(provider, "ensure_home", None)
                 if callable(ensure):
                     return ensure(
@@ -1105,67 +1085,8 @@ def _round_robot_fn(game_id: str, arm_throw: dict | None = None):
                 return provider.reset_home(
                     on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout
                 )
-            if command == "prepare_throw":
-                _mark_throw_failed()  # Never reuse a previous round's gesture on prep failure.
-                outcome = provider.prepare_throw(
-                    on_event=on_event, is_cancelled=is_cancelled, timeout_seconds=timeout
-                )
-                if isinstance(outcome, dict) and outcome.get("status") == "completed":
-                    if arm_throw is not None:
-                        arm_throw.update(status="pending", gesture=None, reason=None)
-                else:
-                    _mark_throw_failed(
-                        str(outcome.get("reason") or "预备动作未完成")
-                        if isinstance(outcome, dict)
-                        else "预备动作未完成"
-                    )
-                return outcome
-            if command == "throw_gesture":
-                gesture = action.get("gesture")
-                # 派发即重置：再来一局/重试重新出拳时，消费方必须等到这份
-                # 新结果，而不是读到上一局的 completed（判分≠臂姿的竞态）。
-                if arm_throw is not None:
-                    arm_throw.update(status="pending", gesture=None, reason=None)
-                # 出拳时机参数：进入状态起延迟 N 秒再调 provider（与口令
-                # 音频/回执解耦）。重置在延迟之前——延迟期间槽必须是
-                # pending，分析侧的等待才会等这份新结果。可取消：分段睡
-                # 眠，回合取消/终态时中止且不再动臂。
-                delay = action.get("delay_seconds")
-                if isinstance(delay, (int, float)) and not isinstance(delay, bool) and delay > 0:
-                    deadline = time.monotonic() + float(delay)
-                    while time.monotonic() < deadline:
-                        if is_cancelled():
-                            if arm_throw is not None:
-                                arm_throw.update(status="failed", gesture=None)
-                            return {
-                                "status": "failed",
-                                "reason": "throw delay interrupted (cancelled)",
-                            }
-                        time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
-                outcome = provider.throw_gesture(
-                    **({"prepared": True} if action.get("prepared") else {}),
-                    gesture=gesture if isinstance(gesture, str) and gesture else None,
-                    on_event=on_event,
-                    is_cancelled=is_cancelled,
-                    timeout_seconds=timeout,
-                )
-                if arm_throw is not None:
-                    arm_throw["status"] = (
-                        "completed"
-                        if isinstance(outcome, dict) and outcome.get("status") == "completed"
-                        else "failed"
-                    )
-                    arm_throw["reason"] = (
-                        outcome.get("reason") if isinstance(outcome, dict) else "出拳动作未完成"
-                    )
-                    arm_throw["gesture"] = (
-                        outcome.get("gesture") if isinstance(outcome, dict) else None
-                    )
-                return outcome
             return {"status": "failed", "reason": f"unknown robot command {command!r}"}
         except Exception as exc:
-            if command in ("throw_gesture", "prepare_throw"):
-                _mark_throw_failed(str(exc))
             return {"status": "failed", "reason": str(exc)}
 
     return run_robot
@@ -1174,9 +1095,9 @@ def _round_robot_fn(game_id: str, arm_throw: dict | None = None):
 def _manifest_uses_robot(manifest: dict) -> bool:
     """True when the game drives the arm — via state actions or its pipeline.
 
-    两种形态都算：状态机 on_enter 声明 robot 动作（dice 抓/摇/归位、rps 出拳），
-    或游戏自身 manifest 显式声明 ``providers.robot_arm`` 槽位（管线直发的游戏
-    靠这个 opt-in）。必须传**合并全局默认前**的 manifest——合并后所有游戏都带
+    两种形态都算：状态机 on_enter 声明 robot 动作（如 dice 的抓杯、摇杯、归位），
+    或游戏自身 manifest 显式声明 ``providers.robot_arm`` 槽位（管线直接驱动机械臂
+    的游戏靠这个 opt-in）。必须传**合并全局默认前**的 manifest——合并后所有游戏都带
     全局槽位，那不代表该游戏用臂。
     """
     machine = manifest.get("state_machine") or {}
@@ -1301,7 +1222,7 @@ def create_round(game_id: str, *, shared: bool = False, event_sink=None) -> Game
     manifest = require_game(get_games(), game_id)
     if not isinstance(manifest.get("state_machine"), dict):
         raise InvalidRequestError(f"game {game_id} declares no state_machine")
-    # rps 这类管线直发机械臂的游戏靠自身 manifest 显式声明槽位来 opt-in
+    # 管线直接驱动机械臂的游戏靠自身 manifest 显式声明槽位来 opt-in
     # 预热/终局归位，所以 _manifest_uses_robot 必须看合并前的原始 manifest。
     uses_robot = _manifest_uses_robot(manifest)
     # The round snapshots the *effective* manifest: arena defaults underlaid,
@@ -1320,17 +1241,11 @@ def create_round(game_id: str, *, shared: bool = False, event_sink=None) -> Game
         finished = [rid for rid, item in rounds.items() if item.status != "running"]
         for stale_id in finished[: max(0, len(rounds) - 16)]:
             rounds.pop(stale_id, None)
-        # Round-shared robot-throw slot: the manifest's throw_gesture action
-        # (rps plays it right after the call-out wav, before adjudication)
-        # resets and fills this dict, and the adjudication pipeline consumes
-        # the same dict — the gesture the arm actually played is the one the
-        # round is judged on.
-        arm_throw: dict = {"status": "pending", "gesture": None}
         round_ = GameRound(
             game_id=game_id,
             manifest=manifest,
-            adjudicate_fn=_round_adjudicate_fn(game_id, arm_throw),
-            robot_fn=_round_robot_fn(game_id, arm_throw),
+            adjudicate_fn=_round_adjudicate_fn(game_id),
+            robot_fn=_round_robot_fn(game_id),
             log=lambda line: print(f"[round:{round_.id[:8]}] {line}", flush=True),
             event_sink=(lambda event: event_sink(round_, event)) if event_sink else None,
         )

@@ -19,10 +19,11 @@
 | `schema_version` | `1` | 固定为 `1` |
 | `runtime.binary` | `vision/yolov8_objdetect/bin/yolov8_camera` | 识别程序，相对 `game/`；`mm` 在 K3 上编译安装，缺失时 `dice-arena serve` 拒绝启动 |
 | `runtime.working_dir` | `vision/yolov8_objdetect` | 不经 `dice-arena` 运行时的进程工作目录；由 `dice-arena serve` 运行时为 `SITE/dice_arena/vision/`。OpenCL 缓存写在工作目录 |
-| `runtime.mode` | `resident` | `resident` 与 `prewarm_camera: true` 同时设置时，识别进程跨回合常驻复用；`per_request` 时每次裁决结束后停止 |
+| `runtime.mode` | `resident` | `resident` 与 `prewarm_camera: true` 同时设置时，识别进程在进入游戏时启动，跨回合常驻复用；`per_request` 时进入游戏不启动，每次裁决时启动、裁决结束后停止，网页只在裁决期间有实时画面 |
 | `runtime.prewarm_camera` | `true` | 常驻模式下保持摄像头与推流 |
-| `runtime.terminate_grace_seconds` | `5` | 代码不读取；停止识别进程时先发送 SIGTERM，2 秒未退出则强制结束 |
-| `events.protocol` | `jsonl-events-v2` | 代码不读取；事件协议固定为 `jsonl-events-v2`，识别程序声明的协议不符时回合以错误结束 |
+| `runtime.terminate_grace_seconds` | `5` | 停止识别进程时先发送 SIGTERM，超过该时间（`(0,30]` 秒）未退出则强制结束 |
+
+事件协议固定为 `jsonl-events-v2`，识别程序声明的协议不符时回合以错误结束。
 
 `SITE` 表示现场目录，默认 `~/.local/share/spacemit-manipulation/site/`。
 
@@ -47,7 +48,7 @@
 | `ep_affinity` | `14;15` | `14;15` | EP 推理线程绑定的核，分号分隔，核数须等于 `intra_threads` |
 | `queue_depth` | `2` | `2` | 帧队列深度，限制在 1～8 |
 | `rtsp.enabled` | `true` | `false` | 向 MediaMTX 推送 H.264 |
-| `rtsp.host`、`rtsp.port` | `127.0.0.1`、`8554` | `0.0.0.0`、`8554` | MediaMTX 的 RTSP 地址；推流路径取游戏 manifest 的 `video.path`（`/dice/det`） |
+| `rtsp.host`、`rtsp.port` | `127.0.0.1`、`8554` | `127.0.0.1`、`8554` | MediaMTX 的 RTSP 地址；推流路径取游戏 manifest 的 `video.path`（`/dice/det`） |
 
 其他可用键：
 
@@ -58,7 +59,7 @@
 
 ## 运行行为
 
-- 进入游戏时以预热模式启动识别进程：打开摄像头并推流、加载模型，不推理；`analysis` 状态开始裁决后才推理。
+- 常驻模式下，进入游戏时以预热模式启动识别进程：打开摄像头并推流、加载模型，不推理；`analysis` 状态开始裁决后才推理。
 - 一帧计入连续计数须同时满足：开启 `divider_detection` 时检出分界线；至少检出一个目标，且类别组成与上一帧相同。不满足时计数清零。
 - 连续计数达到 `stable_frames` 后发布稳定观测。组件按检出的分界线把骰子分到左右两侧，任一侧数量不等于 `vision.expected_count` 时生成失败诊断。
 - 在 `timeouts.yolo_detection_seconds` 内未得到稳定观测时，组件按最近一帧的检测结果生成失败诊断。

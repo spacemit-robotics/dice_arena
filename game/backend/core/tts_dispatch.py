@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from core.arena_config import DEFAULT_LOCAL_TTS
 from core.errors import DiceArenaError
 from core.games import GameRegistry, require_game, resolve_provider_id
 
@@ -26,7 +27,7 @@ class TtsDispatcher:
         components: Any,
         games: GameRegistry,
         *,
-        default_provider: str = "tts_qwen3",
+        default_provider: str = DEFAULT_LOCAL_TTS,
         slot_fallbacks: Callable[[str], str] | None = None,
         pinned_local_tts: str | None = None,
     ) -> None:

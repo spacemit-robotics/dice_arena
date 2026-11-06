@@ -106,8 +106,8 @@ class VisionStreamManager:
         """
         profile = (round_.manifest or {}).get("vision_profile")
         if not isinstance(profile, Mapping):
-            # A game without a visual profile (for example rps today) has no
-            # camera of its own; never start one on its behalf.
+            # A game without a visual profile has no camera of its own; never
+            # start one on its behalf.
             return False
         provider_id = resolve_provider_id(round_.manifest, "vision_adjudicator")
         if not provider_id:
@@ -130,8 +130,7 @@ class VisionStreamManager:
             # stream must be stopped here.  Re-entering the same provider keeps its
             # warm runtime (reuse is the design); switching providers means a
             # different runtime — with two vision packages sharing one camera, the
-            # eager stop is what lets the new runtime's camera open succeed
-            # (rps→dice fast switch lost the round, 2026-09-24).
+            # eager stop is what lets the new runtime's camera open succeed.
             with self._lock:
                 prev_provider = self._provider
                 prev_round_id = self._owner_round_id

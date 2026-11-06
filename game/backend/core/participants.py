@@ -74,7 +74,7 @@ def project_categorical_result(
     *,
     choice_field: str = "choice",
 ) -> dict[str, Any]:
-    """Project a categorical game's verdict (rock / scissors / paper, ...).
+    """Project a categorical game's verdict (one named outcome per participant).
 
     The counterpart of the numeric path for games whose evidence is a **label**
     per side instead of a number: it reads ``left_<choice_field>`` /

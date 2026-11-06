@@ -52,7 +52,7 @@ class TtsMossNano(TtsProvider):
 
     id = "tts_moss_nano"
     type = "tts"
-    name = "MOSS-TTS-Nano (SpaceMIT EP)"
+    name = "MOSS-TTS-Nano (SpacemiT EP)"
     version = "1.1"
 
     def health(self) -> dict[str, Any]:

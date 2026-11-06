@@ -10,7 +10,7 @@
     const root = document.documentElement;
     const failure = document.getElementById('analysisFailureActions');
     const judge = document.getElementById('stepJudge');
-    const playing = new Set(['game_start', 'countdown', 'shaking', 'play', 'rps-play']);
+    const playing = new Set(['game_start', 'countdown', 'shaking']);
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     let animation = null;
     const originalWillChange = panel.style.willChange;
